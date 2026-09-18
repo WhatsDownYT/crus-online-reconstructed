@@ -20,6 +20,11 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
     project = Path(directory)
+    source_engine = Path(args.godot).resolve()
+    test_engine = project / source_engine.name
+    shutil.copy2(source_engine, test_engine)
+    for library in source_engine.parent.glob('*.dll'):
+        shutil.copy2(library, project / library.name)
     mod = project / 'MOD_CONTENT' / 'CruS Online'
     mod.mkdir(parents=True)
     for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
@@ -70,7 +75,9 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         '[autoload]\nGlobal="*res://global.gd"\n'
         '[rendering]\nquality/driver/driver_name="GLES2"\n', encoding='utf-8')
     (project / 'global.gd').write_text('extends Node\nvar player\nvar UI\nvar objectives = 0\nvar objective_complete = false\n'
-                                     'var soul_intact = true\nvar husk_mode = false\nvar hope_discarded = false\n', encoding='utf-8')
+                                     'var soul_intact = true\nvar husk_mode = false\nvar hope_discarded = false\n'
+                                     'var death = false\nvar implants\nvar CURRENT_LEVEL = 0\nvar DEAD_CIVS = []\n'
+                                     'var menu\nvar LEVEL_AMBIENCE = [null]\nvar ambience\nvar music\n', encoding='utf-8')
     menu_source = (root / 'menu.tscn').read_text(encoding='utf-8')
     for match in re.finditer(r'script/source = "((?:[^"\\]|\\.)*)"', menu_source):
         source = match.group(1).replace(r'\"', '"').replace('\\\\', '\\')
@@ -81,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
     (project / 'test.tscn').write_text('[gd_scene load_steps=2 format=2]\n'
         '[ext_resource path="res://test.gd" type="Script" id=1]\n'
         '[node name="Tests" type="Node"]\nscript = ExtResource( 1 )\n', encoding='utf-8')
-    result = subprocess.run([args.godot, '--no-window', '--path', str(project),
+    result = subprocess.run([str(test_engine), '--no-window', '--path', str(project),
                              '--quit'],
                             capture_output=True, text=True, timeout=45)
     output = result.stdout + result.stderr
@@ -100,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         try:
             for role in ('host', 'client_a', 'client_b'):
                 processes.append(subprocess.Popen(
-                    [args.godot, '--no-window', '--path', str(project), 'res://lan.tscn',
+                    [str(test_engine), '--no-window', '--path', str(project), 'res://lan.tscn',
                      f'--role={role}', f'--port={port}'], stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True,
                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))

@@ -233,16 +233,18 @@ func cancer():
 		speed_bonus = - 10
 		set_move_speed()
 
+func _implant_speed_bonus():
+	var implants = GLOBAL.implants
+	var result = implants.leg_implant.speed_bonus + implants.torso_implant.speed_bonus + implants.head_implant.speed_bonus + implants.arm_implant.speed_bonus
+	if implants.torso_implant.orbsuit:
+		result += 1
+	if GLOBAL.husk_mode:
+		result += 0.25
+	if GLOBAL.death:
+		result += 0.1
+	return result
+
 func update_implants():
-	
-	var leg_implant = GLOBAL.implants.leg_implant
-	var arm_implant = GLOBAL.implants.arm_implant
-	var head_implant = GLOBAL.implants.head_implant
-	var torso_implant = GLOBAL.implants.torso_implant
-	
-	jump_bonus = leg_implant.jump_bonus + torso_implant.jump_bonus + head_implant.jump_bonus + arm_implant.jump_bonus
-	speed_bonus = leg_implant.speed_bonus + torso_implant.speed_bonus + head_implant.speed_bonus + arm_implant.speed_bonus
-	armor = leg_implant.armor * torso_implant.armor * head_implant.armor * arm_implant.armor
 	
 	if GLOBAL.CURRENT_LEVEL == 18 and Global.DEAD_CIVS.find("Limit Chancellor") == - 1:
 		Global.implants.head_implant = Global.implants.empty_implant
@@ -253,11 +255,18 @@ func update_implants():
 		Global.menu.get_node("Character_Menu/Character_Container").clear_equips()
 		Global.menu.get_node("Character_Menu/Character_Container").update_buttons()
 	
-	if not GLOBAL.implants.head_implant.nightmare and not GLOBAL.implants.head_implant.nightvision:
-		$NV.hide()
-		shader_screen.material.set_shader_param("nightmare_vision", false)
-		shader_screen.material.set_shader_param("scope", false)
+	var leg_implant = GLOBAL.implants.leg_implant
+	var arm_implant = GLOBAL.implants.arm_implant
+	var head_implant = GLOBAL.implants.head_implant
+	var torso_implant = GLOBAL.implants.torso_implant
 	
+	jump_bonus = leg_implant.jump_bonus + torso_implant.jump_bonus + head_implant.jump_bonus + arm_implant.jump_bonus
+	speed_bonus = _implant_speed_bonus()
+	armor = leg_implant.armor * torso_implant.armor * head_implant.armor * arm_implant.armor
+
+	$NV.visible = head_implant.nightmare or head_implant.nightvision
+	shader_screen.material.set_shader_param("nightmare_vision", head_implant.nightmare)
+	shader_screen.material.set_shader_param("scope", head_implant.nightvision or torso_implant.terror)
 	if Global.implants.torso_implant.orbsuit:
 		orb = true
 	else :
@@ -288,7 +297,6 @@ func update_implants():
 		health = 200
 		UI.set_health(health)
 		jump_bonus += 3
-		speed_bonus += 1
 		$Foot_Step.stream = orbWalkSound
 	else:
 		$Foot_Step.stream = playerWalkSound
@@ -300,7 +308,6 @@ func update_implants():
 	else:
 		terrorsuit.hide()
 		UI.show()
-		shader_screen.material.set_shader_param("scope", false)
 	
 	if leg_implant.toxic_shield or torso_implant.toxic_shield or arm_implant.toxic_shield or head_implant.toxic_shield or orb:
 		hazmat = true
@@ -358,7 +365,7 @@ func _ready():
 		Global.menu.get_node("Character_Menu/Character_Container").clear_equips()
 		Global.menu.get_node("Character_Menu/Character_Container").update_buttons()
 	if not GLOBAL.implants.head_implant.nightmare and not GLOBAL.implants.head_implant.nightvision:
-		$NV.queue_free()
+		$NV.hide()
 	if Global.implants.torso_implant.orbsuit:
 		orb = true
 	else :
@@ -432,13 +439,8 @@ func _ready():
 		health = 200
 		UI.set_health(health)
 		jump_bonus += 3
-		speed_bonus += 1
 		$Foot_Step.stream = orbWalkSound
-	speed_bonus = leg_implant.speed_bonus + torso_implant.speed_bonus + head_implant.speed_bonus + arm_implant.speed_bonus
-	if GLOBAL.husk_mode:
-		speed_bonus += 0.25
-	if Global.death:
-		speed_bonus += 0.1
+	speed_bonus = _implant_speed_bonus()
 	armor = leg_implant.armor * torso_implant.armor * head_implant.armor * arm_implant.armor
 	print("armor", armor)
 	if leg_implant.toxic_shield or torso_implant.toxic_shield or arm_implant.toxic_shield or head_implant.toxic_shield or orb:

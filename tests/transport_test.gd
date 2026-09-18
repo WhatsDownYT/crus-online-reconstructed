@@ -16,6 +16,8 @@ class MultiplayerFixture:
 
 class NotifyFixture:
 	extends Control
+	func set_health(_value):
+		pass
 	func notify(_text, _color):
 		pass
 	func set_death_label():
@@ -121,6 +123,13 @@ class GrappleReceiver:
 	func set_grapple(value):
 		point = value
 
+class ImplantMenuFixture:
+	extends Node
+	func clear_equips():
+		pass
+	func update_buttons():
+		pass
+
 class CancerNpcFixture:
 	extends Spatial
 	var dead = false
@@ -166,6 +175,25 @@ func run():
 	net.set_process(false)
 	net._my_steam_id = 1
 	net._server_steam_id = 1
+	var early_bridge = Bridge.new()
+	var early_entity = Entity.new()
+	root.add_child(early_entity)
+	var early_definitions = [["network_set_rotation", net.PERMISSION.ALL]]
+	early_bridge.register_rpcs(early_entity, early_definitions)
+	early_bridge.register_rset(early_entity, "state", net.PERMISSION.SERVER)
+	early_definitions.clear()
+	var removed_before_ready = Entity.new()
+	root.add_child(removed_before_ready)
+	early_bridge.register_rpcs(removed_before_ready, [["network_set_rotation", net.PERMISSION.ALL]])
+	removed_before_ready.free()
+	check(early_bridge._pending_registrations.size() == 3, "registrations before bridge ready are queued without touching null network")
+	multiplayer.add_child(early_bridge)
+	early_bridge._flush_registrations()
+	check(early_bridge._pending_registrations.empty(), "startup registrations flushed after bridge initializes")
+	check(net._registered_nodes.has(early_entity.get_instance_id()) and net._registered_nodes[early_entity.get_instance_id()].permissions.size() == 2, "early RPC and property permissions survive offline startup")
+	early_bridge._flush_registrations()
+	early_entity.free()
+	early_bridge.free()
 	for peer_id in [1, 2, 3]:
 		var peer = net._create_peer(peer_id)
 		peer.connected = true
@@ -699,5 +727,72 @@ func run():
 		rope_player.free()
 		anchor.translation = Vector3(2, 0, 0)
 	anchor.free()
+	var implant_player = KinematicBody.new()
+	root.add_child(implant_player)
+	implant_player.set_script(load("res://MOD_CONTENT/CruS Online/remaped/Player.gd"))
+	implant_player.GLOBAL = Global
+	implant_player.weapon = {"weapon1": null, "weapon2": null}
+	implant_player.UI = NotifyFixture.new()
+	implant_player.add_child(implant_player.UI)
+	implant_player.terrorsuit = Control.new()
+	implant_player.add_child(implant_player.terrorsuit)
+	var night_vision = Control.new()
+	night_vision.name = "NV"
+	implant_player.add_child(night_vision)
+	var footstep = AudioStreamPlayer.new()
+	footstep.name = "Foot_Step"
+	implant_player.add_child(footstep)
+	implant_player.orbWalkSound = AudioStreamSample.new()
+	implant_player.playerWalkSound = AudioStreamSample.new()
+	var screen = ColorRect.new()
+	implant_player.add_child(screen)
+	var vision_shader = Shader.new()
+	vision_shader.code = "shader_type canvas_item; uniform bool scope = false; uniform bool nightmare_vision = false; uniform bool holy_mode = false;"
+	screen.material = ShaderMaterial.new()
+	screen.material.shader = vision_shader
+	implant_player.shader_screen = screen
+	var empty_implant = {"speed_bonus": 0.0, "jump_bonus": 0.0, "armor": 1.0,
+		"nightmare": false, "nightvision": false, "holy": false, "radio": false,
+		"orbsuit": false, "terror": false, "toxic_shield": false}
+	Global.implants = {"head_implant": empty_implant.duplicate(), "torso_implant": empty_implant.duplicate(),
+		"arm_implant": empty_implant.duplicate(), "leg_implant": empty_implant.duplicate(), "empty_implant": empty_implant}
+	Global.music = AudioStreamPlayer.new()
+	implant_player.add_child(Global.music)
+	Global.husk_mode = true
+	Global.death = true
+	Global.implants.torso_implant.orbsuit = true
+	Global.implants.torso_implant.armor = 0.6
+	implant_player.update_implants()
+	check(is_equal_approx(implant_player.speed_bonus, 1.35) and implant_player.health == 200 and implant_player.hazmat, "Golem refresh keeps suit and personal-state bonuses")
+	check(is_equal_approx(implant_player._implant_speed_bonus(), implant_player.speed_bonus), "startup and respawn use same implant speed calculation")
+	Global.implants.head_implant.nightmare = true
+	implant_player.update_implants()
+	check(night_vision.visible and screen.material.get_shader_param("nightmare_vision"), "nightmare vision enables on implant refresh")
+	Global.implants.head_implant.nightmare = false
+	Global.implants.head_implant.nightvision = true
+	implant_player.update_implants()
+	check(night_vision.visible and not screen.material.get_shader_param("nightmare_vision") and screen.material.get_shader_param("scope"), "switching to night vision clears nightmare without losing scope")
+	Global.implants.torso_implant = empty_implant.duplicate()
+	Global.implants.head_implant = empty_implant.duplicate()
+	implant_player.update_implants()
+	check(not implant_player.orb and not implant_player.hazmat and footstep.stream == implant_player.playerWalkSound, "removing Golem restores normal sound and protection")
+	check(not night_vision.visible and not screen.material.get_shader_param("scope"), "removing vision implant clears its effects")
+	Global.menu = Node.new()
+	implant_player.add_child(Global.menu)
+	var character_menu = Node.new()
+	character_menu.name = "Character_Menu"
+	Global.menu.add_child(character_menu)
+	var character_controls = ImplantMenuFixture.new()
+	character_controls.name = "Character_Container"
+	character_menu.add_child(character_controls)
+	Global.CURRENT_LEVEL = 18
+	Global.LEVEL_AMBIENCE.resize(19)
+	Global.implants.leg_implant = empty_implant.duplicate()
+	Global.implants.leg_implant.speed_bonus = 10
+	Global.implants.leg_implant.toxic_shield = true
+	Global.implants.leg_implant.armor = 0.1
+	implant_player.update_implants()
+	check(is_equal_approx(implant_player.speed_bonus, 0.35) and implant_player.armor == 1 and not implant_player.hazmat, "stripped implants cannot leave old speed armor or protection behind")
+	implant_player.free()
 	print("TRANSPORT_TEST_RESULT failures=", failures)
 	get_tree().quit(1 if failures else 0)

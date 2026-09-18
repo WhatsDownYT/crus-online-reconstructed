@@ -359,7 +359,7 @@ margin_bottom = 49.0
 size_flags_horizontal = 9
 custom_colors/font_color = Color( 0.101961, 1, 0, 1 )
 custom_fonts/font = SubResource( 8 )
-text = "Cruelty Squad Online"
+text = "CruS Online Reconstructed"
 
 [node name="SyncLoad" type="TextureRect" parent="."]
 visible = false

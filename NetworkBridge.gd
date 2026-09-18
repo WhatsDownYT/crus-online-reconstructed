@@ -19,6 +19,24 @@ var debug = false
 
 var rpc_debug_list = {}
 var rset_debug_list = {}
+var _pending_registrations = []
+
+func _ready():
+	call_deferred("_flush_registrations")
+
+func _flush_registrations():
+	if not is_instance_valid(SteamNetwork):
+		return
+	var pending = _pending_registrations
+	_pending_registrations = []
+	for entry in pending:
+		var caller = entry[0].get_ref()
+		if not is_instance_valid(caller) or not caller.is_inside_tree():
+			continue
+		if entry[1] == "rpc":
+			SteamNetwork.register_rpcs(caller, entry[2])
+		else:
+			SteamNetwork.register_rset(caller, entry[2], entry[3])
 
 func add_rpc_to_debug_list(caller, method):
 	if not debug:
@@ -131,9 +149,15 @@ func check_rpc(caller : Node, method = ""):
 	return SteamNetwork.check_permission_hash(caller, method)
 
 func register_rpcs(caller : Node, args):
+	if not is_instance_valid(SteamNetwork):
+		_pending_registrations.append([weakref(caller), "rpc", args.duplicate(true)])
+		return
 	SteamNetwork.register_rpcs(caller, args)
 
 func register_rset(caller : Node, method, recived_permission):
+	if not is_instance_valid(SteamNetwork):
+		_pending_registrations.append([weakref(caller), "rset", method, recived_permission])
+		return
 	SteamNetwork.register_rset(caller, method, recived_permission)
 
 func n_rpc(caller : Node, method = null, args = []):
