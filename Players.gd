@@ -14,13 +14,14 @@ func load_players():
 	for key in parent.players.keys():
 		if not puppetsNames.has(key):
 			var player = preload("res://MOD_CONTENT/CruS Online/multiplayer_player.tscn").instance()
-			player.set_name(key)
-			player.set_network_master(key)
+			player.set_name(str(key))
+
+			if parent.NetworkBridge.is_lan():
+				player.set_network_master(key)
 			player.setup_puppet(key)
 			player.nickname = parent.players[key].nickname
 			player.skinPath = parent.players[key].skinPath
 			player.color = parent.players[key].color
-			player.singleton = parent
 			add_child(player)
 			parent.players[key]["puppet"] = player
 			player.global_transform.origin = Vector3(-1000,-1000,-1000)
@@ -41,5 +42,6 @@ func sync_players():
 	print(get_children())
 	
 	for player in get_children():
-		if parent.players[player.name] == null:
+
+		if not parent.players.has(int(player.name)):
 			player.queue_free()

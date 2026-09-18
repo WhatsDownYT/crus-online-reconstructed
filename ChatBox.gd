@@ -1,4 +1,4 @@
-extends PanelContainer
+extends "res://MOD_CONTENT/CruS Online/FloatingPanel.gd"
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
@@ -13,6 +13,7 @@ onready var parent = Global.get_node("Multiplayer")
 var sizeRatio = 16
 
 func _ready():
+	window_drag_enabled = in_game_chat
 	NetworkBridge.register_rpcs(self,[
 		["send_message_host", NetworkBridge.PERMISSION.ALL],
 		["send_message", NetworkBridge.PERMISSION.SERVER]
@@ -22,7 +23,7 @@ func _ready():
 		hide()
 
 func set_size_ratio():
-	sizeRatio = 16 * (Global.resolution[0] / 1280)
+	sizeRatio = 16
 	
 	textBox.get_font("normal_font").size = sizeRatio
 	lineEdit.get_font("font").size = sizeRatio
@@ -61,6 +62,7 @@ func _text_entered(new_text):
 func open_chat(type):
 	show()
 	set_size_ratio()
+	fit_in_parent()
 	$"../OpenChat".button_disable()
 	$"../CloseChat".button_enable()
 

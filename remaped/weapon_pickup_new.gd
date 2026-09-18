@@ -1,6 +1,6 @@
 extends Area
 
-# WARN: По какой-то причине загружается до инициализации стима
+
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
@@ -10,7 +10,7 @@ export (WEAPON) var current_weapon = 0
 export  var menu = false
 var ammo = 0
 
-################################################################################
+
 
 remote func _update_vars(id, recivedWeapon,recivedAmmo):
 	current_weapon = recivedWeapon
@@ -19,7 +19,7 @@ remote func _update_vars(id, recivedWeapon,recivedAmmo):
 remote func _change_visible(id, mesh, visibility):
 	mesh.visible = visibility
 
-################################################################################
+
 
 remote func syncUpdate(id):
 	for meshGun in MESH:

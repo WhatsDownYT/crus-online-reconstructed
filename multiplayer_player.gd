@@ -1,5 +1,28 @@
 extends Spatial
 
+const ActionPolicy = preload("res://MOD_CONTENT/CruS Online/PlayerActionPolicy.gd")
+
+func is_target_action(method):
+	return ActionPolicy.is_action(method)
+
+func is_owner_state(method):
+	return method in ["_update_puppet", "respawn_puppet", "set_current_weapon",
+		"set_is_on_floor", "set_kick", "set_sit", "set_crouch", "set_gravity",
+		"shoot_commit", "set_flashlight", "_set_death"]
+
+func validate_network_action(sender, target, method, args):
+	if not Multiplayer.players.has(sender) or not Multiplayer.players.has(target):
+		return false
+	if str(name) != str(target) or get_parent() != Multiplayer.Players:
+		return false
+	if not ActionPolicy.validate(method, args, canDamage, death):
+		return false
+	if method == "_respawn_player":
+		var helper = Multiplayer.Players.get_node_or_null(str(sender))
+		if helper == null or helper.death or helper.global_transform.origin.distance_to(global_transform.origin) > 5.0:
+			return false
+	return true
+
 var weaponsMesh
 var currentWeaponId = 0
 
@@ -7,14 +30,14 @@ var weaponHold = false
 var playerCrouch = false
 var playerOnFloor = true
 
-var playerMovement
-var playerAim
+var playerMovement = [0.0, 0.0]
+var playerAim = 0.0
 
 var jumpBlend = 0.0
 var movementBlend = [0.0,0.0]
 var weaponBlend = 0.0
 var playerAimBlend = 0.0
-var crouchBlend
+var crouchBlend = 0.0
 
 var sit_blend = 0.0
 var player_sitting = false
@@ -59,6 +82,7 @@ func _ready():
 		["set_sit", NetworkBridge.PERMISSION.ALL],
 		["set_crouch", NetworkBridge.PERMISSION.ALL],
 		["set_gravity", NetworkBridge.PERMISSION.ALL],
+		["set_flashlight", NetworkBridge.PERMISSION.ALL],
 		["shoot_commit", NetworkBridge.PERMISSION.ALL],
 		["_respawn_player", NetworkBridge.PERMISSION.ALL],
 		["hideHelpLabel", NetworkBridge.PERMISSION.ALL],
@@ -72,7 +96,7 @@ func _ready():
 	$Puppet/PlayerModel/Nickname.text = nickname
 	$Puppet/PlayerModel/Nickname.modulate = Color(color)
 	
-#	Multiplayer.connect("host_tick", self, "host_tick")
+
 	
 	rset_config("transform_lerp", MultiplayerAPI.RPC_MODE_REMOTE)
 	
@@ -149,7 +173,7 @@ func _process(delta):
 	animTree.set("parameters/LOOK_DIRECTION/blend_amount", playerAim)
 	animTree.set("parameters/ARMS_BLEND/blend_amount", weaponBlend)
 	
-	global_transform = global_transform.interpolate_with(transform_lerp, delta * 10.0)
+	global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
 	
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
 		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to help"
@@ -159,22 +183,25 @@ func _process(delta):
 
 func set_grapple_orbs():
 	grapple_point.global_transform.origin = grapple_pos
-	var distance = grapple_start_point.global_transform.origin.distance_to(grapple_point)
+	var distance = grapple_start_point.global_transform.origin.distance_to(grapple_point.global_transform.origin)
 	var orb_res = 4
 	
-	if grapple_orbs.size() < int(distance) * orb_res:
-		for i in range(orb_res):
+
+	var wanted_orbs = int(distance) * orb_res
+	if grapple_orbs.size() < wanted_orbs:
+		for i in range(min(orb_res, wanted_orbs - grapple_orbs.size())):
 			var new_grapple_orb = grapple_orb.instance()
 			add_child(new_grapple_orb)
 			grapple_orbs.append(new_grapple_orb)
-	elif grapple_orbs.size() > int(distance) * orb_res:
-		for i in range(orb_res):
-			grapple_orbs[grapple_orbs.size() - 1].queue_free()
-			grapple_orbs.pop_back()
-	for orb in grapple_orbs:
-		var o_scale = (sin(Global.player.time * 2 - grapple_orbs.find(orb)) * 0.5 + 2) * 0.5
+	elif grapple_orbs.size() > wanted_orbs:
+		for i in range(min(orb_res, grapple_orbs.size() - wanted_orbs)):
+			grapple_orbs.pop_back().queue_free()
+	var rope_direction = (grapple_start_point.global_transform.origin - grapple_point.global_transform.origin).normalized()
+	for index in range(grapple_orbs.size()):
+		var orb = grapple_orbs[index]
+		var o_scale = (sin(OS.get_ticks_msec() * 0.002 - index) * 0.5 + 2) * 0.5
 		orb.scale = Vector3(o_scale, o_scale, o_scale)
-		orb.global_transform.origin = grapple_start_point.global_transform.origin - (grapple_start_point.global_transform.origin - grapple_point.global_transform.origin).normalized() * grapple_orbs.find(orb) / orb_res
+		orb.global_transform.origin = grapple_start_point.global_transform.origin - rope_direction * index / orb_res
 
 func delete_grapple_orbs():
 	for orb in grapple_orbs:
@@ -189,7 +216,7 @@ func _physics_process(delta):
 			delete_grapple_orbs()
 	
 	if NetworkBridge.check_connection():
-		if int(self.name) == NetworkBridge.get_id():
+		if int(self.name) == NetworkBridge.get_id() and is_instance_valid(Global.player):
 			NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [Global.player.global_transform, [Global.player.cmd.forward_move,Global.player.cmd.right_move], Global.player.rotation_helper.rotation.x, grapple_pos])
 			hide()
 

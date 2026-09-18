@@ -1,6 +1,6 @@
 extends KinematicBody
 
-# TODO: Оптимизировать анимации -> Слишком большое количество RPC (15/сек на NPC)
+
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
@@ -54,8 +54,8 @@ var tranqtimer:Timer
 
 onready var Multiplayer = Global.get_node("Multiplayer")
 
-# Multiplayer stuff
-################################################################################
+
+
 
 func get_near_player() -> Dictionary:
 	var oldDistance = null
@@ -99,7 +99,7 @@ func host_tick():
 			last_mesh_rotation = mesh.rotation
 			tick = 0
 
-################################################################################
+
 
 func _ready():
 	NetworkBridge.register_rpcs(self,[
@@ -116,7 +116,7 @@ func _ready():
 	
 	lerp_transform = global_transform
 	
-#	Multiplayer.connect("host_tick", self, "host_tick")
+
 	rset_config("lerp_transform", MultiplayerAPI.RPC_MODE_PUPPET)
 	rset_config("lerp_mesh_rotation", MultiplayerAPI.RPC_MODE_PUPPET)
 	
@@ -161,13 +161,13 @@ func _ready():
 
 func _on_Screen_Entered():
 	pass
-#	active = true
+
 
 func _on_Screen_Exited():
 	pass
-#	if objective:
-#		return 
-#	active = false
+
+
+
 
 func _physics_process(delta):
 	if NetworkBridge.check_connection():

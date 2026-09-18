@@ -41,7 +41,7 @@ func player_died():
 		$HelpLabel.text = \"Wait until someone helps you\"
 		$HelpLabel.show()
 		
-		Multiplayer.player_died()
+	Multiplayer.player_died()
 	
 	show()
 	
@@ -121,7 +121,7 @@ func respawn():
 			Global.player.health = 20
 			Global.player.UI.set_health(20)
 			
-			Multiplayer.player_respawn()
+		Multiplayer.player_respawn()
 		
 		Multiplayer.playerPuppet.respawn_puppet(null)
 			

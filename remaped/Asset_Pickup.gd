@@ -1,6 +1,6 @@
 extends Area
 
-# WARN: По какой-то причине загружается до инициализации стима
+
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 

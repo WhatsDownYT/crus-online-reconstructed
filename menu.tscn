@@ -199,7 +199,7 @@ func connect_lobby():
 	
 	Multiplayer.emit_signal(\"status_update\", \"Connecting...\")
 	
-	#$VBoxContainer/PlayersList/PlayersListLabel.show()
+
 	LobbyList.hide()
 	LobbyInfo.hide()
 
@@ -385,7 +385,14 @@ func _skin_selected(index):
 	selected = index
 
 func set_texture(path):
-	$TextureRect.texture = load(path)
+	selected = 0
+	for index in range(playerNameImage.size()):
+		if playerNameImage[index][1] == path:
+			selected = index
+			break
+	if not playerNameImage.empty():
+		$ItemList.select(selected)
+		$TextureRect.texture = playerNameImage[selected][2]
 
 func get_texture():
 	return playerNameImage[selected][1]
@@ -407,7 +414,14 @@ func _skin_selected(index):
 	selected = index
 
 func set_texture(path):
-	$TextureRect.texture = load(path)
+	selected = 0
+	for index in range(playerSkins.size()):
+		if playerSkins[index][1] == path:
+			selected = index
+			break
+	if not playerSkins.empty():
+		$ItemList.select(selected)
+		$TextureRect.texture = playerSkins[selected][2]
 
 func get_texture():
 	return playerSkins[selected][1]

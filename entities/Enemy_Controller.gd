@@ -9,8 +9,8 @@ var glob
 var delta
 var mutex
 
-# Multiplayer stuff
-################################################################################
+
+
 
 func get_near_player(object) -> Dictionary:
 	var oldDistance = null
@@ -27,7 +27,7 @@ func get_near_player(object) -> Dictionary:
 		"distance" : oldDistance
 	}
 
-################################################################################
+
 
 func _ready():
 	mutex = Mutex.new()

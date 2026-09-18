@@ -40,7 +40,7 @@ func lobby_init():
 	SteamInit.Steam.connect("lobby_invite", self, "_on_lobby_invite")
 	SteamInit.Steam.connect("join_requested", self, "_on_lobby_join_requested")
 	
-	# Check for command line arguments
+
 	check_command_line()
 	
 	$"../SteamNetwork".init_network()
@@ -74,20 +74,20 @@ func join_lobby(lobby_id: int):
 	SteamInit.Steam.joinLobby(lobby_id)
 
 func leave_lobby():
-	# If in a lobby, leave it
+
 	if _steam_lobby_id != 0:
 		print("Leaving Lobby %s" % _steam_lobby_id)
-		# Send leave request to SteamInit.Steam
+
 		SteamInit.Steam.leaveLobby(_steam_lobby_id)
-		# Wipe the SteamInit.Steam lobby ID then display the default lobby ID and player list title
+
 		_steam_lobby_id = 0
-		# Close session with all users
-		# This is a bit of a hack for now to keep SteamNetwork isolated
+
+
 		for steam_id in _members.keys():
 			var session_state = SteamInit.Steam.getP2PSessionState(steam_id)
 			if session_state.has("connection_active") and session_state["connection_active"]:
 				SteamInit.Steam.closeP2PSessionWithUser(steam_id)
-		# Clear the local lobby list
+
 		_members.clear()
 		emit_signal("player_left_lobby", _my_steam_id)
 
@@ -134,33 +134,37 @@ func _on_lobby_joined(lobby_id: int, permissions, locked: bool, response):
 	print("Lobby Joined!")
 	_steam_lobby_id = lobby_id
 	_update_lobby_members()
+	var remote_version = SteamInit.Steam.getLobbyData(lobby_id, "version")
+	if get_lobby_owner() != _my_steam_id and remote_version != "" and remote_version != Multiplayer.version:
+		Multiplayer.clear_connection(Multiplayer.errorType.WRONG_VERSION)
+		return
 	emit_signal("lobby_joined", lobby_id)
 
 func _on_lobby_join_requested(lobby_id: int, friend_id):
 	print("Attempting to join lobby %s from request" % lobby_id)
-	# Attempt to join the lobby
+
 	emit_signal("lobby_join_requested", lobby_id)
 	join_lobby(lobby_id)
 	
 func _update_lobby_members():
-		# Clear your previous lobby list
+
 	_members.clear()
 
 	_steam_lobby_host = SteamInit.Steam.getLobbyOwner(_steam_lobby_id)
 
-	# Get the number of members from this lobby from Steam
+
 	var num_members: int = SteamInit.Steam.getNumLobbyMembers(_steam_lobby_id)
 
-	# Get the data of these players from Steam
+
 	for member_index in range(0, num_members):
 
-		# Get the member's Steam ID
+
 		var member_steam_id = SteamInit.Steam.getLobbyMemberByIndex(_steam_lobby_id, member_index)
 
-		# Get the member's Steam name
+
 		var member_steam_name = SteamInit.Steam.getFriendPersonaName(member_steam_id)
 
-		# Add them to the list
+
 		_members[member_steam_id] = member_steam_name
 	
 	print(_members)
@@ -170,7 +174,7 @@ func _on_lobby_invite(inviter, lobby, game):
 	
 func _on_lobby_data_update(success, lobby_id, member_id):
 	if success:
-		# check for host change
+
 		var host = SteamInit.Steam.getLobbyOwner(_steam_lobby_id)
 		if host != _steam_lobby_host and host > 0:
 			_owner_changed(_steam_lobby_host, host)
@@ -220,20 +224,20 @@ func check_command_line():
 	
 	print("[CRUS ONLINE / STEAM LOBBY]: Check command line")
 
-	# There are arguments to process
+
 	if args.size() > 0:
 		var _lobby_invite_arg := false
-		# Loop through them and get the useful ones
+
 		for arg in args:
 			print("Command line: "+str(arg))
 
-			# An invite argument was passed
+
 			if _lobby_invite_arg:
 				print("[CRUS ONLINE / STEAM LOBBY]: Lobby join requested")
 				emit_signal("lobby_join_requested", int(arg))
-				#join_lobby(int(arg))
 
-			# A Steam connection argument exists
+
+
 			if arg == "+connect_lobby":
 				_lobby_invite_arg = true
 

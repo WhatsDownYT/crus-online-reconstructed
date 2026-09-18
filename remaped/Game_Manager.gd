@@ -223,7 +223,7 @@ func levels_completed():
 		return false
 
 func _enter_tree()->void :
-	#Steam.steamInit()
+
 	STOCKS = $Stocks
 	player = KinematicBody.new()
 	add_child(player)
@@ -397,9 +397,15 @@ func set_new_scene(scene_resource:PackedScene)->void :
 	emit_signal("scene_loaded")
 
 func add_objective()->void :
+	if not _has_objective_authority():
+		return
 	objectives += 1
+	objective_complete = false
+	_publish_objectives()
 
 func remove_objective()->void :
+	if not _has_objective_authority() or objectives <= 0:
+		return
 	objectives -= 1
 	print(objectives)
 	UI.notify("Target Eliminated", Color(1, 0, 0))
@@ -407,6 +413,16 @@ func remove_objective()->void :
 	if objectives == 0:
 		objective_complete = true
 		UI.notify("All Objectives Complete. Locate the exit.", Color(1, 0, 1))
+	_publish_objectives()
+
+func _has_objective_authority():
+	var multiplayer = get_node_or_null("Multiplayer")
+	return multiplayer == null or not multiplayer.NetworkBridge.check_connection() or multiplayer.NetworkBridge.is_world_authority()
+
+func _publish_objectives():
+	var multiplayer = get_node_or_null("Multiplayer")
+	if multiplayer != null and multiplayer.player_scene_loaded and not get_tree().paused:
+		multiplayer.publish_mission_state()
 
 func level_finished()->void :
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), music_volume)

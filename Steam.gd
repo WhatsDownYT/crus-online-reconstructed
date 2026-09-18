@@ -35,9 +35,9 @@ func _ready() -> void:
 	
 	print("Did Steam initialize?: %s" % initialize_response)
 	
-#	if initialize_response['status'] > 0:
-#		print("Failed to initialize Steam, shutting down: %s" % initialize_response)
-#		get_tree().quit()
+
+
+
 	
 	is_on_steam_deck = Steam.isSteamRunningOnSteamDeck()
 	is_online = Steam.loggedOn()
@@ -51,10 +51,10 @@ func _ready() -> void:
 	print("Steam ID: %s" % steam_id)
 	print("Steam Username: %s" % steam_username)
 
-	# Check if account owns the game
+
 	if is_owned == false:
 		print("User does not own this game")
-		#get_tree().quit()
+
 	
 	print("\n[ CRUS ONLINE / STEAM ]")
 	

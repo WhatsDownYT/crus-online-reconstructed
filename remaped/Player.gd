@@ -147,7 +147,7 @@ var playerWalkSound
 
 var car = null
 
-################################################################################
+
 
 onready var Multiplayer = Global.get_node("Multiplayer")
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
@@ -212,7 +212,7 @@ remote func _spawn_explosion(id, pos):
 		
 		Multiplayer.players[id].puppet.play_explosion_sound()
 
-################################################################################
+
 
 func _enter_tree():
 	name = "Player"
@@ -485,19 +485,23 @@ func grapple(pos3d:Position3D):
 	
 	playerPuppet.set_grapple(pos3d.global_transform.origin)
 	
-	if grapple_orbs.size() < int(distance) * orb_res:
-		for i in range(orb_res):
+
+	var wanted_orbs = int(distance) * orb_res
+	if grapple_orbs.size() < wanted_orbs:
+		for i in range(min(orb_res, wanted_orbs - grapple_orbs.size())):
 			var new_grapple_orb = grapple_orb.instance()
 			add_child(new_grapple_orb)
 			grapple_orbs.append(new_grapple_orb)
-	elif grapple_orbs.size() > int(distance) * orb_res:
-		for i in range(orb_res):
-			grapple_orbs[grapple_orbs.size() - 1].queue_free()
-			grapple_orbs.pop_back()
-	for o in grapple_orbs:
-		var o_scale = (sin(time * 2 - grapple_orbs.find(o)) * 0.5 + 2) * 0.5
-		o.scale = Vector3(o_scale, o_scale, o_scale)
-		o.global_transform.origin = global_transform.origin - (global_transform.origin - point).normalized() * grapple_orbs.find(o) / orb_res
+	elif grapple_orbs.size() > wanted_orbs:
+		for i in range(min(orb_res, grapple_orbs.size() - wanted_orbs)):
+			grapple_orbs.pop_back().queue_free()
+
+	var rope_direction = (global_transform.origin - point).normalized()
+	for index in range(grapple_orbs.size()):
+		var orb_node = grapple_orbs[index]
+		var o_scale = (sin(time * 2 - index) * 0.5 + 2) * 0.5
+		orb_node.scale = Vector3(o_scale, o_scale, o_scale)
+		orb_node.global_transform.origin = global_transform.origin - rope_direction * index / orb_res
 	if distance > 3 and distance < 10:
 		player_velocity -= (global_transform.origin - point).normalized() * gravity * get_process_delta_time() * 2.3
 	elif distance > 10 and distance < 20:
@@ -1211,10 +1215,10 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 	var n_explosion = EXPLOSION.instance()
 	get_parent().add_child(n_explosion)
 	n_explosion.global_transform.origin = global_transform.origin
-#	spawn_gib(0, 1, damage, collision_n, collision_p)
-#	spawn_gib(1, 2, damage, collision_n, collision_p)
-#	spawn_gib(2, 2, damage, collision_n, collision_p)
-#	spawn_gib(3, 1, damage, collision_n, collision_p)
+
+
+
+
 	UI.hide()
 	GLOBAL.get_node('DeathScreen').player_died()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)

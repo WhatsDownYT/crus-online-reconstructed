@@ -1,6 +1,6 @@
 extends KinematicBody
 
-# WARN: Требует повторной регистрации RPC после начала уровня
+
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
@@ -15,7 +15,6 @@ var boresound
 var bored = false
 export  var head_health = 40
 var damage_multiplier = 1
-var cancer_orb = preload("res://Cancerball.tscn")
 var gibflag = false
 var bloodparticles:Array = [preload("res://Entities/Particles/Blood_Particle.tscn"), preload("res://Entities/Particles/Blood_Particle3.tscn")]
 onready var deadhead = get_node("../Dead_Head")
@@ -24,8 +23,8 @@ export  var type = 0
 
 onready var head_gib = preload("res://Entities/Physics_Objects/Head_Gib.tscn")
 
-# Multiplayer stuff
-################################################################################
+
+
 
 puppet func _spawn_gib_client(id, parentPath, gibName):
 	var new_gib = head_gib.instance()
@@ -42,11 +41,19 @@ puppet func _client_damage(id):
 	$CollisionShape.disabled = true
 	gibflag = true
 
-################################################################################
+
 
 func _ready():
-#	set_physics_process(false)
-#	set_process(false)
+	NetworkBridge.register_rpcs(self, [
+		["tranquilize", NetworkBridge.PERMISSION.ALL],
+		["request_cancer", NetworkBridge.PERMISSION.ALL],
+		["network_damage", NetworkBridge.PERMISSION.ALL],
+		["network_piercing_damage", NetworkBridge.PERMISSION.ALL],
+		["_spawn_gib_client", NetworkBridge.PERMISSION.SERVER],
+		["_client_damage", NetworkBridge.PERMISSION.SERVER]
+	])
+
+
 	head_health = 50
 	soul = get_parent().get_parent()
 	if self.name == "Torso":
@@ -62,32 +69,24 @@ func _ready():
 		damage_multiplier = 1
 
 func cancer():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		if soul.cancer_immunity:
-			return 
-		if soul.armor > 0:
-			return 
-		for i in range(6):
-			var cancerball = cancer_orb.instance()
-			soul.get_parent().add_child(cancerball)
-			cancerball.global_transform.origin = global_transform.origin
-			cancerball.dir = cancerball.dir.rotated(Vector3.FORWARD, rand_range( - PI, PI))
-			cancerball.dir = cancerball.dir.rotated(Vector3.LEFT, rand_range( - PI, PI))
-			cancerball.dir = cancerball.dir.rotated(Vector3.UP, rand_range( - PI, PI))
-		soul.remove_objective()
-		soul.hide()
+	if NetworkBridge.is_world_authority():
+		if is_instance_valid(soul):
+			Global.get_node("Multiplayer/CancerReplication").convert_npc(soul, global_transform.origin)
+	else:
+		NetworkBridge.request_host(self, "request_cancer", [Global.get_node("Multiplayer/CancerReplication").epoch])
+
+master func request_cancer(id, event_epoch):
+	if not NetworkBridge.is_world_authority() or not is_instance_valid(soul):
+		return
+	var replication = Global.get_node("Multiplayer/CancerReplication")
+	if event_epoch != replication.epoch:
+		return
+	id = NetworkBridge.request_sender(id)
+	if NetworkBridge.get_peer_actor(id) == null:
+		return
+	replication.convert_npc(soul, global_transform.origin)
 
 func _physics_process(delta):
-	if OS.get_ticks_msec() % 15 == 0:
-		if not NetworkBridge.check_rpc(self, "network_damage"):
-			NetworkBridge.register_rpcs(self, [
-				["tranquilize", NetworkBridge.PERMISSION.ALL],
-				["network_damage", NetworkBridge.PERMISSION.ALL],
-				["network_piercing_damage", NetworkBridge.PERMISSION.ALL],
-				["_spawn_gib_client", NetworkBridge.PERMISSION.SERVER],
-				["_client_damage", NetworkBridge.PERMISSION.SERVER]
-			])
-	
 	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
 		if bored:
 			head_health -= 1
@@ -177,8 +176,8 @@ func player_use():
 				Global.player.set_toxic()
 		else:
 			pass
-			#Global.player.weapon.hold(soul.body)
-			# TODO: Починить возможность подбирать трупы
+
+
 
 func remove_weapon():
 	soul.remove_weapon()

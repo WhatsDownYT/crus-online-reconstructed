@@ -1,5 +1,8 @@
 extends KinematicBody
 
+const DoorPolicy = preload("res://MOD_CONTENT/CruS Online/SpiritualDoorPolicy.gd")
+var door_revision = 0
+
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 var PARTICLE = preload("res://Entities/Particles/Destruction_Particle.tscn")
@@ -20,14 +23,13 @@ var audio_player
 var isDestroyed = false
 
 func _ready():
-	rset_config("global_transform",MultiplayerAPI.RPC_MODE_PUPPET)
-	
 	NetworkBridge.register_rpcs(self, [
 		["_get_transform", NetworkBridge.PERMISSION.ALL],
-		["player_use", NetworkBridge.PERMISSION.ALL],
-		["door_use", NetworkBridge.PERMISSION.ALL]
+		["request_use", NetworkBridge.PERMISSION.ALL],
+		["sync_door", NetworkBridge.PERMISSION.SERVER],
+		["_set_transform", NetworkBridge.PERMISSION.SERVER]
 	])
-	
+
 	set_process(false)
 	set_collision_layer_bit(8, 1)
 	for child in get_children():
@@ -59,35 +61,52 @@ func _ready():
 	audio_player.max_db = 4
 	audio_player.pitch_scale = 0.6
 	
-	if not NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rpc(self, "_get_transform")
+	if NetworkBridge.check_connection() and not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "_get_transform")
 
 master func _get_transform(id):
-	NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	if NetworkBridge.get_peer_actor(id) != null:
+		NetworkBridge.n_rpc_id(self, id, "sync_door", [global_transform, open, stop, door_revision])
+
+func _publish_door():
+	if NetworkBridge.check_connection():
+		NetworkBridge.n_rpc(self, "sync_door", [global_transform, open, stop, door_revision])
+
+puppet func sync_door(_id, pose, opened, stopped, revision):
+	if typeof(pose) != TYPE_TRANSFORM or typeof(opened) != TYPE_BOOL or typeof(stopped) != TYPE_BOOL or typeof(revision) != TYPE_INT or revision < door_revision:
+		return
+	door_revision = revision
+	global_transform = pose
+	open = opened
+	stop = stopped
+
+puppet func _set_transform(_id, pose, revision):
+	if typeof(revision) == TYPE_INT and revision == door_revision and not stop:
+		global_transform = pose
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		if not open and not stop:
-			rotation.y += rotation_speed * delta
-			rotation_counter += rad2deg(rotation_speed * delta)
-			NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
-		if open and not stop:
-			rotation.y -= rotation_speed * delta
-			rotation_counter += rad2deg(rotation_speed * delta)
-			NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
-		if rotation_counter > 90:
-			rotation_counter = 0
-			stop = true
+	if not NetworkBridge.is_world_authority() or stop:
+		return
+	var step = min(rotation_speed * delta, deg2rad(90 - rotation_counter))
+	rotation.y += -step if open else step
+	rotation_counter += rad2deg(step)
+	if rotation_counter >= 89.999:
+		rotation_counter = 0
+		stop = true
+		door_revision += 1
+		_publish_door()
+	elif NetworkBridge.check_connection():
+		NetworkBridge.n_rpc_unreliable(self, "_set_transform", [global_transform, door_revision])
 
 func get_type():
 	return type;
 
-master func player_use(id):
+func player_use():
 	if Global.soul_intact:
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-			door_use(null)
-		else:
-			NetworkBridge.n_rpc(self, "door_use")
+		NetworkBridge.request_host(self, "request_use", [DoorPolicy.capture(Global)])
 	elif Global.hope_discarded:
 		Global.player.UI.notify("It hurts.", Color(1, 0, 0))
 		Global.player.UI.notify("It hurts.", Color(1, 0, 0))
@@ -96,6 +115,14 @@ master func player_use(id):
 	else :
 		Global.player.UI.notify("Feels like something is missing. It won't budge.", Color(0.9, 0.9, 1))
 
-master func door_use(id):
+master func request_use(id, spiritual_state):
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	var actor = NetworkBridge.get_peer_actor(id)
+	if actor == null or not DoorPolicy.allows(spiritual_state, "soul_intact", actor.global_transform.origin, global_transform.origin):
+		return
 	stop = not stop
 	open = not open
+	door_revision += 1
+	_publish_door()

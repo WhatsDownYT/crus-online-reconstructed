@@ -190,7 +190,7 @@ var melee = false
 
 onready var stealthMaterial = preload("res://Materials/seethrough.tres")
 
-########################################
+
 onready var playerPuppet = Global.get_node("Multiplayer").playerPuppet
 
 remote func _create_drop_weapon(id, parentPath, recivedTransform,recivedHoldPos, implantThrowBonus, recivedCurrentWeapon, recivedAmmo, playerVelocity, recivdeRandName, playerIgnoreId):
@@ -272,7 +272,7 @@ puppet func npc_muzzleflash(id, recivedWeapon, recivedPitch = null):
 	if get_parent().get_parent().muzzleflash:
 		get_parent().get_parent().muzzleflash.show()
 
-########################################
+
 
 func _ready() -> void :
 	NetworkBridge.register_rpcs(self, [
@@ -686,7 +686,7 @@ func _process(delta)->void :
 			new_weapon_drop.gun.MESH[current_weapon].show()
 			new_weapon_drop.playerIgnoreId = NetworkBridge.get_id()
 			
-			#get_tree().get_network_unique_id()
+
 			
 			NetworkBridge.n_rpc(self, "_create_drop_weapon", [glob.player.get_parent().get_path(),global_transform.origin,hold_pos.global_transform.origin,glob.implants.arm_implant.throw_bonus,current_weapon,magazine_ammo[current_weapon],glob.player.player_velocity,new_weapon_drop.name,NetworkBridge.get_id()])
 			
@@ -706,84 +706,19 @@ func _process(delta)->void :
 			if use_ray.is_colliding():
 				if global_transform.origin.distance_to(use_ray.get_collision_point()) < global_transform.origin.distance_to(hold_pos.global_transform.origin):
 					pos = use_ray.get_collision_point()
-			held_object.set_network_transform(null, hold_pos.global_transform, true)
-			held_object.global_transform.origin = pos
-			held_object.velocity = Vector3.ZERO
+			var held_transform = held_object.global_transform
+			held_transform.origin = pos
+			held_object.move_held(held_transform)
 			var col_is_usable
 			if use_ray.is_colliding():
 				var collider = use_ray.get_collider()
 				if collider != null:
 					col_is_usable = use_ray.get_collider().get_collision_layer_bit(8)
 			if Input.is_action_just_pressed("Use") and not col_is_usable:
-				holding = false
-				
-				if NetworkBridge.check_connection():
-					held_object.set_hold_collision(false)
-					use_ray.remove_exception(held_object)
-					
-					held_object.set_drop_object()
-					NetworkBridge.n_rpc(held_object, "set_drop_object")
-#				else:
-#					if "soul" in held_object:
-#						held_object.get_parent().remove_child(held_object)
-#						held_object.soul.add_child(held_object)
-#					else :
-#						held_object.get_parent().remove_child(held_object)
-#						glob.player.get_parent().add_child(held_object)
-#						held_object.set_collision_layer_bit(6, 1)
-#					held_object.global_transform.origin = pos
-#					if held_object_world:
-#						held_object.set_collision_layer_bit(0, 1)
-#
-#					held_object.set_collision_mask_bit(0, 1)
-#					yield (get_tree(), "idle_frame")
-#					if is_instance_valid(held_object):
-#						use_ray.remove_exception(held_object)
-#						if "held" in held_object:
-#							held_object.held = false
-			
+				held_object.release_held(pos, Vector3.ZERO, Vector3.ZERO, false)
 			if Input.is_action_just_pressed("kick") and not col_is_usable:
-				holding = false
-				
-				if NetworkBridge.check_connection():
-					held_object.set_hold_collision(false)
-					use_ray.remove_exception(held_object)
-					
-					held_object.set_drop_object()
-					NetworkBridge.n_rpc(held_object, "set_drop_object")
-					
-					var calculatedVelocity
-					if "mass" in held_object:
-						calculatedVelocity = (20 + glob.implants.arm_implant.throw_bonus - held_object.mass) * (global_transform.origin - hold_pos.global_transform.origin).normalized()
-					else :
-						calculatedVelocity = (20 + glob.implants.arm_implant.throw_bonus) * (global_transform.origin - hold_pos.global_transform.origin).normalized()
-					held_object.velocity += glob.player.player_velocity
-					NetworkBridge.n_rset(held_object, "velocity", [held_object.velocity + glob.player.player_velocity - calculatedVelocity])
-#				else:
-#					if "alerter" in held_object:
-#						held_object.alerter = true
-#					if "soul" in held_object:
-#						held_object.get_parent().remove_child(held_object)
-#						held_object.soul.add_child(held_object)
-#					else :
-#						held_object.get_parent().remove_child(held_object)
-#						glob.player.get_parent().add_child(held_object)
-#					held_object.global_transform.origin = pos
-#					if "mass" in held_object:
-#						held_object.velocity -= (20 + glob.implants.arm_implant.throw_bonus - held_object.mass) * (global_transform.origin - hold_pos.global_transform.origin).normalized()
-#					else :
-#						held_object.velocity -= (20 + glob.implants.arm_implant.throw_bonus) * (global_transform.origin - hold_pos.global_transform.origin).normalized()
-#					held_object.velocity += glob.player.player_velocity
-#					if held_object_world:
-#						held_object.set_collision_layer_bit(0, 1)
-#					held_object.set_collision_mask_bit(0, 1)
-#					if "alerter" in held_object:
-#						held_object.set_collision_layer_bit(6, 1)
-#					yield (get_tree(), "idle_frame")
-#					if is_instance_valid(held_object):
-#						use_ray.remove_exception(held_object)
-#						if "held" in held_object:
-#							held_object.held = false
+				var backwards = (global_transform.origin - hold_pos.global_transform.origin).normalized()
+				held_object.release_held(pos, backwards, glob.player.player_velocity, true)
 
 		if not is_zero_approx(player_weapon.rotation.z):
 			player_weapon.rotation.z = lerp(player_weapon.rotation.z, 0, 0.8)

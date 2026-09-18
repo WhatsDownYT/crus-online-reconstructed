@@ -6,7 +6,7 @@ func multiplayer_exit():
 	visible = true
 	in_game = false
 	menu[START].show()
-	#hide_buttons(menu[START], 3, 5)
+
 	
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
@@ -14,7 +14,7 @@ func multiplayer_enter():
 	visible = false
 	in_game = true
 	menu[START].hide()
-	#hide_buttons(menu[START], 2, 4)
+
 	$Hover_Panel.hide()
 	
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -395,7 +395,7 @@ func _ready():
 	update_level_info()
 	
 	
-	#hide_buttons(menu[START], 3, 5)
+
 	set_res(Global.resolution[0], Global.resolution[1])
 	
 	
@@ -1211,7 +1211,7 @@ func toggle_menu():
 		else :
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		if (in_game):
-			#get_tree().paused = not get_tree().paused
+
 			pass
 
 func _on_Master_Volume_value_changed(value):
@@ -1265,7 +1265,7 @@ func _on_Exit_Menu_Pressed(m:int, b:Button):
 	Global.goto_scene("res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn")
 	in_game = false
 	menu[START].show()
-	#get_tree().paused = false
+
 	active_element.hide()
 	active_element.go()
 	hide_buttons(menu[START], 2, 4)
@@ -1283,7 +1283,7 @@ func _on_Exit_Level_Select_Pressed(m:int, b:Button):
 	Global.goto_scene("res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn")
 	in_game = false
 	menu[START].show()
-	#get_tree().paused = false
+
 	if active_element:
 		active_element.hide()
 		active_element.go()
@@ -1315,7 +1315,7 @@ func _on_Retry_Button_Pressed(m:int, b:TextureButton):
 				if Global.CURRENT_LEVEL < Global.L_PUNISHMENT:
 					Global.CURRENT_LEVEL -= 1
 			else :
-				#get_tree().paused = true
+
 				pass
 		menu[START].show()
 		Global.objective_complete = false

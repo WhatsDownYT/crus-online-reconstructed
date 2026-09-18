@@ -1,6 +1,8 @@
 extends KinematicBody
 
-# WARN: По какой-то причине загружается до инициализации стима
+const InteractionPolicy = preload("res://MOD_CONTENT/CruS Online/PropInteractionPolicy.gd")
+
+
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
@@ -54,13 +56,19 @@ var change_transform = true
 
 onready var Multiplayer = Global.get_node("Multiplayer")
 
-################################################################################
+
 
 var holdId = 0
+var holder_throw_bonus = 0.0
+var physics_revision = 0
+var _hold_collision_saved = false
+var _hold_layer = 0
+var _hold_mask = 0
+var _hold_shape_disabled = false
 
 var playerIgnoreId = 0
 
-remote func _sync_vars(id, recDisabled,recUsable,recGrill_health,recSphere_collision,recDamager,recHeld):
+puppet func _sync_vars(id, recDisabled,recUsable,recGrill_health,recSphere_collision,recDamager,recHeld):
 	disabled = recDisabled
 	usable = recUsable
 	grill_health = recGrill_health
@@ -105,12 +113,34 @@ func syncUpdate():
 var lerp_transform : Transform
 var last_transform : Transform
 
-puppet func client_set_lerp_transform(id, recived_transform):
+puppet func client_set_lerp_transform(id, recived_transform, revision = 0):
+	if revision != physics_revision:
+		return
 	lerp_transform = recived_transform
 
-master func set_lerp_transform(id, recived_transform):
+master func set_lerp_transform(id, recived_transform, revision = 0):
+	if revision != physics_revision:
+		return
+	id = NetworkBridge.request_sender(id)
+	if not NetworkBridge.is_world_authority() or not held or id != holdId:
+		return
+	var actor = NetworkBridge.get_peer_actor(id)
+	if actor == null or typeof(recived_transform) != TYPE_TRANSFORM or not InteractionPolicy.finite_vector(recived_transform.origin) or recived_transform.origin.distance_to(actor.global_transform.origin) > 6.0:
+		return
+	global_transform = recived_transform
 	lerp_transform = recived_transform
-	NetworkBridge.n_rpc_unreliable(self, "client_set_lerp_transform", [recived_transform])
+	velocity = Vector3.ZERO
+	NetworkBridge.n_rpc_unreliable(self, "client_set_lerp_transform", [recived_transform, physics_revision])
+
+func move_held(recived_transform):
+	if not held or holdId != NetworkBridge.get_id():
+		return
+	global_transform = recived_transform
+	velocity = Vector3.ZERO
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc_unreliable(self, "client_set_lerp_transform", [recived_transform, physics_revision])
+	else:
+		NetworkBridge.n_rpc_unreliable(self, "set_lerp_transform", [recived_transform, physics_revision])
 
 var tick = 0
 
@@ -120,9 +150,9 @@ func host_tick():
 		last_transform = global_transform
 		
 		if NetworkBridge.n_is_network_master(self):
-			NetworkBridge.n_rpc_unreliable(self, "client_set_lerp_transform", [global_transform])
+			NetworkBridge.n_rpc_unreliable(self, "client_set_lerp_transform", [global_transform, physics_revision])
 		else:
-			NetworkBridge.n_rpc_unreliable(self, "set_lerp_transform", [global_transform])
+			NetworkBridge.n_rpc_unreliable(self, "set_lerp_transform", [global_transform, physics_revision])
 		
 		tick = 0
 
@@ -130,18 +160,22 @@ func register_all_rpcs():
 	NetworkBridge.register_rpcs(self, [
 		["_get_transform", NetworkBridge.PERMISSION.ALL],
 		["set_network_transform", NetworkBridge.PERMISSION.ALL],
-		["add_velocity", NetworkBridge.PERMISSION.ALL],
-		["_sync_vars", NetworkBridge.PERMISSION.ALL],
+		["network_add_velocity", NetworkBridge.PERMISSION.ALL],
+		["_sync_vars", NetworkBridge.PERMISSION.SERVER],
 		["_set_grill", NetworkBridge.PERMISSION.ALL],
 		["_spawn_fake_gas", NetworkBridge.PERMISSION.ALL],
 		["_grill", NetworkBridge.PERMISSION.ALL],
 		["_create_blood_decal", NetworkBridge.PERMISSION.ALL],
 		["_remove", NetworkBridge.PERMISSION.SERVER],
-		["_set_hold_collision", NetworkBridge.PERMISSION.ALL],
+		["_set_hold_collision", NetworkBridge.PERMISSION.SERVER],
 		["set_lerp_transform", NetworkBridge.PERMISSION.ALL],
 		["client_set_lerp_transform", NetworkBridge.PERMISSION.SERVER],
 		["set_hold_object", NetworkBridge.PERMISSION.ALL],
 		["set_drop_object", NetworkBridge.PERMISSION.ALL],
+		["request_hold", NetworkBridge.PERMISSION.ALL],
+		["request_release", NetworkBridge.PERMISSION.ALL],
+		["sync_hold_state", NetworkBridge.PERMISSION.SERVER],
+		["sync_settled_pose", NetworkBridge.PERMISSION.SERVER],
 		["network_set_grill", NetworkBridge.PERMISSION.ALL],
 		["network_damage", NetworkBridge.PERMISSION.ALL]
 	])
@@ -156,8 +190,8 @@ func register_all_rpcs():
 	NetworkBridge.register_rset(self, "stay_active", NetworkBridge.PERMISSION.SERVER)
 	NetworkBridge.register_rset(self, "finished", NetworkBridge.PERMISSION.SERVER)
 
-	rset_config("global_transform", NetworkBridge.PERMISSION.SERVER)
-	rset_config("lerp_transform", NetworkBridge.PERMISSION.SERVER)
+	rset_config("global_transform", MultiplayerAPI.RPC_MODE_PUPPET)
+	rset_config("lerp_transform", MultiplayerAPI.RPC_MODE_PUPPET)
 
 	rset_config("holdId", MultiplayerAPI.RPC_MODE_PUPPET)
 	rset_config("disabled", MultiplayerAPI.RPC_MODE_PUPPET)
@@ -166,13 +200,13 @@ func register_all_rpcs():
 	rset_config("stay_active",MultiplayerAPI.RPC_MODE_PUPPET)
 	rset_config("finished",MultiplayerAPI.RPC_MODE_PUPPET)
 
-################################################################################
+
 
 func _ready()->void :
 	lerp_transform = global_transform
 	
-	# TODO: Не забыть переработать весь этот пиздец
-	# TODO: Не, это реально не смешно. Мне самому страшно от того что я когда-то написал
+
+
 	
 	register_all_rpcs()
 
@@ -210,23 +244,12 @@ func _ready()->void :
 		NetworkBridge.n_rpc(self, "_get_transform")
 
 master func _get_transform(id):
-	NetworkBridge.n_rset_unreliable(self, "lerp_transform", lerp_transform)
-	NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "sync_hold_state", [holdId, global_transform, velocity, damager, alerter, physics_revision])
 
 master func set_network_transform(id, recivedTransform, only_origin = false):
-	if NetworkBridge.n_is_network_master(self):
-		finished = false
-		t = 0
-		velocity = Vector3.ZERO
-		
-		if only_origin:
-			lerp_transform.origin = recivedTransform.origin
-			global_transform.origin = recivedTransform.origin
-		else:
-			lerp_transform = recivedTransform
-			global_transform = recivedTransform
-	else:
-		NetworkBridge.n_rpc(self, "set_network_transform", [recivedTransform, only_origin])
+
+	set_lerp_transform(id, recivedTransform, physics_revision)
 
 func add_velocity(recivedVelocity):
 	network_add_velocity(null, recivedVelocity)
@@ -239,27 +262,32 @@ master func network_add_velocity(id, recivedVelocity):
 
 func set_hold_collision(recived_holding):
 	_set_hold_collision(null, recived_holding)
-	NetworkBridge.n_rpc(self, "_set_hold_collision", [recived_holding])
 
-remote func _set_hold_collision(id, recived_holding):
+puppet func _set_hold_collision(id, recived_holding):
 	if recived_holding:
+		if not _hold_collision_saved:
+			_hold_layer = collision_layer
+			_hold_mask = collision_mask
+			_hold_shape_disabled = $CollisionShape.disabled
+			_hold_collision_saved = true
 		$CollisionShape.disabled = true
 		set_collision_layer_bit(6, 0)
 		set_collision_mask_bit(0, 0)
 	else:
-		$CollisionShape.disabled = false
-		set_collision_layer_bit(6, 1)
-		set_collision_mask_bit(0, 1)
-		
-		holdId = 0
-		held = false
+		if _hold_collision_saved:
+			collision_layer = _hold_layer
+			collision_mask = _hold_mask
+			$CollisionShape.disabled = _hold_shape_disabled
+			_hold_collision_saved = false
 
 func _physics_process(delta):
-	if OS.get_ticks_msec() % 15 == 0:
-		if not NetworkBridge.check_rpc(self, "add_velocity"):
-			register_all_rpcs()
-	
 	if NetworkBridge.check_connection():
+		if held:
+			if NetworkBridge.is_world_authority() and NetworkBridge.get_peer_actor(holdId) == null:
+				_commit_release(false, Vector3.ZERO)
+			elif holdId != NetworkBridge.get_id():
+				global_transform = global_transform.interpolate_with(lerp_transform, clamp(delta * 10.0, 0, 1))
+			return
 		if disabled:
 			$CollisionShape.disabled = true
 			set_physics_process(false)
@@ -277,9 +305,9 @@ func _physics_process(delta):
 			if velocity.x > 0.05 or velocity.y > 0.05:
 				change_transform = true
 			
-	#		if Global.fps < 30 and not player_head:
-	#			if global_transform.origin.distance_to(glob.player.global_transform.origin) > 20:
-	#				return 
+
+
+
 
 			if not stay_active and not gun_rotation or global_transform.origin.distance_to(glob.player.global_transform.origin) > 30:
 				if fmod(t, 2) == 0:
@@ -298,17 +326,17 @@ func _physics_process(delta):
 				new_healing.global_transform.origin = global_transform.origin
 				NetworkBridge.n_rpc(self, "_grill", [new_healing.global_transform.origin])
 			
-#			if collidable:
-#				if Vector2(velocity.x, velocity.z).length() > 5:
-#					set_collision_layer_bit(0, 0)
-#					set_collision_mask_bit(2, 1)
-#					set_collision_mask_bit(3, 1)
-#					NetworkBridge.n_rpc(self, "_set_collision",0,1)
-#				elif not held:
-#					set_collision_layer_bit(0, 1)
-#					set_collision_mask_bit(2, 0)
-#					set_collision_mask_bit(3, 0)
-#					NetworkBridge.n_rpc(self, "_set_collision",1,0)
+
+
+
+
+
+
+
+
+
+
+
 			
 			if player_head:
 				rot_towards = lerp(rot_towards, global_transform.origin - velocity, 5 * delta)
@@ -344,17 +372,17 @@ func _physics_process(delta):
 			if collision and (t < 200 or stay_active):
 				if velocity.length() > 5 and flesh and Global.fps > 30:
 					var new_blood_decal = blood_decal.instance()
-					#print(collision.collider.get_path())
-					#print(get_node(collision.collider.get_path()))
+
+
 					collision.collider.add_child(new_blood_decal)
 					new_blood_decal.global_transform.origin = collision.position
 					new_blood_decal.transform.basis = align_up(new_blood_decal.transform.basis, collision.normal)
 					NetworkBridge.n_rpc(self, "_create_blood_decal", [collision.collider.get_path(), new_blood_decal.global_transform.origin, new_blood_decal.transform.basis])
-				if Vector2(velocity.x, velocity.z).length() > 5 and (gun_rotation or glob.implants.arm_implant.throw_bonus > 0):
+				if Vector2(velocity.x, velocity.z).length() > 5 and (gun_rotation or holder_throw_bonus > 0):
 					if collision.collider.has_method("damage"):
-						if collision.collider.client.name != str(playerIgnoreId):
+						var is_thrower = "client" in collision.collider and str(collision.collider.client.name) == str(playerIgnoreId)
+						if not is_thrower:
 							damager = false
-							print(collision.collider.client.name,"/",playerIgnoreId)
 							collision.collider.damage(100, collision.normal, collision.position, global_transform.origin)
 				elif sounds and abs(velocity.length()) > 2 and Global.fps > 30:
 					var current_sound = 0
@@ -375,6 +403,8 @@ func _physics_process(delta):
 			if collision and t >= 200 and not player_head:
 				if not stay_active:
 					finished = true
+					physics_revision += 1
+					NetworkBridge.n_rpc(self, "sync_settled_pose", [global_transform, velocity, physics_revision])
 				if particle:
 					particle_node.emitting = false
 					particle_node.hide()
@@ -406,37 +436,82 @@ remote func network_set_grill(id, recived_value):
 	grill = recived_value
 
 remote func set_hold_object(id, recived_damager):
-	held = true
-	stay_active = true
-	finished = false
-	
-	if recived_damager:
-		damager = true
-	
-	holdId = id
+	request_hold(id, 20 if recived_damager else 0)
 
-remote func set_drop_object(id):
-	held = false
-	stay_active = false
-	
-	damager = false
-	holdId = 0
+remote func set_drop_object(id = null):
+	request_release(id, global_transform.origin, Vector3.ZERO, Vector3.ZERO, false)
 
 func player_use():
-	if not usable or held:
-		return 
-	
-	held = true
+	if usable and not held:
+		NetworkBridge.request_host(self, "request_hold", [glob.implants.arm_implant.throw_bonus])
 
-	if glob.implants.arm_implant.throw_bonus > 0:
-		damager = true
-	
-	stay_active = true
+master func request_hold(id, throw_bonus):
+	if not NetworkBridge.is_world_authority() or not usable or held:
+		return
+	id = NetworkBridge.request_sender(id)
+	var actor = NetworkBridge.get_peer_actor(id)
+
+
+	if actor == null or not throw_bonus in [0, 20] or actor.global_transform.origin.distance_to(global_transform.origin) > 6.0:
+		return
+	for prop in get_tree().get_nodes_in_group("network_held_props"):
+		if prop.holdId == id:
+			return
+	holder_throw_bonus = throw_bonus
+	physics_revision += 1
+	sync_hold_state(null, id, global_transform, Vector3.ZERO, throw_bonus > 0, false, physics_revision)
+	NetworkBridge.n_rpc(self, "sync_hold_state", [id, global_transform, velocity, damager, false, physics_revision])
+
+func release_held(position, backwards, player_velocity, kicked):
+	NetworkBridge.request_host(self, "request_release", [position, backwards, player_velocity, kicked])
+
+master func request_release(id, position, backwards, player_velocity, kicked):
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	var actor = NetworkBridge.get_peer_actor(id)
+	if not held or id != holdId or actor == null:
+		return
+	if not InteractionPolicy.valid_release(position, actor.global_transform.origin, backwards, player_velocity, kicked):
+		return
+	global_transform.origin = position
+	playerIgnoreId = id
+	var released_velocity = InteractionPolicy.release_velocity(kicked, backwards, player_velocity, holder_throw_bonus, mass)
+	_commit_release(kicked, released_velocity)
+
+func _commit_release(kicked, released_velocity):
+	physics_revision += 1
+	var throw_damager = kicked and holder_throw_bonus > 0
+	sync_hold_state(null, 0, global_transform, released_velocity, throw_damager, kicked, physics_revision)
+	NetworkBridge.n_rpc(self, "sync_hold_state", [0, global_transform, released_velocity, throw_damager, kicked, physics_revision])
+
+puppet func sync_hold_state(id, holder, state_transform, state_velocity, state_damager, state_alerter, revision = 0):
+	if revision < physics_revision:
+		return
+	physics_revision = revision
+	var previous_holder = holdId
+	holdId = holder
+	held = holder != 0
+	stay_active = held
 	finished = false
-	
-	NetworkBridge.n_rpc(self, "set_hold_object", [damager])
-	
-	glob.player.weapon.hold(self)
+	t = 0
+	damager = state_damager
+	alerter = state_alerter
+	global_transform = state_transform
+	lerp_transform = state_transform
+	velocity = state_velocity
+	_set_hold_collision(null, held)
+	if held:
+		add_to_group("network_held_props")
+	else:
+		remove_from_group("network_held_props")
+	if holder == NetworkBridge.get_id():
+		glob.player.weapon.hold(self)
+	elif previous_holder == NetworkBridge.get_id() and is_instance_valid(glob.player):
+		var weapon = glob.player.weapon
+		if weapon.held_object == self:
+			weapon.holding = false
+			weapon.use_ray.remove_exception(self)
 
 func damage(damage, collision_n, collision_p, shooter_pos):
 	network_damage(null, damage, collision_n, collision_p, shooter_pos)
@@ -476,3 +551,12 @@ func get_type():
 
 func physics_object():
 	pass
+
+puppet func sync_settled_pose(id, state_transform, state_velocity, revision):
+	if revision < physics_revision:
+		return
+	physics_revision = revision
+	global_transform = state_transform
+	lerp_transform = state_transform
+	velocity = state_velocity
+	finished = true

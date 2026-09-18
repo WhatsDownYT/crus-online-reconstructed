@@ -44,6 +44,8 @@ var flee = false
 var on_fire = false
 var player_seen = false
 var rand_objective = false
+var objective_registered = false
+var population_registered = false
 var alert_sphere = preload("res://Entities/Alert_Sphere.tscn")
 onready var pain_sfx = [$Body / SFX / Pain1]
 onready var gib_sfx = $Body / SFX / Gib
@@ -116,8 +118,8 @@ var fireaudio:AudioStreamPlayer3D
 
 var Multiplayer = Global.get_node("Multiplayer")
 
-# Multiplayer stuff
-################################################################################
+
+
 
 var enabled = true
 
@@ -154,11 +156,8 @@ puppet func _die_client(id):
 		dead = true
 		if objective:
 			$Body / Objective_Indicator.hide()
-			glob.remove_objective()
-		if not civilian:
-			glob.enemy_count -= 1
-		else :
-			glob.civ_count -= 1
+			_complete_objective()
+		_remove_population()
 		if poison_death:
 			poisontimer.start()
 		if not civilian and not creature:
@@ -179,7 +178,10 @@ puppet func _hide_npc_client(id):
 	body.lerp_transform.origin = Vector3(1000,1000,1000)
 	body.set_collision_layer_bit(4, false)
 
-puppet func respawn(id):
+puppet func respawn(id, host_objective = null):
+	if host_objective != null:
+		objective = host_objective
+		$Body/Objective_Indicator.visible = objective
 	enabled = true
 	show()
 	dead = false
@@ -199,7 +201,7 @@ master func check_npc(id):
 		print("[CRUS ONLINE / HOST / " + name + "]: NPC not enabled")
 		NetworkBridge.n_rpc_id(self, id, "cleanup")
 	else:
-		NetworkBridge.n_rpc_id(self, id, "respawn")
+		NetworkBridge.n_rpc_id(self, id, "respawn", [objective])
 
 func set_stealth():
 	network_set_stealth(null)
@@ -211,7 +213,7 @@ puppet func network_set_stealth(id):
 	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
 		NetworkBridge.n_rpc(self, "network_set_stealth")
 
-################################################################################
+
 
 func spawn_check_npc():
 	if NetworkBridge.check_connection() and not NetworkBridge.n_is_network_master(self):
@@ -336,13 +338,18 @@ func _ready():
 	new_alert_sphere.global_transform.origin = body.global_transform.origin
 	if not civilian:
 		weapon = get_node_or_null("Body/Rotation_Helper/Weapon")
-		glob.enemy_count += 1
-		glob.enemy_count_total = glob.enemy_count
+		if enabled and NetworkBridge.is_world_authority():
+			glob.enemy_count += 1
+			glob.enemy_count_total = glob.enemy_count
+			population_registered = true
 	elif not objective:
-		glob.civ_count += 1
-		glob.civ_count_total = glob.civ_count
-	if objective:
-		glob.add_objective()
+		if enabled and NetworkBridge.is_world_authority():
+			glob.civ_count += 1
+			glob.civ_count_total = glob.civ_count
+			population_registered = true
+
+
+	if _register_objective():
 		$Body / Objective_Indicator.show()
 	if objective:
 		print(glob.objectives)
@@ -540,11 +547,8 @@ func remove_objective():
 		return 
 	if objective:
 		$Body / Objective_Indicator.hide()
-		glob.remove_objective()
-	if not civilian:
-		glob.enemy_count -= 1
-	else :
-		glob.civ_count -= 1
+		_complete_objective()
+	_remove_population()
 
 puppet func _spawn_gib_client(id, parentPath, gibName, spawn_head):
 	var count = 0
@@ -670,11 +674,8 @@ func die(damage, collision_n, collision_p):
 			dead = true
 			if objective:
 				$Body / Objective_Indicator.hide()
-				glob.remove_objective()
-			if not civilian:
-				glob.enemy_count -= 1
-			else :
-				glob.civ_count -= 1
+				_complete_objective()
+			_remove_population()
 			if poison_death:
 				poisontimer.start()
 			if not civilian and not creature:
@@ -710,3 +711,25 @@ func grapple(pos3d:Position3D):
 	var distance = body.global_transform.origin.distance_to(point)
 	if distance > 3:
 		body.velocity -= (body.global_transform.origin - point).normalized() * 22 * get_physics_process_delta_time()
+
+func _complete_objective():
+	if not objective_registered:
+		return
+	objective_registered = false
+	glob.remove_objective()
+
+func _register_objective():
+	if not objective or not enabled or objective_registered or not NetworkBridge.is_world_authority():
+		return false
+	objective_registered = true
+	glob.add_objective()
+	return true
+
+func _remove_population():
+	if not population_registered:
+		return
+	population_registered = false
+	if civilian:
+		glob.civ_count = max(0, glob.civ_count - 1)
+	else:
+		glob.enemy_count = max(0, glob.enemy_count - 1)

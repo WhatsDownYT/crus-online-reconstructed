@@ -1,4 +1,4 @@
-extends PanelContainer
+extends "res://MOD_CONTENT/CruS Online/FloatingPanel.gd"
 
 onready var Multiplayer = Global.get_node("Multiplayer")
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
@@ -11,7 +11,7 @@ func _ready():
 	hide()
 
 func set_size_ratio():
-	sizeRatio = 16 * (Global.resolution[0] / 1280)
+	sizeRatio = 16
 	
 	$VBoxContainer/PanelContainer/RichTextLabel.get_font("normal_font").size = sizeRatio
 	$VBoxContainer/Label.get_font("font").size = sizeRatio
@@ -19,6 +19,7 @@ func set_size_ratio():
 func open_stats(type):
 	show()
 	set_size_ratio()
+	fit_in_parent()
 	$"../OpenStats".button_disable()
 	$"../CloseStats".button_enable()
 
@@ -46,7 +47,5 @@ func _physics_process(delta):
 				
 				playerNumber += 1
 				
-				$VBoxContainer/PanelContainer/RichTextLabel.text += player.nickname
 			
-			print(playersList.bbcode_text)
 			tick = 0

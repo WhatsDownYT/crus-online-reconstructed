@@ -1,5 +1,7 @@
 extends Control
 
+var profile_store = preload("res://MOD_CONTENT/CruS Online/ProfileStore.gd").new()
+
 var ip = "127.0.0.1"
 var port = 25567
 
@@ -13,19 +15,12 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 func _ready():
 	var loadedPlayerData = load_data("player.save")
-	if loadedPlayerData == null:
-		save_data("player.save", Multiplayer.playerInfo)
-	else:
-		Multiplayer.playerInfo = loadedPlayerData
-	
+	Multiplayer.playerInfo = profile_store.merge_defaults(Multiplayer.playerInfo, loadedPlayerData)
 	var loadedConfigData = load_data("config.save")
-	if loadedConfigData == null:
-		save_data("config.save", Multiplayer.config)
-	else:
-		Multiplayer.config = loadedConfigData
-	
-	Multiplayer.config.tickRate = int(Multiplayer.config.tickRate)
-	Multiplayer.config.helpTimer = int(Multiplayer.config.helpTimer)
+	Multiplayer.config = profile_store.merge_defaults(Multiplayer.config, loadedConfigData)
+
+	Multiplayer.config.tickRate = int(clamp(Multiplayer.config.tickRate, 1, 60))
+	Multiplayer.config.helpTimer = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
 	
 	var modloaderVersion = Global.get_node_or_null("Menu/ModLoaderVersion")
 	
@@ -38,11 +33,11 @@ func _ready():
 	$CenterContainer/TabContainer/Host/VBoxContainer/Port/PortEdit.text = str(Multiplayer.config.hostPort)
 	$CenterContainer/TabContainer/Host/VBoxContainer/Password/PasswordEdit.text = Multiplayer.config.hostPassword
 	
-	$CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value = int(Multiplayer.config.tickRate)
+	$CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value = int(clamp(Multiplayer.config.tickRate, 1, 60))
 	
 	$CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed = Multiplayer.config.canRespawn
 	$CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed = Multiplayer.config.changeModeOnDeath
-	$CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer/HelpEdit.value = int(Multiplayer.config.helpTimer)
+	$CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer/HelpEdit.value = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
 	
 	NicknameEdit.text = Multiplayer.playerInfo.nickname
 	NicknameColor.color = Multiplayer.playerInfo.color
@@ -159,33 +154,10 @@ func disable_menu():
 	$CenterContainer.visible = false
 
 func save_data(fileName, data):
-	var dir = Directory.new()
-	if not dir.dir_exists("user://mod_config/crus_online/"):
-		dir.make_dir("user://mod_config/crus_online/")
-	
-	var mod_config = File.new()
-	mod_config.open("user://mod_config/crus_online/" + fileName, File.WRITE)
-	mod_config.store_line(to_json(data))
-	mod_config.close()
-	
-	print("[CruS Online]: Saved")
+	if not profile_store.save_data(fileName, data):
+		push_error("[CruS Online] " + profile_store.last_error)
+		return false
+	return true
 
 func load_data(fileName):
-	var dir = Directory.new()
-	if not dir.dir_exists("user://mod_config/crus_online/"):
-		dir.make_dir("user://mod_config/crus_online/")
-
-	var file = File.new()
-	if file.file_exists("user://mod_config/crus_online/" + fileName):
-		file.open("user://mod_config/crus_online/" + fileName, File.READ)
-		var data = parse_json(file.get_as_text())
-		file.close()
-		if typeof(data) == TYPE_DICTIONARY:
-			print("[CruS Online]: Loaded")
-			return data
-		else:
-			printerr("[CruS Online]: Corrupted data!")
-			return null
-	else:
-		printerr("[CruS Online]: No saved data!")
-		return null
+	return profile_store.load_data(fileName)

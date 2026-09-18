@@ -40,7 +40,7 @@ export  var time = 1
 var timer:Timer
 var flechette = preload("res://Entities/Decals/Flechette.tscn")
 
-################################################################################
+
 
 var explosion_types_path = [
 	"res://Entities/Bullets/Poison_Gas.tscn",
@@ -91,9 +91,9 @@ puppet func _delete(id):
 	set_process(false)
 	set_physics_process(false)
 	
-	#queue_free()
 
-################################################################################
+
+
 
 var have_boresound = false
 

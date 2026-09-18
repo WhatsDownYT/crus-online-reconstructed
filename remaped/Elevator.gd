@@ -15,7 +15,7 @@ var move_audio:AudioStreamPlayer3D
 
 func _ready():
 	NetworkBridge.register_rpcs(self, [
-		["stop", NetworkBridge.PERMISSION.ALL],
+		["sync_state", NetworkBridge.PERMISSION.SERVER],
 		["network_use", NetworkBridge.PERMISSION.ALL]
 	])
 	
@@ -41,30 +41,47 @@ func _ready():
 	move_audio.stream = load("res://Sfx/Environment/Elevator_Move.wav")
 
 func _process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
-		
+	if not NetworkBridge.check_connection() or NetworkBridge.is_world_authority():
 		last_pos = global_transform.origin
 		if not stopped:
 			if not move_audio.playing:
 				move_audio.play()
 			translate(Vector3(0, speed * delta, 0))
+			if NetworkBridge.check_connection():
+				NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
 
-master func stop(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+
+
+func stop():
+	if not NetworkBridge.check_connection() or NetworkBridge.is_world_authority():
 		stopped = true
 		initpos = not initpos
 		speed = - speed
 		bell_audio.play()
 		move_audio.stop()
-	else:
-		NetworkBridge.n_rpc(self, "stop")
+		_publish_state()
 
 func use():
 	network_use(null)
 	
 master func network_use(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if not NetworkBridge.check_connection() or NetworkBridge.is_world_authority():
 		stopped = false
+		_publish_state()
 	else:
 		NetworkBridge.n_rpc(self, "network_use")
+
+func _publish_state():
+	if NetworkBridge.check_connection():
+		NetworkBridge.n_rpc(self, "sync_state", [global_transform, stopped, speed, initpos])
+
+puppet func sync_state(id, state_transform, state_stopped, state_speed, state_initpos):
+	global_transform = state_transform
+	stopped = state_stopped
+	speed = state_speed
+	initpos = state_initpos
+	if stopped:
+		bell_audio.play()
+		move_audio.stop()
+	elif not move_audio.playing:
+		move_audio.play()

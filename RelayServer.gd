@@ -8,10 +8,10 @@ export var true_server_port  = 25567
 export var fake_latency_ms = 0
 export var fake_loss = 0.0
 
-# Mental picture :
-#
-# (True) Server  <-->  Virtual Client -[Laggy bridge]- Virtual Server  <-->  (True) Client
-#
+
+
+
+
 
 var vserver_peer
 var vserver_has_dest_address = false
@@ -48,7 +48,7 @@ func _process(delta):
 	var now = Time.get_ticks_msec()
 	var send_at_ms = now - fake_latency_ms
 	
-	# Handle packets Client -> Server
+
 	while vserver_peer.get_available_packet_count() > 0:
 		var packet = vserver_peer.get_packet()
 		var err = vserver_peer.get_packet_error()
@@ -72,7 +72,7 @@ func _process(delta):
 	if not vserver_has_dest_address:
 		return
 	
-	# Handle packets Server -> Client
+
 	while vclient_peer.get_available_packet_count() > 0:
 		var packet = vclient_peer.get_packet()
 		var err = vclient_peer.get_packet_error()

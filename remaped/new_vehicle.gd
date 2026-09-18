@@ -150,26 +150,26 @@ func _process(delta):
 	if Input.is_action_just_pressed("Use") and in_use and (drive_id == NetworkBridge.get_id() or drive_id == null and NetworkBridge.n_is_network_master(self)):
 		eject()
 
-#func _input(event):
-#	if drive_id == NetworkBridge.get_id() and in_use:
-#		if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-#			if not Input.is_action_pressed("reload"):
-#				var x_mouse_sensitivity = Global.mouse_sensitivity
-#				var y_mouse_sensitivity = Global.mouse_sensitivity
-#
-#				var sensitivity = x_mouse_sensitivity * car_camera.fov / Global.FOV
-#
-#				var rot_deg_y = deg2rad(event.relative.y * sensitivity)
-#				if Global.invert_y:
-#					rot_deg_y *= - 1
-#				camera_rotation.rotate_x(rot_deg_y)
-#				if Global.player.max_gravity > 0:
-#					car_camera.rotate_y(deg2rad(event.relative.x * sensitivity * - 1))
-#				else:
-#					car_camera.rotate_y(deg2rad(event.relative.x * sensitivity))
-#				var camera_rot = camera_rotation.rotation_degrees
-#				camera_rot.x = clamp(camera_rot.x, - 75, 75)
-#				camera_rotation.rotation_degrees = camera_rot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 func eject():
 		car_camera.current = false
@@ -243,5 +243,5 @@ func _on_Area_body_entered(body):
 		body.damage(200, (global_transform.origin - body.global_transform.origin).normalized(), body.global_transform.origin, global_transform.origin)
 
 remote func _set_master(id):
-	#set_network_master(id)
+
 	pass
