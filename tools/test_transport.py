@@ -27,11 +27,11 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         shutil.copy2(library, project / library.name)
     mod = project / 'MOD_CONTENT' / 'CruS Online'
     mod.mkdir(parents=True)
-    for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'FriendlyFire.gd', 'EnemyTargeting.gd', 'ImplantNetwork.gd', 'PlayerCollisionProxy.gd', 'SessionFlow.gd', 'DifficultyLabel.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
+    for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'FriendlyFire.gd', 'EnemyTargeting.gd', 'ImplantNetwork.gd', 'PlayerCollisionProxy.gd', 'SessionFlow.gd', 'DiscordPresence.gd', 'VoiceChat.gd', 'VoiceCodec.gd', 'VoiceRoster.gd', 'VoiceSettings.gd', 'DifficultyLabel.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
         shutil.copy2(root / name, mod / name)
 
 
-    integration = ('multiplayer.gd', 'multiplayer_player.gd', 'SteamLobby.gd', 'multiplayer_menu.gd', 'Players.gd', 'Menu.gd', 'Stats.gd', 'ChatBox.gd',
+    integration = ('VoiceChat.gd', 'multiplayer.gd', 'multiplayer_player.gd', 'SteamLobby.gd', 'multiplayer_menu.gd', 'Players.gd', 'Menu.gd', 'Stats.gd', 'ChatBox.gd',
                    'CancerSegment.gd', 'CancerReplication.gd', 'entities/Enemy_Torso.gd', 'remaped/Kinematic_Physics_Object.gd',
                    'remaped/Switch.gd', 'remaped/Door.gd', 'remaped/down_door.gd', 'remaped/down_switch_door.gd', 'remaped/Divine_Door.gd', 'remaped/Profane_Door.gd', 'remaped/Terror_Door.gd', 'remaped/Elevator.gd', 'remaped/weapon.gd',
                    'remaped/Player.gd', 'remaped/Exit.gd', 'remaped/Game_Manager.gd', 'entities/EnemyHandler.gd',
@@ -86,6 +86,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
             if f'var {collection}' in source:
                 (project / f'{collection}.gd').write_text(source, encoding='utf-8')
     shutil.copy2(root / 'tests/transport_test.gd', project / 'test.gd')
+    shutil.copy2(root / 'tests/voice_test.gd', project / 'voice_test.gd')
     (project / 'test.tscn').write_text('[gd_scene load_steps=2 format=2]\n'
         '[ext_resource path="res://test.gd" type="Script" id=1]\n'
         '[node name="Tests" type="Node"]\nscript = ExtResource( 1 )\n', encoding='utf-8')

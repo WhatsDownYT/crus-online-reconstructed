@@ -4,6 +4,7 @@ var version = "Beta v0.3"
 
 enum errorType {UNKNOW, TIME_OUT, WRONG_PASSWORD, WRONG_VERSION, PASSWORD_REQUIRE, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
 
+var profile_loaded = false
 var playerInfo = {
 	"nickname": "MT Foxtrot",
 	"color": "ff00ff",
@@ -18,7 +19,10 @@ var hostSettings = {
 	"canRespawn": false,
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
-	"friendlyFire": true
+	"friendlyFire": true,
+	"useVoiceChat": true,
+	"proximityVoiceChat": true,
+	"hearDeadPlayers": false
 }
 
 var config = {
@@ -31,7 +35,10 @@ var config = {
 	"canRespawn": false,
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
-	"friendlyFire": true
+	"friendlyFire": true,
+	"useVoiceChat": true,
+	"proximityVoiceChat": true,
+	"hearDeadPlayers": false
 }
 
 var password = ""
@@ -85,11 +92,18 @@ func _notification(what):
 			push_error("[CRUS ONLINE / MAIN]: CRASH DETECTED")
 
 var Flow
+var Voice
 
 func _ready():
 	Flow = preload("res://MOD_CONTENT/CruS Online/SessionFlow.gd").new()
 	Flow.name = "SessionFlow"
 	add_child(Flow)
+	Voice = preload("res://MOD_CONTENT/CruS Online/VoiceChat.gd").new()
+	Voice.name = "VoiceChat"
+	add_child(Voice)
+	var discord_presence = preload("res://MOD_CONTENT/CruS Online/DiscordPresence.gd").new()
+	discord_presence.name = "DiscordPresence"
+	add_child(discord_presence)
 	var cancer_replication = preload("res://MOD_CONTENT/CruS Online/CancerReplication.gd").new()
 	cancer_replication.name = "CancerReplication"
 	add_child(cancer_replication)
@@ -104,6 +118,7 @@ func _ready():
 		["goto_menu_client", SteamNetwork.PERMISSION.SERVER],
 		["goto_scene_client", SteamNetwork.PERMISSION.SERVER],
 		["scene_loaded_signal", SteamNetwork.PERMISSION.SERVER],
+		["sync_load_progress", SteamNetwork.PERMISSION.SERVER],
 		["set_death_label", SteamNetwork.PERMISSION.SERVER],
 		["hide_death_screen", SteamNetwork.PERMISSION.SERVER],
 		["ping_host", SteamNetwork.PERMISSION.ALL],
@@ -129,7 +144,7 @@ func _ready():
 
 	get_tree().connect("network_peer_connected", self, "connected")
 	get_tree().connect("network_peer_disconnected", self, "disconnected")
-	get_tree().connect("server_disconnected", self, "host_session_ended")
+	get_tree().connect("server_disconnected", self, "host_session_ended", [], CONNECT_DEFERRED)
 	
 	SteamNetwork.connect("all_peers_connected", self, "steam_peers_connect")
 	SteamNetwork.connect("host_left", self, "host_session_ended", [], CONNECT_DEFERRED)
@@ -220,6 +235,8 @@ func apply_host_settings():
 	hostSettings.changeModeOnDeath = config.changeModeOnDeath
 	hostSettings.friendlyFire = config.friendlyFire
 	hostSettings.shareDifficulty = config.shareDifficulty
+	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
+		hostSettings[key] = config[key]
 	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
 		NetworkBridge.n_rpc(self, "sync_host_settings", [hostSettings])
 
@@ -267,6 +284,8 @@ func join_to_server(ip, port):
 		print("[CRUS ONLINE / MAIN]: Client try to connect")
 
 func leave_server():
+	if is_instance_valid(Voice):
+		Voice.reset_session()
 	if is_instance_valid(Flow):
 		Flow.reset_session()
 	_announce_difficulty = false
@@ -411,6 +430,7 @@ func host_add_player(id, info):
 	if not players.has(id):
 		players[id] = info
 		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])
+		Flow.send_world(id)
 		print("[CRUS ONLINE / HOST]: Sync player info")
 		
 		emit_signal("players_update", players)
@@ -565,6 +585,7 @@ func goto_scene_host(scene):
 	Flow.prepare_mission()
 	_announce_difficulty = not hostSettings.get("shareDifficulty", false)
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1)
+	sync_load_progress(null, 0, players.size(), SteamNetwork.scene_epoch)
 	$CancerReplication.reset(SteamNetwork.scene_epoch)
 	$RestartTimer.stop()
 	hostSettings.map = scene
@@ -597,6 +618,7 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	died_players.clear()
 	team_wipe_applied = false
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1 if epoch < 0 else epoch)
+	sync_load_progress(null, 0, players.size(), SteamNetwork.scene_epoch)
 	$CancerReplication.reset(SteamNetwork.scene_epoch)
 	$RestartTimer.stop()
 	player_scene_loaded = false
@@ -637,10 +659,18 @@ func _scene_loaded():
 
 func check_players_load():
 	var is_players_loaded = true
+	var ready_count = 0
 
 	for player in players:
 		if not loaded_players.has(player):
 			is_players_loaded = false
+		else:
+			ready_count += 1
+	var progress_key = "%s:%s:%s" % [SteamNetwork.scene_epoch, ready_count, players.size()]
+	if progress_key != _load_progress_key:
+		_load_progress_key = progress_key
+		sync_load_progress(null, ready_count, players.size(), SteamNetwork.scene_epoch)
+		NetworkBridge.n_rpc(self, "sync_load_progress", [ready_count, players.size(), SteamNetwork.scene_epoch])
 	
 	if is_players_loaded:
 		disconnect("host_tick", self, "check_players_load")
@@ -667,19 +697,29 @@ puppet func notify_host_difficulty(id, message):
 
 func publish_mission_state():
 	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
-		NetworkBridge.n_rpc(self, "sync_mission_state", [Global.objectives, Global.objective_complete])
+		NetworkBridge.n_rpc(self, "sync_mission_state", [Global.objectives, Global.objective_complete, Global.objectives_total])
 
-puppet func sync_mission_state(id, remaining, complete):
+puppet func sync_mission_state(id, remaining, complete, total = -1):
 	if typeof(remaining) != TYPE_INT or remaining < 0 or typeof(complete) != TYPE_BOOL:
+		return
+	if typeof(total) != TYPE_INT or total < -1 or (total >= 0 and total < remaining):
 		return
 	var previous_remaining = Global.objectives
 	var was_complete = Global.objective_complete
 	Global.objectives = remaining
+	Global.objectives_total = total if total >= 0 else max(Global.objectives_total, remaining)
 	Global.objective_complete = complete
 	if remaining < previous_remaining and Global.UI != null:
 		Global.UI.notify("Target Eliminated", Color(1, 0, 0))
 	if complete and not was_complete and Global.UI != null:
 		Global.UI.notify("All Objectives Complete. Locate the exit.", Color(1, 0, 1))
+
+var _load_progress_key = ""
+
+puppet func sync_load_progress(id, ready_count, total, epoch):
+	if epoch != SteamNetwork.scene_epoch or typeof(ready_count) != TYPE_INT or typeof(total) != TYPE_INT or ready_count < 0 or ready_count > total:
+		return
+	$SyncLoad/Center/Label.text = "Online synchronization\nPlease wait\n\n(%d/%d)" % [ready_count, total]
 
 master func load_check(id):
 	id = NetworkBridge.request_sender(id)
@@ -878,6 +918,9 @@ func host_session_ended():
 	if players.empty() and not dataLoaded and not SteamLobby.in_lobby():
 		return
 	leave_server()
+	_prepare_menu_return(false)
+	Global.cutscene = false
+	Global.border.show()
 	Players.remove_players()
 	Global.menu.in_game = false
 	Global.goto_scene(get_menu_scene())
@@ -901,3 +944,14 @@ func get_alive_actors():
 			if preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd").alive(actor, Global.player, local_id, died_players):
 				_alive_actors.append(actor)
 	return _alive_actors
+
+func refresh_local_profile():
+	var peer = NetworkBridge.get_id()
+	if not NetworkBridge.check_connection() or not players.has(peer):
+		return
+	if NetworkBridge.is_world_authority():
+		for field in ["nickname", "color", "image", "skinPath"]:
+			players[peer][field] = playerInfo[field]
+		Players.sync_players()
+		emit_signal("players_update", players)
+		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])

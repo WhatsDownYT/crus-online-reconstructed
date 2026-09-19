@@ -78,7 +78,22 @@ onready var grapple_start_point = $Puppet/GrappleStartPoint
 onready var grapple_orb = preload("res://Entities/grappleorb.tscn")
 var grapple_orbs = []
 
+var voice_icon
+var voice_icon_elapsed = 0.0
+var label_font_ready = false
+var centered_name = ""
+
 func _ready():
+	$Puppet/PlayerModel/Nickname.set_as_toplevel(true)
+	$Puppet/PlayerModel/Nickname.global_transform = Transform.IDENTITY
+	$Puppet/PlayerModel/Nickname.billboard = SpatialMaterial.BILLBOARD_ENABLED
+	$Puppet/PlayerModel/Nickname.horizontal_alignment = Label3D.ALIGN_CENTER
+	voice_icon = Sprite3D.new()
+	voice_icon.name = "VoiceIndicator"
+	voice_icon.billboard = SpatialMaterial.BILLBOARD_ENABLED
+	voice_icon.translation = Vector3(0, 0.24, 0)
+	voice_icon.hide()
+	$Puppet/PlayerModel/Nickname.add_child(voice_icon)
 	var proxy = preload("res://MOD_CONTENT/CruS Online/PlayerCollisionProxy.gd").new()
 	proxy.name = "GameplayCollision"
 	$Puppet.add_child(proxy)
@@ -135,6 +150,8 @@ remote func _set_death(id, recived_death):
 	_update_collision_stance()
 	
 	if death:
+		transform_lerp.basis = global_transform.basis
+		playerMovement = [0.0, 0.0]
 		animTree.set("parameters/DEATH1/active", true)
 	else:
 		animTree.set("parameters/DEATH1/active", false)
@@ -188,6 +205,12 @@ remote func set_sit(id, recived_value):
 		player_sitting = recived_value
 
 func _process(delta):
+	if not label_font_ready:
+		_apply_label_font()
+	voice_icon_elapsed += delta
+	if voice_icon_elapsed >= 0.1:
+		voice_icon_elapsed = 0.0
+		_update_voice_icon()
 	weaponBlend = lerp(weaponBlend, float(!weaponHold), delta * 4.0)
 	crouchBlend = lerp(crouchBlend, floor(playerCrouch), delta * 4.0)
 	jumpBlend = lerp(jumpBlend, abs(floor(playerOnFloor) - 1), delta * 4.0)
@@ -209,6 +232,10 @@ func _process(delta):
 	if not global_transform.is_equal_approx(transform_lerp):
 		global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
 	
+	$Puppet/PlayerModel/Nickname.global_transform.origin = $Puppet.global_transform.origin + Vector3(0, 2.15 if not playerCrouch else 1.45, 0)
+	if label_font_ready and centered_name != $Puppet/PlayerModel/Nickname.text:
+		centered_name = $Puppet/PlayerModel/Nickname.text
+		call_deferred("_center_nickname")
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
 		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to help"
 	
@@ -265,6 +292,10 @@ func _physics_process(delta):
 			hide()
 
 remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedPlayerAim, recived_grapple_pos = null):
+	if death:
+		recivedTransform.basis = transform_lerp.basis
+		recivedPlayerMovement = [0.0, 0.0]
+		recivedPlayerAim = playerAim
 	if int(self.name) != NetworkBridge.get_id():
 		transform_lerp = recivedTransform
 		if NetworkBridge.is_world_authority():
@@ -437,3 +468,40 @@ func _update_collision_stance():
 puppet func _add_velocity(id, velocity):
 	if int(name) == NetworkBridge.get_id() and ActionPolicy.finite_vector(velocity) and velocity.length() <= 2000 and is_instance_valid(Global.player):
 		Global.player.player_velocity += velocity
+
+func _update_voice_icon():
+	var voice = Global.get_node("Multiplayer").get_node_or_null("VoiceChat")
+	if voice == null or not is_instance_valid(voice_icon):
+		return
+	var peer = int(name)
+	voice_icon.visible = voice.is_talking(peer)
+	voice_icon.texture = voice.TALK_ICON
+	voice_icon.pixel_size = 0.22 / voice_icon.texture.get_height()
+	voice_icon.modulate = Color(0.35, 0.35, 0.35) if voice.is_muted(peer) else Color.white
+
+func _apply_label_font():
+	if not is_instance_valid(Global.UI):
+		return
+	var health_label = Global.UI.get_node_or_null("UI_HBOX/TextureRect/Health")
+	if health_label != null:
+		var font = health_label.get_font("font").duplicate()
+		if font is DynamicFont:
+			font.outline_size = 2
+			font.outline_color = Color.black
+			var ammo = Global.UI.get_node_or_null("Ammovbox/HBoxContainer/Ammo")
+			if ammo != null and ammo.get_font("font") is DynamicFont:
+				font.extra_spacing_char = ammo.get_font("font").extra_spacing_char
+			else:
+				font.extra_spacing_char = -2
+		for label in [$Puppet/PlayerModel/Nickname, $Puppet/PlayerModel/HelpLabel]:
+			label.font = font
+			label.outline_modulate = Color.black
+			label.horizontal_alignment = Label3D.ALIGN_CENTER
+			label.offset = Vector2.ZERO
+		label_font_ready = true
+		centered_name = ""
+
+func _center_nickname():
+	var label = $Puppet/PlayerModel/Nickname
+	var bounds = label.get_aabb()
+	label.offset.x -= (bounds.position.x + bounds.size.x * 0.5) / label.pixel_size

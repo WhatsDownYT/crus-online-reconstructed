@@ -55,7 +55,7 @@ func _ready():
 		"res://Cancerball.tscn", "res://Entities/Physics_Objects/Chest_Gib.tscn",
 		"res://Scripts/Player.gd", "res://Scripts/Enemy_Torso.gd",
 		"res://Scripts/Divine_Door.gd", "res://Scripts/Profane_Door.gd",
-		"res://Terror_Door.gd", "res://Scripts/Elevator.gd"]:
+		"res://Terror_Door.gd", "res://Scripts/Elevator.gd", "res://Entities/soulll.gd", "res://Levels/sky_rotator.gd"]:
 		var resource = load(path)
 		if resource == null:
 			failures += 1

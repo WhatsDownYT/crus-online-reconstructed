@@ -1,4 +1,4 @@
-[gd_scene load_steps=38 format=2]
+[gd_scene load_steps=39 format=2]
 
 [ext_resource path="res://MOD_CONTENT/CruS Online/multiplayer.gd" type="Script" id=1]
 [ext_resource path="res://Maps/textures/trauma/bugs.png" type="Texture" id=2]
@@ -26,6 +26,8 @@
 [ext_resource path="res://MOD_CONTENT/CruS Online/NetworkBridge.gd" type="Script" id=24]
 [ext_resource path="res://MOD_CONTENT/CruS Online/SteamLobby.gd" type="Script" id=25]
 [ext_resource path="res://MOD_CONTENT/CruS Online/SteamNetwork.gd" type="Script" id=26]
+
+[ext_resource path="res://Textures/Menu/OS_normal.png" type="Texture" id=27]
 
 [sub_resource type="DynamicFont" id=12]
 size = 20
@@ -231,10 +233,10 @@ margin_left = 420.0
 margin_top = 100.0
 margin_right = 548.0
 margin_bottom = 228.0
-texture = ExtResource( 19 )
+texture = ExtResource( 27 )
 expand = true
-idleTexture = ExtResource( 19 )
-labelText = "Exit"
+idleTexture = ExtResource( 27 )
+labelText = "Quit to OS"
 buttonType = "chat"
 
 [node name="ChatBox" type="PanelContainer" parent="Menu"]
@@ -386,8 +388,10 @@ margin_left = 437.0
 margin_top = 332.0
 margin_right = 842.0
 margin_bottom = 387.0
-text = "Multiplayer synchronization
-Please wait"
+text = "Online synchronization
+Please wait
+
+(0/0)"
 align = 1
 
 [node name="RestartTimer" type="Timer" parent="."]

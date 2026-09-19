@@ -48,8 +48,12 @@ master func activation(id, violence):
 			NetworkBridge.n_rpc(self, "_create_object", [get_path(), items_paths[rand], new_item.name, new_item.global_transform])
 			
 			if not violence:
-				NetworkBridge.n_rpc(self, "notify", ["Purchased " + str(item_names[rand]) + " for " + "$10", Color(0, 1, 1)])
-				Global.player.UI.notify("Purchased " + str(item_names[rand]) + " for " + "$10", Color(0, 1, 1))
+				var buyer = NetworkBridge.request_sender(id)
+				var message = "Purchased " + str(item_names[rand]) + " for $10"
+				if buyer == NetworkBridge.get_id():
+					Global.player.UI.notify(message, Color(0, 1, 1))
+				else:
+					NetworkBridge.n_rpc_id(self, buyer, "notify", [message, Color(0, 1, 1)])
 	else:
 		NetworkBridge.n_rpc(self, "activation", [violence])
 

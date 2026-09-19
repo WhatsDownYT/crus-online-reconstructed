@@ -1261,7 +1261,7 @@ func toggle_menu():
 			get_tree().paused = visible
 
 func _on_Master_Volume_value_changed(value):
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), value)
+	Global.set_game_volume(value)
 	Global.master_volume = value
 
 
@@ -1628,6 +1628,7 @@ func _refresh_start_buttons():
 		button.rect_position = origin + Vector2(button_size.x * index, 0)
 
 func open_online_destination(level_select):
+	_hide_online_navigation()
 	_close_online_panel()
 	if active_element != null:
 		active_element.hide()

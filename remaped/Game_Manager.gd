@@ -3,6 +3,8 @@ extends Node
 var loader:ResourceInteractiveLoader
 var wait_frames:int
 var time_max:float = 100
+var loading_path = ""
+var loading_report_msec = 0
 var play_time = 0
 var current_scene = null
 
@@ -24,6 +26,7 @@ var timer = false
 var character_mat = preload("res://Materials/mainguy.tres")
 var rain = true
 var objectives:int = 0
+var objectives_total:int = 0
 var below_30 = 0
 var chaos_mode = false
 var objective_complete:bool = false
@@ -304,6 +307,7 @@ func _backup():
 	save_game("user://backup.save")
 	Global.STOCKS.save_stocks("user://stock_backup.save")
 func _ready()->void :
+	_setup_game_audio()
 	add_child(backup_timer)
 	backup_timer.one_shot = false
 	backup_timer.connect("timeout", self, "_backup")
@@ -346,9 +350,12 @@ func goto_scene(path:String):
 	call_deferred("_deferred_goto_scene", path)
 
 func _deferred_goto_scene(path:String)->void :
+	loading_path = path
+	loading_report_msec = OS.get_ticks_msec()
+	print("[CruS loading] Begin ", path)
 	loader = ResourceLoader.load_interactive(path)
 	if loader == null:
-		print("OOPS")
+		push_error("[CruS loading] Cannot load " + path)
 		return 
 	set_process(true)
 
@@ -368,7 +375,12 @@ func _process(time:float)->void :
 		return 
 		
 	var t = OS.get_ticks_msec()
-	while OS.get_ticks_msec() < t + time_max:
+	var bridge = get_node_or_null("Multiplayer/NetworkBridge")
+	var budget = 8.0 if bridge != null and bridge.check_connection() else time_max
+	while OS.get_ticks_msec() < t + budget:
+		if OS.get_ticks_msec() - loading_report_msec >= 1000:
+			loading_report_msec = OS.get_ticks_msec()
+			print("[CruS loading] ", loading_path, " stage ", loader.get_stage(), "/", loader.get_stage_count())
 		var err = loader.poll()
 		
 		if err == ERR_FILE_EOF:
@@ -379,6 +391,7 @@ func _process(time:float)->void :
 		elif err == OK:
 			update_progress()
 		else :
+			push_error("[CruS loading] Failed " + loading_path + " at stage " + str(loader.get_stage()) + ": " + str(err))
 			loader = null
 			break
 
@@ -390,8 +403,11 @@ signal scene_loaded()
 
 func set_new_scene(scene_resource:PackedScene)->void :
 	$Loading_Screen.visible = false
+	print("[CruS loading] Instantiate ", loading_path)
 	current_scene = scene_resource.instance()
+	print("[CruS loading] Initialize ", loading_path)
 	get_node("/root").add_child(current_scene)
+	print("[CruS loading] Ready ", loading_path)
 	get_tree().get_root().set_disable_input(false)
 	raise()
 	emit_signal("scene_loaded")
@@ -400,6 +416,7 @@ func add_objective()->void :
 	if not _has_objective_authority():
 		return
 	objectives += 1
+	objectives_total += 1
 	objective_complete = false
 	_publish_objectives()
 
@@ -578,6 +595,7 @@ func level_finished()->void :
 func level_start()->void :
 	objective_complete = false
 	objectives = 0
+	objectives_total = 0
 	enemy_count = 0
 	civ_count = 0
 
@@ -1089,7 +1107,7 @@ func load_game()->void :
 					set_inputs("Stocks", action)
 	
 	
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), master_volume)
+	set_game_volume(master_volume)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), music_volume)
 	
 	settings.close()
@@ -1182,3 +1200,32 @@ func record_multiplayer_win():
 	if levels_completed() and BONUS_UNLOCK.find("END") == - 1:
 		BONUS_UNLOCK.append("END")
 	save_game()
+
+func _setup_game_audio():
+	if AudioServer.get_bus_index("CruS Game") < 0:
+		AudioServer.add_bus(1)
+		AudioServer.set_bus_name(1, "CruS Game")
+		AudioServer.set_bus_send(1, "Master")
+	for index in range(2, AudioServer.bus_count):
+		if not AudioServer.get_bus_name(index) in ["CruS Voice", "CruS Microphone"] and AudioServer.get_bus_send(index) == "Master":
+			AudioServer.set_bus_send(index, "CruS Game")
+	if not get_tree().is_connected("node_added", self, "_route_game_audio"):
+		get_tree().connect("node_added", self, "_route_game_audio")
+	var pending = [get_tree().root]
+	while not pending.empty():
+		var node = pending.pop_back()
+		pending.append_array(node.get_children())
+		_route_game_audio(node)
+	set_game_volume(master_volume)
+
+func _route_game_audio(node):
+	if node is AudioStreamPlayer or node is AudioStreamPlayer2D or node is AudioStreamPlayer3D:
+		if node.bus == "Master":
+			node.bus = "CruS Game"
+
+func set_game_volume(value):
+	master_volume = value
+	AudioServer.set_bus_volume_db(0, 0.0)
+	var bus = AudioServer.get_bus_index("CruS Game")
+	if bus >= 0:
+		AudioServer.set_bus_volume_db(bus, value)

@@ -27,13 +27,11 @@ func _ready():
 	add_child(audio_player)
 	audio_player.stream = load("res://Sfx/sfx100v2_thunder_02.ogg")
 
-	if _hope_weather():
-		return 
 	init_energy = light_energy
 	init_energy_ambient = env.environment.ambient_light_energy
-	if not Global.rain:
-		init_fog = env.environment.fog_color
-		init_sky_color = env.environment.background_color
+	if not Global.rain or _hope_weather():
+		init_fog = env.base_environment.fog_color if env.has_method("_apply_world_style") and env.base_environment != null else env.environment.fog_color
+		init_sky_color = env.base_environment.background_color if env.has_method("_apply_world_style") and env.base_environment != null else env.environment.background_color
 	else :
 		if Global.CURRENT_LEVEL != Global.L_SWAMP:
 			env.environment.fog_depth_begin = 0

@@ -3,12 +3,14 @@ import json
 from pathlib import Path
 import re
 import zipfile
+import subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--base-package', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'tools/build_discord.ps1')], check=True)
 prefix = 'MOD_CONTENT/CruS Online/'
 excluded = {'.git', 'dist', 'docs', 'tests', 'tools', '__pycache__'}
 runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.png', '.jpg', '.jpeg', '.webp', '.svg',
@@ -20,13 +22,13 @@ with zipfile.ZipFile(args.base_package) as base:
                if not name.endswith('/') and not name.startswith(prefix)}
     entries.pop('Menu/Main_Menu.tscn.remap', None)
     entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remaped/Switch.gd"\n'
-    for source, target in [('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+    for source, target in [('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
         entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remaped/' + target + '"\n').encode()
     for path in root.rglob('*'):
         relative = path.relative_to(root)
         if not path.is_file() or any(part in excluded for part in relative.parts):
             continue
-        if path.suffix.lower() in runtime_suffixes:
+        if path.suffix.lower() in runtime_suffixes or relative.as_posix() == 'discord/CruSDiscord.exe':
             entries[prefix + relative.as_posix()] = path.read_bytes()
     for name, data in entries.items():
         if name.endswith('.remap'):

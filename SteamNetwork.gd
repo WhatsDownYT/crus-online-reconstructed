@@ -57,6 +57,9 @@ func begin_scene(epoch):
 
 func diagnostics():
 	var result = metrics.sample()
+	var voice = get_node_or_null("../../VoiceChat")
+	if voice != null:
+		result["voice"] = voice.diagnostics()
 	result["queued_snapshots"] = _pending_snapshots.size()
 	result["path_cache"] = _node_path_cache.size()
 	result["permissions"] = _permissions.size()

@@ -45,3 +45,8 @@ func sync_players():
 
 		if not parent.players.has(int(player.name)):
 			player.queue_free()
+		else:
+			var info = parent.players[int(player.name)]
+			player.nickname = info.nickname
+			player.get_node("Puppet/PlayerModel/Nickname").text = info.nickname
+			player.get_node("Puppet/PlayerModel/Nickname").modulate = Color(info.color)

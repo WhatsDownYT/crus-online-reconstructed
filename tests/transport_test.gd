@@ -7,6 +7,7 @@ var failures = 0
 
 class MultiplayerFixture:
 	extends Node
+	signal scene_loaded()
 	var Flow
 	var hostSettings = {"friendlyFire": true}
 	var players = {1: {}, 2: {}, 3: {}}
@@ -624,6 +625,16 @@ func run():
 	prop.step(1.0)
 	check(is_equal_approx(prop.translation.x, 1.0), "new client pose moves a settled prop without overshooting on slow frames")
 	elevator_bridge.authority = true
+	prop.finished = true
+	prop._get_transform(2)
+	check(elevator_bridge.events.back()[0] == "sync_settled_pose", "late-loading client receives settled pose instead of waking prop")
+	prop._remove(null)
+	var removed_pose = prop.global_transform
+	prop.sync_hold_state(1, 0, Transform.IDENTITY, Vector3.ZERO, false, false, prop.physics_revision + 1)
+	prop.sync_settled_pose(1, Transform.IDENTITY, Vector3.ZERO, prop.physics_revision + 1)
+	check(prop.global_transform == removed_pose and not prop.is_physics_processing() and prop.collision_layer == 0, "late reliable poses cannot reactivate a removed prop")
+	prop._get_transform(2)
+	check(elevator_bridge.events.back()[0] == "_remove", "late-loading client receives removed prop state")
 	prop.free()
 	elevator_bridge.actor.free()
 	var revive_bridge = Bridge.new()
@@ -1363,5 +1374,6 @@ func run():
 	join_manager.join_lobby(10)
 	check(parent.Steam.joins == [10, 10], "leaving clears pending join so same lobby can be joined again")
 	join_manager.free()
+	load("res://voice_test.gd").new().run(self)
 	print("TRANSPORT_TEST_RESULT failures=", failures)
 	get_tree().quit(1 if failures else 0)

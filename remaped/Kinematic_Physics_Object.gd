@@ -39,6 +39,7 @@ var rot_changed = Vector3(0, 0, 0)
 var t = 0
 var water = false
 var finished = false
+var removed = false
 var no_rot = false
 var gun
 var rot_towards
@@ -107,6 +108,11 @@ remote func _create_blood_decal(id, collider, recivedTransform, recivedBasis):
 	new_blood_decal.transform.basis = recivedBasis
 
 puppet func _remove(id):
+	removed = true
+	disabled = true
+	usable = false
+	collision_layer = 0
+	collision_mask = 0
 	hide()
 	global_translation = Vector3(-1000, -1000, -1000)
 	
@@ -123,7 +129,7 @@ var lerp_transform : Transform
 var last_transform : Transform
 
 puppet func client_set_lerp_transform(id, recived_transform, revision = 0):
-	if revision != physics_revision:
+	if removed or revision != physics_revision:
 		return
 	lerp_transform = recived_transform
 	set_physics_process(true)
@@ -215,6 +221,7 @@ func register_all_rpcs():
 
 func _ready()->void :
 	lerp_transform = global_transform
+	Multiplayer.connect("scene_loaded", self, "_request_loaded_pose")
 	
 
 
@@ -254,9 +261,18 @@ func _ready()->void :
 		
 		NetworkBridge.n_rpc(self, "_get_transform")
 
+func _request_loaded_pose():
+	if NetworkBridge.check_connection() and not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "_get_transform")
+
 master func _get_transform(id):
 	if NetworkBridge.is_world_authority():
-		NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "sync_hold_state", [holdId, global_transform, velocity, damager, alerter, physics_revision])
+		if removed:
+			NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "_remove")
+		elif finished:
+			NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "sync_settled_pose", [global_transform, velocity, physics_revision])
+		else:
+			NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "sync_hold_state", [holdId, global_transform, velocity, damager, alerter, physics_revision])
 
 master func set_network_transform(id, recivedTransform, only_origin = false):
 
@@ -514,7 +530,7 @@ func _commit_release(kicked, released_velocity):
 	NetworkBridge.n_rpc(self, "sync_hold_state", [0, global_transform, released_velocity, throw_damager, kicked, physics_revision])
 
 puppet func sync_hold_state(id, holder, state_transform, state_velocity, state_damager, state_alerter, revision = 0):
-	if revision < physics_revision:
+	if removed or revision < physics_revision:
 		return
 	physics_revision = revision
 	var previous_holder = holdId
@@ -589,7 +605,7 @@ func physics_object():
 	pass
 
 puppet func sync_settled_pose(id, state_transform, state_velocity, revision):
-	if revision < physics_revision:
+	if removed or revision < physics_revision:
 		return
 	physics_revision = revision
 	global_transform = state_transform

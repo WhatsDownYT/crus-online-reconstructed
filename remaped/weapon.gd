@@ -238,14 +238,24 @@ puppet func _client_spawn_object(id, recived_id, parentPath, recivedObject, reci
 		_spawn_object(recived_id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity)
 
 remote func _play_sound(id, soundName):
-	Global.get_node("Multiplayer").players[id].puppet.get_node("Puppet/PlayerModel/SFX/" + soundName).play()
+	var players = Global.get_node("Multiplayer").players
+	if not players.has(id) or id == NetworkBridge.get_id() or not soundName in ["Kicksound", "Kicksound2"]:
+		return
+	var puppet = players[id].get("puppet")
+	if not is_instance_valid(puppet):
+		return
+	var sound = puppet.get_node_or_null("Puppet/PlayerModel/SFX/" + soundName)
+	if sound == null:
+		return
+	sound.max_distance = 50.0
+	sound.play()
 
-	if NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.is_steam() and NetworkBridge.is_world_authority():
 		NetworkBridge.n_rpc(self, "_client_play_sound", [id, soundName])
 
 puppet func _client_play_sound(id, recived_id, soundName):
 	if recived_id != NetworkBridge.get_id():
-		_play_sound(id, soundName)
+		_play_sound(recived_id, soundName)
 
 func update_implants():
 	if Global.implants.torso_implant.orbsuit:
@@ -278,6 +288,8 @@ func clear_npc_muzzleflash():
 	if is_instance_valid(_npc_flash_timer):
 		_npc_flash_timer.stop()
 	var body = get_parent().get_parent()
+	if body.get("flash_until") != null:
+		body.flash_until = 0
 	if is_instance_valid(body.get("muzzleflash")):
 		body.muzzleflash.hide()
 
@@ -301,8 +313,11 @@ puppet func npc_muzzleflash(id, recivedWeapon, recivedPitch = null):
 				sound.pitch_scale = max(0.1, recivedPitch)
 			sound.play()
 
-	if get_parent().get_parent().muzzleflash:
-		get_parent().get_parent().muzzleflash.show()
+	var body = get_parent().get_parent()
+	if body.get("flash_until") != null:
+		body.flash_until = OS.get_ticks_msec() + 80
+	if body.muzzleflash:
+		body.muzzleflash.show()
 
 
 
@@ -523,6 +538,8 @@ func normalize(value, mn, mx):
 	return norm
 
 func _process(delta)->void :
+	if player and has_meta("pending_pickup"):
+		return
 	if disabled:
 		return 
 	t += 1
@@ -1534,6 +1551,7 @@ func mg3()->void :
 		else :
 			if get_parent().get_parent().muzzleflash:
 				get_parent().get_parent().muzzleflash.show()
+				NetworkBridge.n_rpc(self, "npc_muzzleflash", [current_weapon, null])
 		audio[current_weapon][0].play()
 		if player:
 			if is_instance_valid(playerPuppet):
@@ -1749,6 +1767,7 @@ func zippy()->void :
 				timer.start(0.3)
 				if get_parent().get_parent().muzzleflash:
 					get_parent().get_parent().muzzleflash.show()
+					NetworkBridge.n_rpc(self, "npc_muzzleflash", [current_weapon, null])
 			
 			if player:
 				get_parent().rotation.x -= 0.01
@@ -1809,6 +1828,7 @@ func pistol()->void :
 			timer.start(0.3)
 			if get_parent().get_parent().muzzleflash:
 				get_parent().get_parent().muzzleflash.show()
+				NetworkBridge.n_rpc(self, "npc_muzzleflash", [current_weapon, null])
 		
 		if player:
 			muzzle_light.light_energy = 1
@@ -1859,6 +1879,7 @@ func vag72()->void :
 			timer.start(0.3)
 			if get_parent().get_parent().muzzleflash:
 				get_parent().get_parent().muzzleflash.show()
+				NetworkBridge.n_rpc(self, "npc_muzzleflash", [current_weapon, null])
 		
 		if player:
 			muzzle_light.light_energy = 1
@@ -1926,6 +1947,7 @@ func sks()->void :
 			timer.start(0.3)
 			if get_parent().get_parent().muzzleflash:
 				get_parent().get_parent().muzzleflash.show()
+				NetworkBridge.n_rpc(self, "npc_muzzleflash", [current_weapon, null])
 		
 		if player:
 			muzzle_light.light_energy = 1

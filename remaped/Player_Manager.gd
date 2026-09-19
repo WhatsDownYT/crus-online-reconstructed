@@ -14,12 +14,53 @@ func _ready():
 	get_node("..").call_deferred("add_child", respawnPoint)
 	respawnPoint.transform = transform
 	
-	var respawnPoints = get_tree().get_nodes_in_group("Respawn")
-	respawnPoints.shuffle()
-	
-	if not respawnPoints.empty():
-		player.global_transform.origin = respawnPoints[0].global_transform.origin
-		player.global_rotation.y = respawnPoints[0].global_rotation.y
+	call_deferred("_spread_spawn")
+
+func _spread_spawn():
+	var mp = Global.get_node("Multiplayer")
+	if not mp.NetworkBridge.check_connection():
+		return
+	var peers = mp.players.keys()
+	peers.sort()
+	var origin = player.global_transform.origin
+	var candidates = [Vector3.ZERO]
+	for radius in [1.2, 2.2]:
+		for i in range(16):
+			candidates.append(Vector3(cos(i * TAU / 16.0), 0, sin(i * TAU / 16.0)) * radius)
+	var assigned = []
+	var space = get_world().direct_space_state
+	var shape = CapsuleShape.new()
+	shape.radius = 0.35
+	shape.height = 1.0
+	var query = PhysicsShapeQueryParameters.new()
+	query.set_shape(shape)
+	query.collision_mask = 1
+	query.exclude = [player.get_rid()]
+	for peer in peers:
+		var spawn = origin
+		for offset in candidates:
+			var floor_hit = space.intersect_ray(origin + offset + Vector3.UP * 2, origin + offset + Vector3.DOWN * 3, [player], 1)
+			if floor_hit.empty() or floor_hit.normal.y < 0.65:
+				continue
+			var point = floor_hit.position + Vector3.UP * 0.1
+			if abs(point.y - origin.y) > 1.0:
+				continue
+			var overlaps = false
+			for used in assigned:
+				if used.distance_to(point) < 0.85:
+					overlaps = true
+			if overlaps:
+				continue
+			query.transform = Transform(Basis(), point + Vector3.UP * 0.85)
+			if not space.intersect_shape(query, 1).empty():
+				continue
+			spawn = point
+			break
+		assigned.append(spawn)
+		if peer == mp.NetworkBridge.get_id():
+			player.global_transform.origin = spawn
+			cam_pos.global_transform.origin = spawn + Vector3.UP * 1.481
+			return
 
 func _process(delta):
 	if Input.is_action_just_pressed("Stocks") and not Global.get_node("Multiplayer/Menu").visible:

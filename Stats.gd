@@ -9,6 +9,13 @@ var sizeRatio = 20
 
 func _ready():
 	playersList.clear()
+	playersList.hide()
+	var scroll = ScrollContainer.new()
+	scroll.add_stylebox_override("bg", StyleBoxEmpty.new())
+	scroll.size_flags_horizontal = SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = SIZE_EXPAND_FILL
+	$VBoxContainer/PanelContainer.add_child(scroll)
+	scroll.add_child(preload("res://MOD_CONTENT/CruS Online/VoiceRoster.gd").new())
 	hide()
 
 func set_size_ratio():
@@ -19,7 +26,6 @@ func set_size_ratio():
 
 func open_stats(type):
 	playersList.clear()
-	tick = 0
 	show()
 	set_size_ratio()
 	fit_in_parent()
@@ -30,25 +36,3 @@ func close_stats(type):
 	hide()
 	$"../OpenStats".button_enable()
 	$"../CloseStats".button_disable()
-
-var tick = 0
-
-func _physics_process(delta):
-	if visible and $"..".visible:
-		tick += 1
-		if tick % 15 == 0:
-			var playerNumber = 1
-			playersList.bbcode_text = ""
-			
-			for player in Multiplayer.players:
-				playersList.bbcode_text += str(playerNumber) + ": [color=#" + Multiplayer.players[player].color + "]" + Multiplayer.players[player].nickname + "[/color]"
-				
-				if player == NetworkBridge.get_host_id():
-					playersList.bbcode_text += " (host)\n"
-				else:
-					playersList.bbcode_text += "\n"
-				
-				playerNumber += 1
-				
-			
-			tick = 0

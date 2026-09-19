@@ -254,6 +254,7 @@ func _ready():
 		["cleanup", NetworkBridge.PERMISSION.SERVER],
 		["network_set_stealth", NetworkBridge.PERMISSION.SERVER],
 		["_spawn_gib_client", NetworkBridge.PERMISSION.SERVER],
+		["_spawn_death_gas", NetworkBridge.PERMISSION.SERVER],
 		["_spawn_drop_client", NetworkBridge.PERMISSION.SERVER]
 	])
 	
@@ -708,9 +709,15 @@ func die(damage, collision_n, collision_p):
 func poison_timeout():
 	if NetworkBridge.n_is_network_master(self):
 		var new_misery = SELF_DESTRUCT.instance()
-		add_child(new_misery)
+		get_parent().add_child(new_misery)
 		new_misery.global_transform.origin = body.global_transform.origin
+		NetworkBridge.n_rpc(self, "_spawn_death_gas", [body.global_transform.origin])
 		damage(500, Vector3.ZERO, body.global_transform.origin, Vector3.ZERO)
+
+puppet func _spawn_death_gas(id, position):
+	var cloud = preload("res://MOD_CONTENT/CruS Online/effects/fake_poison_gas.tscn").instance()
+	get_parent().add_child(cloud)
+	cloud.global_transform.origin = position
 
 func align_up(node_basis, normal):
 	var result = Basis()
@@ -777,6 +784,8 @@ func _update_simulation():
 				if node is Area:
 					node.monitoring = state[5]
 		_suspended_nodes.clear()
+		if civilian and not dead and not body.get("tranq") and not body.get("flee"):
+			body.set_collision_layer_bit(8, true)
 		return
 	if not _suspended_nodes.empty():
 		return

@@ -5,7 +5,7 @@ var directory_path = "user://mod_config/crus_online"
 var last_error = ""
 
 func load_data(filename):
-	if not filename in ["player.save", "config.save"]:
+	if not filename in ["player.save", "config.save", "voice.save"]:
 		return null
 	var path = directory_path.plus_file(filename)
 	var data = _read_dictionary(path)
@@ -25,7 +25,7 @@ func _read_dictionary(path):
 
 func save_data(filename, data):
 	last_error = ""
-	if not filename in ["player.save", "config.save"] or typeof(data) != TYPE_DICTIONARY:
+	if not filename in ["player.save", "config.save", "voice.save"] or typeof(data) != TYPE_DICTIONARY:
 		last_error = "Invalid mod settings file or data"
 		return false
 	var directory = Directory.new()

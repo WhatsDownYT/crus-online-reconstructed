@@ -22,6 +22,7 @@ var sniper_lines:Array = ["I CAN SEE YOU", "TARGET ACQUIRED", "RUN PIG", "YOU CA
 var sniper_audio:Array = ["res://Sfx/Sniper/Seeyou.wav", "res://Sfx/Sniper/targetacquired.wav", "res://Sfx/Sniper/runpig.wav", "res://Sfx/Sniper/canthide.wav"]
 onready var Toxic_UI = $UI_HBOX / Toxic
 var stop = false
+var sight_until = 0
 var snipe_timer = 0
 var comms:VBoxContainer
 var message_box:RichTextLabel
@@ -146,6 +147,7 @@ func comms_timeout():
 
 func set_sniped(value):
 	if value:
+		sight_until = OS.get_ticks_msec() + 500
 		if not $Eyevbox.visible:
 			var rand_index = randi() % sniper_lines.size()
 			notify(sniper_lines[rand_index], Color(0.8, 0.2, 0))
@@ -155,9 +157,8 @@ func set_sniped(value):
 
 func set_in_sight(value):
 	if value:
-		if not $Eyevbox.visible:
-			snipe_timer = 10
-			$Eyevbox.show()
+		sight_until = OS.get_ticks_msec() + 500
+		$Eyevbox.show()
 
 func notify(message:String, color:Color):
 	var new_notification:Label = notify.duplicate()
@@ -233,7 +234,7 @@ func _physics_process(delta):
 	comms.modulate = lerp(comms.modulate, comms_color, 0.1)
 	
 	snipe_timer -= 1
-	if snipe_timer == 0:
+	if snipe_timer <= 0 and OS.get_ticks_msec() >= sight_until:
 		eyevbox.hide()
 	var elapsed = (time_now - time_start) / 1000
 	var elapsed_msecs = time_now - time_start

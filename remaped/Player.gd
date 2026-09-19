@@ -42,6 +42,21 @@ var double_jump_flag = 0
 var start_flag = false
 onready var psychosound = $Soundrotator / Psychosound
 var special_vision = true
+var vision_state = -1
+
+func _refresh_vision():
+	if not is_instance_valid(shader_screen):
+		return
+	var head = Global.implants.head_implant
+	var torso = Global.implants.torso_implant
+	var state = int(head.nightmare) + int(head.nightvision) * 2 + int(head.holy) * 4 + int(torso.terror) * 8 + int(special_vision) * 16
+	if state == vision_state:
+		return
+	vision_state = state
+	$NV.visible = head.nightmare or head.nightvision
+	shader_screen.material.set_shader_param("nightmare_vision", head.nightmare and special_vision)
+	shader_screen.material.set_shader_param("holy_mode", head.holy and special_vision)
+	shader_screen.material.set_shader_param("scope", head.nightvision or torso.terror)
 var last_height = Vector3.ZERO
 var foot_step_counter = 0
 var top_touching = false
@@ -157,13 +172,13 @@ const deathMessages = {
 	"general":[
 		"%s was killed by god",
 		"%s didn't want to live",
-		"%s just lose 500$",
+		"%s just lost $500",
 		"%s decided to start from scratch",
 		"%s died"
 	],
 	"killedByPlayer":[
 		"%s was killed by %s",
-		"%s give his life to %s",
+		"%s gave their life to %s",
 		"%s was distracted by %s"
 	]
 }
@@ -183,9 +198,11 @@ func reset_last_damager_id():
 	weaponType = null
 
 remote func send_death_nofify(id, killerId):
+	if not Multiplayer.players.has(id):
+		return
 	var deadNickname = Multiplayer.players[id].nickname
 	
-	if killerId == null:
+	if killerId == null or not Multiplayer.players.has(killerId):
 		Global.UI.notify(deathMessages.general[randi() % deathMessages.general.size()] % deadNickname, Color(1, 0, 0))
 	else:
 		var killerNickname = Multiplayer.players[killerId].nickname
@@ -200,10 +217,50 @@ remote func _spawn_gib(id, parentPath, gib, gibName, gibPos, recivedDamage):
 	NetworkBridge.apply_damage(self, new_gib, "damage", [recivedDamage[0], recivedDamage[1], recivedDamage[2], recivedDamage[3]])
 
 remote func _play_sound(id, soundName):
-	Multiplayer.players[id].puppet.get_node("Puppet/PlayerModel/SFX/" + soundName).play()
+	if not Multiplayer.players.has(id) or id == NetworkBridge.get_id():
+		return
+	var puppet = Multiplayer.players[id].get("puppet")
+	if not is_instance_valid(puppet):
+		return
+	var sources = {"Jump": "AudioStreamPlayer3D", "Boostjump": "Boostjump", "Gunksound": "Gunksound", "Armorsound": "Armorsound", "FootStep": "Foot_Step", "Pain": "Pain", "Health": "SFX/Health", "Intro_Laugh": "SFX/Intro_Laugh"}
+	if not sources.has(soundName):
+		return
+	var source = get_node_or_null(sources[soundName])
+	if source == null:
+		return
+	var parent = puppet.get_node("Puppet/PlayerModel/SFX")
+	var sound = parent.get_node_or_null(soundName)
+	if sound == null:
+		sound = AudioStreamPlayer3D.new()
+		sound.name = soundName
+		parent.add_child(sound)
+	sound.stream = source.stream
+	sound.pitch_scale = source.pitch_scale
+	sound.bus = source.bus
+	sound.unit_size = 4.0
+	sound.max_distance = 50.0
+	sound.play()
+	if NetworkBridge.is_steam() and NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc(self, "_relay_player_sound", [id, soundName])
+
+puppet func _relay_player_sound(id, peer, sound_name):
+	if peer == NetworkBridge.get_id() or not Multiplayer.players.has(peer):
+		return
+	if sound_name == "death":
+		_play_death_sound(peer)
+	elif sound_name == "explosion":
+		var puppet = Multiplayer.players[peer].get("puppet")
+		if is_instance_valid(puppet):
+			puppet.play_explosion_sound()
+	else:
+		_play_sound(peer, sound_name)
 
 remote func _play_death_sound(id):
+	if not Multiplayer.players.has(id) or not is_instance_valid(Multiplayer.players[id].get("puppet")):
+		return
 	Multiplayer.players[id].puppet.play_death_sound()
+	if NetworkBridge.is_steam() and NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc(self, "_relay_player_sound", [id, "death"])
 
 remote func _spawn_explosion(id, pos):
 	if NetworkBridge.get_id() != id:
@@ -213,6 +270,8 @@ remote func _spawn_explosion(id, pos):
 		n_explosion.global_transform.origin = pos
 		
 		Multiplayer.players[id].puppet.play_explosion_sound()
+		if NetworkBridge.is_steam() and NetworkBridge.is_world_authority():
+			NetworkBridge.n_rpc(self, "_relay_player_sound", [id, "explosion"])
 
 
 
@@ -247,6 +306,7 @@ func _implant_speed_bonus():
 	return result
 
 func update_implants():
+	vision_state = -1
 	
 	if GLOBAL.CURRENT_LEVEL == 18 and Global.DEAD_CIVS.find("Limit Chancellor") == - 1:
 		Global.implants.head_implant = Global.implants.empty_implant
@@ -280,8 +340,11 @@ func update_implants():
 	
 	if not GLOBAL.implants.arm_implant.radio:
 		if GLOBAL.LEVEL_AMBIENCE[GLOBAL.CURRENT_LEVEL] != null:
-			GLOBAL.ambience.stream = GLOBAL.LEVEL_AMBIENCE[GLOBAL.CURRENT_LEVEL]
-			GLOBAL.ambience.play()
+			var ambience_stream = GLOBAL.LEVEL_AMBIENCE[GLOBAL.CURRENT_LEVEL]
+			if GLOBAL.ambience.stream != ambience_stream:
+				GLOBAL.ambience.stream = ambience_stream
+			if not GLOBAL.ambience.playing:
+				GLOBAL.ambience.play()
 	
 	if GLOBAL.implants.head_implant.nightmare:
 		$NV.show()
@@ -292,7 +355,7 @@ func update_implants():
 	else:
 		shader_screen.material.set_shader_param("holy_mode", false)
 	
-	if not GLOBAL.implants.arm_implant.radio:
+	if not GLOBAL.implants.arm_implant.radio and not GLOBAL.music.playing:
 		GLOBAL.music.play()
 	
 	if orb:
@@ -325,6 +388,7 @@ func _ready():
 		["send_death_nofify", NetworkBridge.PERMISSION.ALL],
 		["_spawn_gib", NetworkBridge.PERMISSION.ALL],
 		["_play_sound", NetworkBridge.PERMISSION.ALL],
+		["_relay_player_sound", NetworkBridge.PERMISSION.SERVER],
 		["_play_death_sound", NetworkBridge.PERMISSION.ALL],
 		["_spawn_explosion", NetworkBridge.PERMISSION.ALL]
 	])
@@ -385,6 +449,8 @@ func _ready():
 	floor_ray = $Ray_Rotation / Floor_Ray
 	floor_ray2 = $Ray_Rotation / Floor_Ray2
 	shader_screen = $Shader_Screen
+	vision_state = -1
+	_refresh_vision()
 	if Global.implants.head_implant.nightvision:
 		$NV.show()
 		shader_screen.material.set_shader_param("scope", true)
@@ -474,6 +540,7 @@ func thrust():
 	print("FUCK", (global_transform.origin - front_pos_helper.global_transform.origin).normalized() * Vector3(1, 0, 1) * get_process_delta_time() * 60)
 	player_velocity -= (global_transform.origin - front_pos_helper.global_transform.origin).normalized() * Vector3(1, 0, 1) * get_process_delta_time() * 60
 	$Gunksound.play()
+	NetworkBridge.n_rpc(self, "_play_sound", ["Gunksound"])
 	var space = get_world().direct_space_state
 	var result = space.intersect_ray(global_transform.origin + Vector3.UP, global_transform.origin + Vector3.DOWN * 10, [self])
 	if result:
@@ -750,6 +817,7 @@ func detox():
 	set_move_speed()
 
 func _process(delta):
+	_refresh_vision()
 	if (_gameplay_just_pressed("Tertiary_Weapon") and Global.implants.arm_implant.grav and cancer_count < 10) or drug_gravity_flag == true:
 		max_gravity *= - 1
 		$Top_Checkr / RayCast.cast_to *= - 1
@@ -1003,6 +1071,7 @@ func air_move(delta):
 			result.collider.add_child(new_vomit)
 			new_vomit.global_transform.origin = result.position
 		$Gunksound.play()
+		NetworkBridge.n_rpc(self, "_play_sound", ["Gunksound"])
 		$Particles.emitting = true
 		player_velocity.y *= 0.5
 		var j = jump_speed
@@ -1081,8 +1150,10 @@ func ground_move(delta):
 		var jetpack = _gameplay_pressed("kick") and Global.implants.torso_implant.jetpack
 		if jump_bonus > 0 and not water and not jetpack:
 			$Boostjump.play()
+			NetworkBridge.n_rpc(self, "_play_sound", ["Boostjump"])
 		elif not water and not jetpack:
 			audio_player.play()
+			NetworkBridge.n_rpc(self, "_play_sound", ["Jump"])
 		var j = jump_speed
 		if jetpack:
 			j = 1
@@ -1171,6 +1242,7 @@ func damage(damage, collision_n, collision_p, shooter_pos):
 		if randi() % 2 == 0:
 			helmet_flag = true
 		$Armorsound.play()
+		NetworkBridge.n_rpc(self, "_play_sound", ["Armorsound"])
 		return 
 	if Global.implants.torso_implant.instadeath or Global.implants.head_implant.shrink:
 		damage = health
@@ -1255,14 +1327,14 @@ func _on_Crush_Check_body_entered(body):
 
 func _on_Water_Check_area_entered(area):
 	water = true
-	AudioServer.set_bus_effect_enabled(1, 0, true)
+	AudioServer.set_bus_effect_enabled(AudioServer.get_bus_index("Water_Effect"), 0, true)
 	
 	shader_screen.material.set_shader_param("water", true)
 
 func _on_Water_Check_area_exited(area):
 	water = false
-	AudioServer.set_bus_effect_enabled(1, 0, false)
-	AudioServer.set_bus_effect_enabled(1, 1, false)
+	AudioServer.set_bus_effect_enabled(AudioServer.get_bus_index("Water_Effect"), 0, false)
+	AudioServer.set_bus_effect_enabled(AudioServer.get_bus_index("Water_Effect"), 1, false)
 	if _gameplay_pressed("movement_jump"):
 		player_velocity.y += jump_speed * 2
 	shader_screen.material.set_shader_param("water", false)

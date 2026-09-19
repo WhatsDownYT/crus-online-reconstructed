@@ -12,72 +12,111 @@ var ammo = 0
 
 
 
-remote func _update_vars(id, recivedWeapon,recivedAmmo):
-	current_weapon = recivedWeapon
-	ammo = recivedAmmo
+var revision = 0
+var pending = false
+var applied_revision = -1
 
-remote func _change_visible(id, mesh, visibility):
-	mesh.visible = visibility
+func _valid_weapon(value):
+	return typeof(value) == TYPE_INT and value >= 0 and value < MESH.size()
 
-
-
-remote func syncUpdate(id):
-	for meshGun in MESH:
-		meshGun.hide()
-	MESH[current_weapon].show()
+func syncUpdate(_id = null):
+	for mesh in MESH:
+		mesh.hide()
+	if _valid_weapon(current_weapon):
+		MESH[current_weapon].show()
 
 func _ready():
-	register_all_rpcs()
-	
-	MESH[current_weapon].show()
-	if not menu:
-		ammo = Global.player.weapon.MAX_MAG_AMMO[current_weapon]
-
-func register_all_rpcs():
 	NetworkBridge.register_rpcs(self, [
-		["_update_vars", NetworkBridge.PERMISSION.ALL],
-		["_change_visible", NetworkBridge.PERMISSION.ALL],
-		["syncUpdate", NetworkBridge.PERMISSION.ALL]
+		["request_pickup", NetworkBridge.PERMISSION.ALL],
+		["request_state", NetworkBridge.PERMISSION.ALL],
+		["sync_state", NetworkBridge.PERMISSION.SERVER],
+		["commit_pickup", NetworkBridge.PERMISSION.SERVER],
+		["reject_pickup", NetworkBridge.PERMISSION.SERVER]
 	])
+	syncUpdate()
+	if not menu and _valid_weapon(current_weapon):
+		ammo = Global.player.weapon.MAX_MAG_AMMO[current_weapon]
+		Global.get_node("Multiplayer").connect("scene_loaded", self, "_request_state")
+		call_deferred("_request_state")
+
+func _request_state():
+	if NetworkBridge.check_connection() and not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "request_state")
+
+master func request_state(id):
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc_id(self, NetworkBridge.request_sender(id), "sync_state", [current_weapon, ammo, revision])
+
+puppet func sync_state(_id, weapon, rounds, version):
+	if version < revision or weapon != null and not _valid_weapon(weapon):
+		return
+	revision = version
+	current_weapon = weapon
+	ammo = rounds
+	syncUpdate()
+	if current_weapon == null:
+		collision_layer = 0
+		collision_mask = 0
+		get_parent()._remove(null)
 
 func player_use():
-	if not menu:
-		var rot = rand_range(0, deg2rad(180))
+	if menu or pending or not _valid_weapon(current_weapon) or not is_instance_valid(Global.player) or Global.player.dead:
+		return
+	var weapon = Global.player.weapon
+	if weapon.has_meta("pending_pickup"):
+		return
+	if weapon.current_weapon != current_weapon and current_weapon in [weapon.weapon1, weapon.weapon2]:
+		return
+	if weapon.current_weapon == current_weapon and (ammo <= 0 or current_weapon in [WEAPON.W_RADIATOR, WEAPON.W_BLACKJACK, WEAPON.W_BORE, WEAPON.W_FLASHLIGHT, WEAPON.W_ROD]):
+		return
+	pending = true
+	weapon.set_meta("pending_pickup", self)
+	var rounds = weapon.magazine_ammo[weapon.current_weapon] if weapon.current_weapon != null else 0
+	NetworkBridge.request_host(self, "request_pickup", [revision, current_weapon, weapon.current_weapon, rounds])
 
-		get_parent().rotation.y = rot
-		get_parent().rot_changed.y = rot
-		
-		if Global.player.weapon.current_weapon == current_weapon:
-			if current_weapon == WEAPON.W_RADIATOR or current_weapon == WEAPON.W_BLACKJACK or current_weapon == WEAPON.W_BORE or current_weapon == WEAPON.W_FLASHLIGHT or current_weapon == WEAPON.W_ROD:
-				return 
-			Global.player.weapon.add_ammo(ammo, current_weapon, Spatial.new())
-			ammo = 0
-			NetworkBridge.n_rpc(self, "_update_vars", [current_weapon, ammo])
-			return 
-		if Global.player.weapon.weapon1 == current_weapon or Global.player.weapon.weapon2 == current_weapon:
-			return 
-		var last_weapon
-		var last_ammo
-		if Global.player.weapon.current_weapon != null:
-			last_weapon = Global.player.weapon.current_weapon
-			last_ammo = Global.player.weapon.magazine_ammo[last_weapon]
-		else :
-			last_weapon = null
-		var a = ammo
-		Global.player.weapon.magazine_ammo[current_weapon] = a
-		Global.player.weapon.set_weapon(current_weapon)
-		Global.player.weapon.set_UI_ammo()
-		Global.player.weapon.player_weapon.show()
-		MESH[current_weapon].hide()
-		NetworkBridge.n_rpc(self, "_change_visible", [MESH[current_weapon], false])
-		current_weapon = last_weapon
-		NetworkBridge.n_rpc(self, "_update_vars", [current_weapon, ammo])
-		if current_weapon == null:
-			NetworkBridge.n_rpc(get_parent(), "_remove")
-			get_parent()._remove()
-			return 
-		ammo = last_ammo
-		NetworkBridge.n_rpc(self, "_update_vars", [current_weapon, ammo])
-		MESH[current_weapon].show()
-		NetworkBridge.n_rpc(self, "_change_visible", [MESH[current_weapon], true])
-		NetworkBridge.n_rpc(self, "syncUpdate")
+master func request_pickup(id, version, expected, replacement, rounds):
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	var actor = NetworkBridge.get_peer_actor(id)
+	if menu or not _valid_weapon(current_weapon) or version != revision or expected != current_weapon or actor == null or actor.global_transform.origin.distance_to(global_transform.origin) > 6.0 or (replacement != null and not _valid_weapon(replacement)) or typeof(rounds) != TYPE_INT or rounds < 0 or rounds > 10000:
+		_reject(id)
+		return
+	var ammo_only = replacement == current_weapon
+	if ammo_only and (ammo <= 0 or current_weapon in [WEAPON.W_RADIATOR, WEAPON.W_BLACKJACK, WEAPON.W_BORE, WEAPON.W_FLASHLIGHT, WEAPON.W_ROD]):
+		_reject(id)
+		return
+	var picked_weapon = current_weapon
+	var picked_ammo = ammo
+	var next_weapon = current_weapon if ammo_only else replacement
+	var next_ammo = 0 if ammo_only else rounds
+	var next_revision = revision + 1
+	commit_pickup(null, id, picked_weapon, picked_ammo, ammo_only, next_weapon, next_ammo, next_revision)
+	NetworkBridge.n_rpc(self, "commit_pickup", [id, picked_weapon, picked_ammo, ammo_only, next_weapon, next_ammo, next_revision])
+
+func _reject(peer):
+	if peer == NetworkBridge.get_id():
+		reject_pickup(null)
+	else:
+		NetworkBridge.n_rpc_id(self, peer, "reject_pickup")
+
+puppet func reject_pickup(_id):
+	pending = false
+	if is_instance_valid(Global.player) and Global.player.weapon.has_meta("pending_pickup") and Global.player.weapon.get_meta("pending_pickup") == self:
+		Global.player.weapon.remove_meta("pending_pickup")
+
+puppet func commit_pickup(_id, peer, picked_weapon, picked_ammo, ammo_only, next_weapon, next_ammo, version):
+	if version <= applied_revision or version < revision or not _valid_weapon(picked_weapon):
+		return
+	applied_revision = version
+	if peer == NetworkBridge.get_id() and pending and is_instance_valid(Global.player):
+		var weapon = Global.player.weapon
+		reject_pickup(null)
+		if ammo_only:
+			weapon.add_ammo(picked_ammo, picked_weapon, self)
+		else:
+			weapon.magazine_ammo[picked_weapon] = picked_ammo
+			weapon.set_weapon(picked_weapon)
+			weapon.set_UI_ammo()
+			weapon.player_weapon.show()
+	sync_state(null, next_weapon, next_ammo, version)

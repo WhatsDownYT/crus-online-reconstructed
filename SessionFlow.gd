@@ -10,9 +10,11 @@ var world = {}
 var personal_difficulty = {}
 var misery_transition = false
 var finishing = false
+var used_orbs = {}
 
 func _ready():
-	NetworkBridge.register_rpcs(self, [["configure_world", NetworkBridge.PERMISSION.SERVER], ["show_result", NetworkBridge.PERMISSION.SERVER], ["request_wait", NetworkBridge.PERMISSION.ALL], ["sync_waiting", NetworkBridge.PERMISSION.SERVER]])
+	pause_mode = Node.PAUSE_MODE_PROCESS
+	NetworkBridge.register_rpcs(self, [["sync_difficulty", NetworkBridge.PERMISSION.SERVER], ["request_orb", NetworkBridge.PERMISSION.ALL], ["apply_orb", NetworkBridge.PERMISSION.SERVER], ["configure_world", NetworkBridge.PERMISSION.SERVER], ["show_result", NetworkBridge.PERMISSION.SERVER], ["request_wait", NetworkBridge.PERMISSION.ALL], ["sync_waiting", NetworkBridge.PERMISSION.SERVER]])
 
 func difficulty():
 	return {"soul_intact": Global.soul_intact, "husk_mode": Global.husk_mode, "hope_discarded": Global.hope_discarded, "hell_discovered": Global.hell_discovered, "punishment_mode": Global.punishment_mode, "chaos_mode": Global.chaos_mode, "consecutive_deaths": Global.consecutive_deaths}
@@ -23,18 +25,20 @@ func set_difficulty(state):
 			Global.set(key, state[key])
 	var index = 3 if Global.hope_discarded else (2 if Global.husk_mode else (1 if Global.soul_intact else 0))
 	Global.border.texture = Global.BORDERS[index]
+	_update_local_effects()
 
 func prepare_mission():
 	clear_result()
+	used_orbs.clear()
 	waiting_peers.clear()
-	world = {"rain": rand_range(0, 100) > 90 or Global.implants.head_implant.fishing_bonus, "hour": OS.get_time().hour, "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty()}
+	world = {"rain": rand_range(0, 100) > 90 or Global.implants.head_implant.fishing_bonus, "hour": OS.get_time().hour, "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty(), "ending_2": Global.ending_2}
 	configure_world(null, world)
 	NetworkBridge.n_rpc(self, "configure_world", [world])
 
 puppet func configure_world(id, state):
 	world = state.duplicate(true)
 	waiting_peers.clear()
-	Global.rain = world.rain
+	Global.rain = world.get("rain", false)
 	if world.share:
 		if not NetworkBridge.is_world_authority() and personal_difficulty.empty():
 			personal_difficulty = difficulty()
@@ -224,3 +228,79 @@ func waiting_world_target(peer, caller):
 		return false
 	var path = str(caller.get_path())
 	return path.begins_with("/root/Level/") or path.begins_with(str(Multiplayer.Players.get_path()) + "/")
+
+func _process(_delta):
+	if not NetworkBridge.check_connection() or not NetworkBridge.is_world_authority():
+		return
+	var current = difficulty()
+	var shared = Multiplayer.hostSettings.get("shareDifficulty", false)
+	var changed = false
+	var previous = world.get("difficulty", {})
+	for key in current:
+		if previous.get(key) != current[key]:
+			changed = true
+			break
+	if changed or world.get("share", false) != shared or world.get("ending_2", false) != Global.ending_2:
+		_update_local_effects()
+		world["difficulty"] = current
+		world["share"] = shared
+		world["ending_2"] = Global.ending_2
+		NetworkBridge.n_rpc(self, "sync_difficulty", [current, shared, Global.ending_2])
+
+puppet func sync_difficulty(id, state, shared, ending_two):
+	world["difficulty"] = state.duplicate(true)
+	world["share"] = shared
+	world["ending_2"] = ending_two
+	if shared:
+		if personal_difficulty.empty():
+			personal_difficulty = difficulty()
+		set_difficulty(state)
+	elif not personal_difficulty.empty():
+		set_difficulty(personal_difficulty)
+		personal_difficulty.clear()
+
+master func request_orb(id, path):
+	id = NetworkBridge.request_sender(id)
+	if not NetworkBridge.is_world_authority() or not Multiplayer.players.has(id) or used_orbs.has(path) or result_active:
+		return
+	var orb = get_node_or_null(path)
+	var actor = NetworkBridge.get_peer_actor(id)
+	if not is_instance_valid(orb) or not orb.has_method("consume_orb") or not is_instance_valid(actor) or Multiplayer.died_players.has(id):
+		return
+	if actor.global_transform.origin.distance_to(orb.global_transform.origin) > 5.0:
+		return
+	used_orbs[path] = true
+	if orb.soul:
+		Global.set_soul()
+	else:
+		Global.set_hope()
+	var state = difficulty()
+	world["difficulty"] = state
+	NetworkBridge.n_rpc(self, "apply_orb", [path, orb.soul, state])
+	apply_orb(null, path, orb.soul, state)
+
+puppet func apply_orb(id, path, soul, state):
+	if not NetworkBridge.is_world_authority():
+		if soul:
+			Global.set_soul()
+		else:
+			Global.set_hope()
+	set_difficulty(state)
+	world["difficulty"] = state.duplicate(true)
+	Global.save_game()
+	var orb = get_node_or_null(path)
+	if is_instance_valid(orb) and orb.has_method("consume_orb"):
+		orb.consume_orb()
+	if not soul and Global.menu.in_game and is_instance_valid(Global.player) and not Global.player.died:
+		Global.player.suicide()
+
+func send_world(peer):
+	var state = {"rain": world.get("rain", false), "hour": world.get("hour", OS.get_time().hour), "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty(), "ending_2": Global.ending_2}
+	NetworkBridge.n_rpc_id(self, peer, "configure_world", [state])
+
+func _update_local_effects():
+	if not Global.menu.in_game or not is_instance_valid(Global.player) or not Global.player.has_method("_implant_speed_bonus"):
+		return
+	Global.player.speed_bonus = Global.player._implant_speed_bonus()
+	Global.player.set_move_speed()
+	Global.music.pitch_scale = 0.75 if Global.hope_discarded else 1.0

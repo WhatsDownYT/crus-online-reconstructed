@@ -4,6 +4,8 @@ var profile_store = preload("res://MOD_CONTENT/CruS Online/ProfileStore.gd").new
 
 var ip = "127.0.0.1"
 var port = 25567
+var stats_tab
+var stats_tab_update_pending = false
 
 onready var IpEdit = $CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/IpEdit
 onready var PortEdit = $CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/PortEdit
@@ -14,8 +16,11 @@ onready var NicknameColor = $CenterContainer/TabContainer/Player/VBoxContainer/C
 onready var Multiplayer = Global.get_node("Multiplayer")
 
 func _ready():
-	var loadedPlayerData = load_data("player.save")
-	Multiplayer.playerInfo = profile_store.merge_defaults(Multiplayer.playerInfo, loadedPlayerData)
+	call_deferred("_add_voice_tabs")
+	if not Multiplayer.profile_loaded:
+		var loadedPlayerData = load_data("player.save")
+		Multiplayer.playerInfo = profile_store.merge_defaults(Multiplayer.playerInfo, loadedPlayerData)
+		Multiplayer.profile_loaded = true
 	var loadedConfigData = load_data("config.save")
 	Multiplayer.config = profile_store.merge_defaults(Multiplayer.config, loadedConfigData)
 
@@ -36,12 +41,15 @@ func _ready():
 	$CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value = int(clamp(Multiplayer.config.tickRate, 1, 60))
 	
 	$CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed = Multiplayer.config.canRespawn
+	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
+		get_node("CenterContainer/TabContainer/Host/VBoxContainer/" + key + "/TickEdit").pressed = Multiplayer.config[key]
 	$CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed = Multiplayer.config.friendlyFire
 	$CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed = Multiplayer.config.shareDifficulty
 	$CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed = Multiplayer.config.changeModeOnDeath
 	$CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer/HelpEdit.value = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
 	
 	NicknameEdit.text = Multiplayer.playerInfo.nickname
+	NicknameEdit.connect("focus_exited", self, "save_player")
 	NicknameColor.color = Multiplayer.playerInfo.color
 	
 	$CenterContainer/TabContainer/Player/VBoxContainer/Image.set_texture(Multiplayer.playerInfo.image)
@@ -73,18 +81,23 @@ func status_update(new_status):
 		$CenterContainer/TabContainer.current_tab = 0
 
 func _physics_process(delta):
+	_update_stats_tab()
 	if Global.menu.in_game:
 		hide()
 	else:
 		show()
 
 func save_player():
-	Multiplayer.playerInfo.nickname = NicknameEdit.text
+	Multiplayer.playerInfo.nickname = NicknameEdit.text.strip_edges()
 	Multiplayer.playerInfo.color = NicknameColor.color.to_html(false)
 	Multiplayer.playerInfo.image = $CenterContainer/TabContainer/Player/VBoxContainer/Image.get_texture()
 	Multiplayer.playerInfo.skinPath = $CenterContainer/TabContainer/Player/VBoxContainer/Skin.get_texture()
 	
+	if Multiplayer.playerInfo.nickname.empty():
+		Multiplayer.playerInfo.nickname = "MT Foxtrot"
+	NicknameEdit.text = Multiplayer.playerInfo.nickname
 	save_data("player.save", Multiplayer.playerInfo)
+	Multiplayer.refresh_local_profile()
 
 func save_host():
 	Multiplayer.config.hostPort = int($CenterContainer/TabContainer/Host/VBoxContainer/Port/PortEdit.text)
@@ -92,6 +105,8 @@ func save_host():
 	Multiplayer.config.tickRate = int($CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value)
 	
 	Multiplayer.config.canRespawn = $CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed
+	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
+		Multiplayer.config[key] = get_node("CenterContainer/TabContainer/Host/VBoxContainer/" + key + "/TickEdit").pressed
 	Multiplayer.config.friendlyFire = $CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed
 	Multiplayer.config.shareDifficulty = $CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed
 	Multiplayer.config.changeModeOnDeath = $CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed
@@ -172,3 +187,61 @@ func load_data(fileName):
 func close_menu():
 	disable_menu()
 	Global.menu.open_online_destination(false)
+
+func _add_voice_tabs():
+	var tabs = $CenterContainer/TabContainer
+	var vc = preload("res://MOD_CONTENT/CruS Online/VoiceSettings.gd").new()
+	vc.name = "VC"
+	tabs.add_child(vc)
+	tabs.move_child(tabs.get_node("Credits"), tabs.get_child_count() - 1)
+	var stats = PanelContainer.new()
+	stats.name = "Stats"
+	stats_tab = stats
+	var source = Multiplayer.get_node("Menu/Stats")
+	stats.theme = source.theme
+	var box = VBoxContainer.new()
+	box.name = "VBoxContainer"
+	box.add_constant_override("separation", 3)
+	stats.add_child(box)
+	var header = Label.new()
+	header.text = "Stats"
+	header.align = Label.ALIGN_CENTER
+	header.add_font_override("font", source.get_node("VBoxContainer/Label").get_font("font"))
+	header.add_stylebox_override("normal", source.get_node("VBoxContainer/Label").get_stylebox("normal"))
+	box.add_child(header)
+	var panel = PanelContainer.new()
+	panel.name = "PanelContainer"
+	panel.size_flags_vertical = SIZE_EXPAND_FILL
+	panel.add_stylebox_override("panel", source.get_node("VBoxContainer/PanelContainer").get_stylebox("panel"))
+	box.add_child(panel)
+	var scroll = ScrollContainer.new()
+	scroll.add_stylebox_override("bg", StyleBoxEmpty.new())
+	scroll.name = "ScrollContainer"
+	scroll.size_flags_vertical = SIZE_EXPAND_FILL
+	panel.add_child(scroll)
+	scroll.add_child(preload("res://MOD_CONTENT/CruS Online/VoiceRoster.gd").new())
+	_update_stats_tab()
+
+func _update_stats_tab():
+	if stats_tab == null or stats_tab_update_pending:
+		return
+	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
+	if in_lobby != (stats_tab.get_parent() != null):
+		stats_tab_update_pending = true
+		call_deferred("_sync_stats_tab")
+
+func _sync_stats_tab():
+	stats_tab_update_pending = false
+	var tabs = $CenterContainer/TabContainer
+	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
+	if in_lobby and stats_tab.get_parent() == null:
+		tabs.add_child(stats_tab)
+		tabs.move_child(tabs.get_node("Credits"), tabs.get_child_count() - 1)
+	elif not in_lobby and stats_tab.get_parent() != null:
+		if tabs.current_tab == stats_tab.get_index():
+			tabs.current_tab = 0
+		tabs.remove_child(stats_tab)
+
+func _exit_tree():
+	if is_instance_valid(stats_tab) and stats_tab.get_parent() == null:
+		stats_tab.free()

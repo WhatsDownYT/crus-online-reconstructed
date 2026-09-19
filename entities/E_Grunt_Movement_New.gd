@@ -70,6 +70,7 @@ var rand_patroller = false
 var height_difference:bool = false
 var velocity:Vector3 = Vector3(0, 0, 0)
 var footstep_counter = 0
+var flash_until = 0
 var muzzleflash
 var flee:bool = false
 var path:Array
@@ -112,8 +113,9 @@ func get_near_player(object) -> Dictionary:
 		"distance" : oldDistance
 	}
 
-remotesync func set_in_sight(id, value):
-	Global.player.UI.set_in_sight(value)
+puppet func set_in_sight(id, value):
+	if is_instance_valid(Global.player) and is_instance_valid(Global.UI):
+		Global.UI.set_in_sight(value)
 
 puppet func set_psychosis(id, value):
 	Global.player.set_psychosis(value)
@@ -157,7 +159,7 @@ func _ready()->void :
 		["network_set_flee", NetworkBridge.PERMISSION.ALL],
 		["network_set_dead", NetworkBridge.PERMISSION.ALL],
 		["network_set_tranquilized", NetworkBridge.PERMISSION.ALL],
-		["set_in_sight", NetworkBridge.PERMISSION.ALL],
+		["set_in_sight", NetworkBridge.PERMISSION.SERVER],
 		["set_psychosis", NetworkBridge.PERMISSION.SERVER],
 		["set_animation", NetworkBridge.PERMISSION.SERVER],
 		["set_puppet_transform", NetworkBridge.PERMISSION.SERVER],
@@ -246,6 +248,10 @@ func _ready()->void :
 puppet func hide_muzzleflash(id, hideFlash):
 	if hideFlash:
 		muzzleflash.hide()
+
+func _process(_delta):
+	if not NetworkBridge.is_world_authority() and is_instance_valid(muzzleflash):
+		muzzleflash.visible = not dead and not tranq and soul.enabled and OS.get_ticks_msec() < flash_until
 
 func _physics_process(delta)->void :
 	if NetworkBridge.n_is_network_master(self):
@@ -422,14 +428,14 @@ func track_player(delta)->void :
 			if (Targeting.matches(collider, player)) and line_of_sight > 0 and not height_difference and line_of_sight_y < 0.8 and not stealthed:
 				if not civ_killer and OS.get_ticks_msec() >= _sight_notice_at:
 					_sight_notice_at = OS.get_ticks_msec() + 200
-					if collider.has_meta("puppetId"):
-						NetworkBridge.n_rpc_id(self, collider.get_meta("puppetId"), "set_in_sight", [true])
+					if player != Global.player:
+						NetworkBridge.n_rpc_id(self, int(player.get_parent().name), "set_in_sight", [true])
 					else:
 						Global.player.UI.set_in_sight(true)
 				if soul.psychosis_inducer and OS.get_ticks_msec() >= _psychosis_notice_at:
 					_psychosis_notice_at = OS.get_ticks_msec() + 200
-					if collider.has_meta("puppetId"):
-						NetworkBridge.n_rpc_id(self, collider.get_meta("puppetId"), "set_psychosis", [true])
+					if player != Global.player:
+						NetworkBridge.n_rpc_id(self, int(player.get_parent().name), "set_psychosis", [true])
 					else:
 						Global.player.set_psychosis(true)
 				spot_time -= delta
