@@ -27,14 +27,15 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         shutil.copy2(library, project / library.name)
     mod = project / 'MOD_CONTENT' / 'CruS Online'
     mod.mkdir(parents=True)
-    for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
+    for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'FriendlyFire.gd', 'EnemyTargeting.gd', 'ImplantNetwork.gd', 'PlayerCollisionProxy.gd', 'SessionFlow.gd', 'DifficultyLabel.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
         shutil.copy2(root / name, mod / name)
 
 
     integration = ('multiplayer.gd', 'multiplayer_player.gd', 'SteamLobby.gd', 'multiplayer_menu.gd', 'Players.gd', 'Menu.gd', 'Stats.gd', 'ChatBox.gd',
                    'CancerSegment.gd', 'CancerReplication.gd', 'entities/Enemy_Torso.gd', 'remaped/Kinematic_Physics_Object.gd',
-                   'remaped/Divine_Door.gd', 'remaped/Profane_Door.gd', 'remaped/Terror_Door.gd', 'remaped/Elevator.gd', 'remaped/weapon.gd',
-                   'remaped/Player.gd', 'remaped/Exit.gd', 'remaped/Game_Manager.gd', 'entities/EnemyHandler.gd')
+                   'remaped/Switch.gd', 'remaped/Door.gd', 'remaped/down_door.gd', 'remaped/down_switch_door.gd', 'remaped/Divine_Door.gd', 'remaped/Profane_Door.gd', 'remaped/Terror_Door.gd', 'remaped/Elevator.gd', 'remaped/weapon.gd',
+                   'remaped/Player.gd', 'remaped/Exit.gd', 'remaped/Game_Manager.gd', 'entities/EnemyHandler.gd',
+                   'remaped/Player_Manager.gd', 'entities/E_Grunt_Movement_New.gd', 'entities/material_randomizer.gd', 'entities/Enemy_Melee_Weapon.gd')
     for name in integration:
         destination = mod / name
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
     (project / 'global.gd').write_text('extends Node\nvar player\nvar UI\nvar objectives = 0\nvar objective_complete = false\n'
                                      'var soul_intact = true\nvar husk_mode = false\nvar hope_discarded = false\n'
                                      'var death = false\nvar implants\nvar CURRENT_LEVEL = 0\nvar DEAD_CIVS = []\n'
-                                     'var menu\nvar LEVEL_AMBIENCE = [null]\nvar ambience\nvar music\n', encoding='utf-8')
+                                     'var last_scene = \"\"\nfunc goto_scene(path):\n\tlast_scene = path\nvar menu\nvar LEVEL_AMBIENCE = [null]\nvar ambience\nvar music\n', encoding='utf-8')
     menu_source = (root / 'menu.tscn').read_text(encoding='utf-8')
     for match in re.finditer(r'script/source = "((?:[^"\\]|\\.)*)"', menu_source):
         source = match.group(1).replace(r'\"', '"').replace('\\\\', '\\')
@@ -93,6 +94,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
                             capture_output=True, text=True, timeout=45)
     output = result.stdout + result.stderr
     print(output)
+    print('Engine exit:', result.returncode)
     if result.returncode or 'TRANSPORT_TEST_RESULT failures=0' not in output or 'ERROR:' in output:
         raise SystemExit(1)
     if args.lan:

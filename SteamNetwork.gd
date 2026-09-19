@@ -3,6 +3,7 @@ extends Node
 signal peer_status_updated(steam_id)
 signal peer_session_failure(steam_id, reason)
 signal all_peers_connected()
+signal host_left()
 
 enum PACKET_TYPE { HANDSHAKE = 1, HANDSHAKE_REPLY = 2, PEER_STATE = 3, NODE_PATH_UPDATE = 4, NODE_PATH_CONFIRM = 5, RPC = 6, RPC_WITH_NODE_PATH = 7, RSET = 8, RSET_WITH_NODE_PATH = 9 }
 
@@ -11,6 +12,7 @@ enum PERMISSION {SERVER, ALL}
 var _peers = {}
 var _my_steam_id := 0
 var _server_steam_id := 0
+var _handshake_elapsed = 0.0
 var _node_path_cache = {}
 
 var _peers_confirmed_node_path = {}
@@ -22,10 +24,13 @@ const SNAPSHOT_PACKET = 10
 const TARGET_REQUEST = 11
 const TARGET_DELIVERY = 12
 const SCENE_EVENT = 13
-const PROTOCOL_VERSION = 2
+const PROTOCOL_VERSION = 3
+const SNAPSHOT_BATCH = 14
+const RELIABLE_SEND_MODE = 2
 const SNAPSHOT_CHANNEL = 1
 const MAX_PACKETS_PER_FRAME = 128
 const PACKET_BUDGET_USEC = 2000
+const SNAPSHOT_SEND_BUDGET_USEC = 4000
 const MAX_PENDING_SNAPSHOTS = 2048
 const SNAPSHOT_INTERVAL = 0.05
 const SNAPSHOT_MAX_AGE_MSEC = 250
@@ -63,31 +68,58 @@ func diagnostics():
 		result["cancer_pending_growth"] = cancer.growth.size()
 		result["cancer_pending_damage"] = cancer.hits.size()
 	result["objects"] = _object_census()
+	result["census_age_ms"] = OS.get_ticks_msec() - _census_finished_at
+	result["level"] = Global.CURRENT_LEVEL
 	result["fps"] = Engine.get_frames_per_second()
+	result["peak_frame_ms"] = _peak_frame_ms
+	_peak_frame_ms = 0.0
+	result["ping_ms"] = Global.get_node("Multiplayer").get("last_ping_ms")
+	result["session_msec"] = OS.get_ticks_msec()
+	result["process_ms"] = Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+	result["physics_ms"] = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	result["draw_calls"] = Performance.get_monitor(Performance.RENDER_DRAW_CALLS_IN_FRAME)
+	result["active_physics_objects"] = Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)
 	result["static_memory_bytes"] = Performance.get_monitor(Performance.MEMORY_STATIC)
 	return result
 
-func _object_census():
+var _census = {"nodes": 0, "dynamic_named": 0, "gibs": 0, "physics_objects": 0, "enemies": 0}
+var _census_work = {}
+var _census_pending = []
+var _census_finished_at = -1000
 
-	var counts = {"nodes": 0, "dynamic_named": 0, "gibs": 0, "physics_objects": 0, "enemies": 0}
-	var pending = [get_tree().root]
-	while not pending.empty():
-		var node = pending.pop_back()
-		counts.nodes += 1
-		pending.append_array(node.get_children())
+func _object_census():
+	return _census.duplicate()
+
+func _update_object_census():
+	if _census_pending.empty():
+		if OS.get_ticks_msec() - _census_finished_at < 1000:
+			return
+		_census_work = {"nodes": 0, "dynamic_named": 0, "gibs": 0, "physics_objects": 0, "enemies": 0}
+		_census_pending = [get_tree().root]
+	var started = OS.get_ticks_usec()
+	var visited = 0
+	while not _census_pending.empty() and visited < 128 and OS.get_ticks_usec() - started < 500:
+		var node = _census_pending.pop_back()
+		if not is_instance_valid(node):
+			continue
+		visited += 1
+		_census_work.nodes += 1
+		_census_pending.append_array(node.get_children())
 		var label = str(node.name).to_lower()
 		if "#" in label:
-			counts.dynamic_named += 1
+			_census_work.dynamic_named += 1
 		if "gib" in label:
-			counts.gibs += 1
+			_census_work.gibs += 1
 		var script = node.get_script()
 		if script != null:
 			var path = script.resource_path.get_file()
 			if path == "Kinematic_Physics_Object.gd" or node is RigidBody:
-				counts.physics_objects += 1
+				_census_work.physics_objects += 1
 			if path in ["EnemyHandler.gd", "Stupid_Civilian.gd", "flesh_rat.gd"]:
-				counts.enemies += 1
-	return counts
+				_census_work.enemies += 1
+	if _census_pending.empty():
+		_census = _census_work
+		_census_finished_at = OS.get_ticks_msec()
 
 func _track_registration(caller, permission_key, member, permission, is_property):
 	if not caller.has_meta("crus_network_bindings"):
@@ -100,11 +132,22 @@ func _track_registration(caller, permission_key, member, permission, is_property
 			caller.connect("tree_exiting", self, "_unregister_node", [instance_id])
 		if not caller.is_connected("tree_entered", self, "_restore_registration"):
 			caller.connect("tree_entered", self, "_restore_registration", [weakref(caller)])
+		if not caller.is_connected("renamed", self, "_registration_renamed"):
+			caller.connect("renamed", self, "_registration_renamed", [weakref(caller)])
 	_registered_nodes[instance_id].permissions[permission_key] = true
+
+func _registration_renamed(reference):
+	var caller = reference.get_ref()
+	if caller == null or not caller.is_inside_tree():
+		return
+	_unregister_node(caller.get_instance_id())
+	_restore_registration(reference)
+	for child in caller.get_children():
+		_registration_renamed(weakref(child))
 
 func _restore_registration(reference):
 	var caller = reference.get_ref()
-	if caller == null:
+	if caller == null or not caller.has_meta("crus_network_bindings"):
 		return
 	var bindings = caller.get_meta("crus_network_bindings")
 	for binding in bindings.keys():
@@ -177,6 +220,7 @@ func init_network():
 	SteamLobby.connect("player_left_lobby", self, "_close_p2p_session")
 	
 	SteamLobby.connect("lobby_created", self, "_init_p2p_host")
+	SteamLobby.connect("lobby_joined", self, "_init_joined_lobby")
 	SteamLobby.connect("lobby_owner_changed", self, "_migrate_host")
 	
 	SteamInit.Steam.connect("p2p_session_request", self, "_on_p2p_session_request")
@@ -184,14 +228,23 @@ func init_network():
 	
 	_my_steam_id = SteamInit.steam_id
 
+var _peak_frame_ms = 0.0
+var _last_frame_usec = 0
+
 func _process(delta):
+	var frame_usec = OS.get_ticks_usec()
+	if _last_frame_usec > 0:
+		_peak_frame_ms = max(_peak_frame_ms, (frame_usec - _last_frame_usec) / 1000.0)
+	_last_frame_usec = frame_usec
+	_update_object_census()
 	var started = OS.get_ticks_usec()
 	var processed = 0
+	var receive_budget = int(clamp(delta * 100000.0, PACKET_BUDGET_USEC, 6000))
 
-	while processed < MAX_PACKETS_PER_FRAME and OS.get_ticks_usec() - started < PACKET_BUDGET_USEC:
+	while processed < MAX_PACKETS_PER_FRAME and OS.get_ticks_usec() - started < receive_budget:
 		var read_any = false
 		for channel in [0, SNAPSHOT_CHANNEL]:
-			if processed >= MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= PACKET_BUDGET_USEC:
+			if processed >= MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= receive_budget:
 				break
 			var packet_size = SteamInit.Steam.getAvailableP2PPacketSize(channel)
 			if packet_size > 0:
@@ -201,13 +254,18 @@ func _process(delta):
 		if not read_any:
 			break
 	metrics.frame(OS.get_ticks_usec() - started)
-	if processed == MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= PACKET_BUDGET_USEC:
+	if processed == MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= receive_budget:
 		metrics.count("receive_budget_hits")
 	_snapshot_elapsed += delta
 	if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
 		_snapshot_elapsed = 0.0
 		_flush_snapshots()
 	metrics.sample()
+	if SteamLobby.in_lobby() and not is_server() and _peers.has(_my_steam_id) and not _peers[_my_steam_id].connected:
+		_handshake_elapsed += delta
+		if _handshake_elapsed >= 1.0:
+			_handshake_elapsed = 0.0
+			_send_p2p_command_packet(get_server_steam_id(), PACKET_TYPE.HANDSHAKE_REPLY, PROTOCOL_VERSION)
 
 func register_rset(caller: Node, property: String, permission: int):
 	var node_path = _get_rset_property_path(caller.get_path(), property)
@@ -378,38 +436,13 @@ func _sender_has_permission(sender_id: int, node_path: NodePath, method: String 
 	return false
 
 func _migrate_host(old_owner_id, new_owner_id):
-	var old_peer = get_peer(old_owner_id)
-	if old_peer != null:
-		old_peer.host = false
-	
-	SteamInit.Steam.closeP2PSessionWithUser(old_owner_id)
-	
-	_server_steam_id = 0
-	
-	begin_scene(scene_epoch + 1)
-	_peers_confirmed_node_path.clear()
-	
-	_peers.clear()
-	for steam_id in SteamLobby.get_lobby_members():
-		var p = _create_peer(steam_id)
-		_peers[steam_id] = p
-	
-	var new_owner = get_peer(new_owner_id)
-	if new_owner != null:
-		new_owner.host = true
-	else:
-		push_error("Error migrating host, no new host was found!")
-		return
-	
-	if is_server():
-		for steam_id in _peers:
-			if steam_id != _my_steam_id:
-				_init_p2p_session(steam_id)
-			else:
-				_peers[steam_id].connected = true
-			
+	if old_owner_id != _my_steam_id:
+		emit_signal("host_left")
+
 
 func _rpc(to_peer_id: int, node: Node, method: String, args: Array):
+	if _waiting_world_target(to_peer_id, node):
+		return
 	if not check_permission_hash(node, method):
 		metrics.warn("unregistered_rpc", method)
 		return
@@ -455,6 +488,8 @@ func _rpc(to_peer_id: int, node: Node, method: String, args: Array):
 	_send_scene_event(to_peer.steam_id, packet, method in ["goto_scene_client", "goto_menu_client"])
 
 func _rset(to_peer, node: Node, property: String, value):
+	if _waiting_world_target(to_peer.steam_id, node):
+		return
 	var node_path = _get_rset_property_path(node.get_path(), property)
 	if not _permissions.has(_get_permission_hash(node_path)):
 		metrics.warn("unregistered_rset", property)
@@ -558,6 +593,7 @@ func _create_peer(steam_id):
 	return peer
 
 func _init_p2p_host(lobby_id):
+	_reset_session()
 	begin_scene(0)
 	print("Initializing P2P Host as %s" % _my_steam_id)
 	var host_peer = _create_peer(_my_steam_id)
@@ -567,27 +603,26 @@ func _init_p2p_host(lobby_id):
 	emit_signal("all_peers_connected")
 	
 func _init_p2p_session(steam_id):
-	if not is_server():
+	if steam_id == _my_steam_id or not is_server():
 
 		return
 	print("Initializing P2P Session with %s" % steam_id)
+	if _peers.has(steam_id) and _peers[steam_id].connected:
+		_server_send_peer_state()
+		return
 	_peers[steam_id] = _create_peer(steam_id)
 	emit_signal("peer_status_updated", steam_id)
 	_send_p2p_command_packet(steam_id, PACKET_TYPE.HANDSHAKE, PROTOCOL_VERSION)
 
 func _close_p2p_session(steam_id):
+	if steam_id != _my_steam_id and steam_id == _server_steam_id:
+		emit_signal("host_left")
 	if steam_id == _my_steam_id:
-		SteamInit.Steam.closeP2PSessionWithUser(_server_steam_id)
-		_server_steam_id = 0
-		_peers.clear()
-		_peers_confirmed_node_path.clear()
-		begin_scene(scene_epoch + 1)
+		_reset_session()
 		return
-	
+
 	print("Closing P2P Session with %s" % steam_id)
-	var session_state = SteamInit.Steam.getP2PSessionState(steam_id)
-	if session_state.has("connection_active") and session_state["connection_active"]:
-		SteamInit.Steam.closeP2PSessionWithUser(steam_id)
+	SteamInit.Steam.closeP2PSessionWithUser(steam_id)
 	if _peers.has(steam_id):
 		_peers.erase(steam_id)
 	_peers_confirmed_node_path.erase(steam_id)
@@ -601,7 +636,7 @@ func _send_p2p_command_packet(steam_id, packet_type: int, arg = null):
 	if not _send_p2p_packet(steam_id, payload):
 		push_error("Failed to send command packet %s" % packet_type)
 
-func _send_p2p_packet(steam_id, data: PoolByteArray, send_type: int = SteamInit.Steam.P2P_SEND_RELIABLE, channel: int = 0) -> bool:
+func _send_p2p_packet(steam_id, data: PoolByteArray, send_type: int = RELIABLE_SEND_MODE, channel: int = 0) -> bool:
 	var sent = SteamInit.Steam.sendP2PPacket(steam_id, data, send_type, channel)
 	if sent:
 		metrics.traffic("sent", data.size(), send_type >= 2)
@@ -609,7 +644,7 @@ func _send_p2p_packet(steam_id, data: PoolByteArray, send_type: int = SteamInit.
 		metrics.count("send_failures")
 	return sent
 
-func _broadcast_p2p_packet(data: PoolByteArray, send_type: int = SteamInit.Steam.P2P_SEND_RELIABLE, channel: int = 0):
+func _broadcast_p2p_packet(data: PoolByteArray, send_type: int = RELIABLE_SEND_MODE, channel: int = 0):
 	for peer_id in _peers:
 		if peer_id != _my_steam_id:
 			_send_p2p_packet(peer_id, data, send_type, channel)
@@ -632,8 +667,11 @@ func _read_p2p_packet(packet_size:int, channel = 0):
 		if packet_data.size() > MAX_UNRELIABLE_BYTES:
 			metrics.warn("snapshot_oversize", "received")
 			return
-		if packet_data.size() > 1 and packet_data[0] == SNAPSHOT_PACKET and _peers.has(sender_id) and _peers[sender_id].connected and (is_server() or sender_id == get_server_steam_id()):
-			_handle_snapshot(sender_id, bytes2var(packet_data.subarray(1, packet_data.size() - 1)))
+		if packet_data.size() > 1 and _peers.has(sender_id) and _peers[sender_id].connected and (is_server() or sender_id == get_server_steam_id()):
+			if packet_data[0] == SNAPSHOT_PACKET:
+				_handle_snapshot(sender_id, bytes2var(packet_data.subarray(1, packet_data.size() - 1)))
+			elif packet_data[0] == SNAPSHOT_BATCH:
+				_snapshots.receive_batch(sender_id, bytes2var(packet_data.subarray(1, packet_data.size() - 1)))
 		return
 	_handle_packet(sender_id, packet_data)
 
@@ -932,6 +970,8 @@ func _execute_rpc(sender, path_cache_index: int, method: String, args: Array):
 				_rpc(peer_id, node, method, forwarded_args)
 
 func _on_p2p_session_connect_fail(steam_id: int, session_error):
+	if steam_id == _server_steam_id and steam_id != _my_steam_id:
+		emit_signal("host_left")
 
 	match session_error:
 		SteamInit.Steam.P2P_SESSION_ERROR_NONE:
@@ -956,25 +996,40 @@ func _on_p2p_session_connect_fail(steam_id: int, session_error):
 		_server_send_peer_state()
 
 func _on_p2p_session_request(remote_steam_id):
-	print("Received p2p session request from %s" % remote_steam_id)
-
-	var requestor = SteamInit.Steam.getFriendPersonaName(remote_steam_id)
-	
-
-	if SteamLobby.get_lobby_owner() == remote_steam_id:
+	if not SteamLobby.in_lobby() or not SteamLobby.get_lobby_members().has(remote_steam_id):
+		SteamInit.Steam.closeP2PSessionWithUser(remote_steam_id)
+		return
+	if is_server():
 		SteamInit.Steam.acceptP2PSessionWithUser(remote_steam_id)
-		
-		if not is_peer_connected(_my_steam_id):
-			var client_peer = _create_peer(_my_steam_id)
-			client_peer.connected = true
-			_peers[_my_steam_id] = client_peer
-		
-		var host_peer = _create_peer(remote_steam_id)
-		host_peer.host = true
-		host_peer.connected = true
-		_peers[remote_steam_id] = host_peer
-	else:
-		push_warning("Got a rogue p2p session request from %s. Not accepting." % remote_steam_id)
+		_init_p2p_session(remote_steam_id)
+	elif SteamLobby.get_lobby_owner() == remote_steam_id:
+		SteamInit.Steam.acceptP2PSessionWithUser(remote_steam_id)
+
+func _reset_session():
+	_handshake_elapsed = 0.0
+	for peer_id in _peers:
+		if peer_id != _my_steam_id:
+			SteamInit.Steam.closeP2PSessionWithUser(peer_id)
+	_peers.clear()
+	_peers_confirmed_node_path.clear()
+	_server_steam_id = 0
+	begin_scene(0)
+
+func _init_joined_lobby(lobby_id):
+	var owner = SteamLobby.get_lobby_owner()
+	if owner == _my_steam_id or (owner == _server_steam_id and _peers.has(_my_steam_id)):
+		return
+	_reset_session()
+	_server_steam_id = owner
+	var local_peer = _create_peer(_my_steam_id)
+	_peers[_my_steam_id] = local_peer
+	var host_peer = _create_peer(owner)
+	host_peer.host = true
+	host_peer.connected = true
+	_peers[owner] = host_peer
+	SteamInit.Steam.acceptP2PSessionWithUser(owner)
+	_send_p2p_command_packet(owner, PACKET_TYPE.HANDSHAKE_REPLY, PROTOCOL_VERSION)
+
 
 class Peer:
 	var connected := false
@@ -996,3 +1051,8 @@ class Peer:
 		return peer.steam_id == steam_id and \
 				peer.host == host and \
 				peer.connected == connected
+
+func _waiting_world_target(peer, caller):
+	var mp = get_node_or_null("../..")
+	var flow = mp.get("Flow") if mp != null else null
+	return is_instance_valid(flow) and flow.waiting_world_target(peer, caller)

@@ -425,6 +425,10 @@ func _publish_objectives():
 		multiplayer.publish_mission_state()
 
 func level_finished()->void :
+	var multiplayer = get_node_or_null("Multiplayer")
+	if multiplayer != null and multiplayer.NetworkBridge.check_connection():
+		multiplayer.Flow.finish_mission(true)
+		return
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), music_volume)
 	menu.get_node("Soul_Rended").hide()
 	menu.get_node("Soul_Rended").rect_position.y = 128
@@ -1097,3 +1101,84 @@ func wait(c:int):
 func set_inputs(action, key):
 	InputMap.action_erase_events(action)
 	InputMap.action_add_event(action, key)
+
+func record_multiplayer_win():
+	consecutive_deaths = 0
+	if not hope_discarded:
+		if Global.stock_mode and LEVEL_STIMES_RAW[CURRENT_LEVEL] > level_time_raw:
+			LEVEL_STIMES[CURRENT_LEVEL] = level_time
+			LEVEL_STIMES_RAW[CURRENT_LEVEL] = level_time_raw
+			if level_time_raw < LEVEL_SRANK_S[CURRENT_LEVEL]:
+				level_stock_ranks[CURRENT_LEVEL] = "S"
+			elif level_time_raw < LEVEL_RANK_A[CURRENT_LEVEL]:
+				level_stock_ranks[CURRENT_LEVEL] = "A"
+			elif level_time_raw < LEVEL_RANK_B[CURRENT_LEVEL]:
+				level_stock_ranks[CURRENT_LEVEL] = "B"
+			else :
+				level_stock_ranks[CURRENT_LEVEL] = "C"
+
+		if LEVEL_TIMES_RAW[CURRENT_LEVEL] > level_time_raw:
+			LEVEL_TIMES[CURRENT_LEVEL] = level_time
+			LEVEL_TIMES_RAW[CURRENT_LEVEL] = level_time_raw
+			if level_time_raw < LEVEL_RANK_S[CURRENT_LEVEL]:
+				level_ranks[CURRENT_LEVEL] = "S"
+			elif level_time_raw < LEVEL_RANK_A[CURRENT_LEVEL]:
+				level_ranks[CURRENT_LEVEL] = "A"
+			elif level_time_raw < LEVEL_RANK_B[CURRENT_LEVEL]:
+				level_ranks[CURRENT_LEVEL] = "B"
+			else :
+				level_ranks[CURRENT_LEVEL] = "C"
+	else :
+		if Global.stock_mode and HELL_STIMES_RAW[CURRENT_LEVEL] > level_time_raw:
+			HELL_STIMES[CURRENT_LEVEL] = level_time
+			HELL_STIMES_RAW[CURRENT_LEVEL] = level_time_raw
+			if level_time_raw < HELL_SRANK_S[CURRENT_LEVEL]:
+				hell_stock_ranks[CURRENT_LEVEL] = "S"
+			elif level_time_raw < HELL_RANK_A[CURRENT_LEVEL]:
+				hell_stock_ranks[CURRENT_LEVEL] = "A"
+			elif level_time_raw < HELL_RANK_B[CURRENT_LEVEL]:
+				hell_stock_ranks[CURRENT_LEVEL] = "B"
+			else :
+				hell_stock_ranks[CURRENT_LEVEL] = "C"
+
+		if HELL_TIMES_RAW[CURRENT_LEVEL] > level_time_raw:
+			HELL_TIMES[CURRENT_LEVEL] = level_time
+			HELL_TIMES_RAW[CURRENT_LEVEL] = level_time_raw
+			if level_time_raw < HELL_RANK_S[CURRENT_LEVEL]:
+				hell_ranks[CURRENT_LEVEL] = "S"
+			elif level_time_raw < HELL_RANK_A[CURRENT_LEVEL]:
+				hell_ranks[CURRENT_LEVEL] = "A"
+			elif level_time_raw < HELL_RANK_B[CURRENT_LEVEL]:
+				hell_ranks[CURRENT_LEVEL] = "B"
+			else :
+				hell_ranks[CURRENT_LEVEL] = "C"
+	if CURRENT_LEVEL + 1 > LEVELS_UNLOCKED and CURRENT_LEVEL + 1 <= L_PUNISHMENT:
+		LEVELS_UNLOCKED = CURRENT_LEVEL + 1
+		LEVELS_UNLOCKED = clamp(LEVELS_UNLOCKED, 1, 12)
+	if CURRENT_LEVEL == L_PUNISHMENT:
+		ending_1 = true
+		water_material.set_shader_param("albedoTex", red_water)
+
+
+
+
+
+
+	if is_instance_valid(player) and is_instance_valid(player.weapon):
+		if player.weapon.weapon1 != null:
+			if not WEAPONS_UNLOCKED[player.weapon.weapon1]:
+				WEAPONS_UNLOCKED[player.weapon.weapon1] = true
+		if player.weapon.weapon2 != null:
+			if not WEAPONS_UNLOCKED[player.weapon.weapon2]:
+				WEAPONS_UNLOCKED[player.weapon.weapon2] = true
+	if punishment_mode:
+		money += LEVEL_REWARDS[CURRENT_LEVEL] * 2
+	else :
+		money += LEVEL_REWARDS[CURRENT_LEVEL]
+	if punishment_mode:
+		if not LEVEL_PUNISHED[CURRENT_LEVEL] and not hope_discarded:
+			set_soul()
+		LEVEL_PUNISHED[CURRENT_LEVEL] = true
+	if levels_completed() and BONUS_UNLOCK.find("END") == - 1:
+		BONUS_UNLOCK.append("END")
+	save_game()

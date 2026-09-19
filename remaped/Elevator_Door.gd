@@ -74,7 +74,7 @@ func _physics_process(delta):
 		audio_player.stop()
 		movement_counter = 0
 		stop = true
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+		if NetworkBridge.n_is_network_master(self):
 			NetworkBridge.n_rpc(self, "set_door", [stop, open, translation])
 
 puppet func set_door(id, recived_stop, recived_open, recived_translation = null):
@@ -88,20 +88,19 @@ func timeout():
 	stop = not stop
 	open = not open
 	
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		NetworkBridge.n_rpc(self, "set_door", [stop, open, translation])
 
 func use():
 	network_use(null)
 	
 master func network_use(id):
-	if NetworkBridge.check_connection():
-		if stop and not open:
-			open = not open
-			stop = not stop
-			
-			timer.start()
-			if NetworkBridge.n_is_network_master(self):
-				NetworkBridge.n_rpc(self, "set_door", [stop, open])
-			else:
-				NetworkBridge.n_rpc(self, "network_use")
+	if stop and not open:
+		open = not open
+		stop = not stop
+
+		timer.start()
+		if NetworkBridge.n_is_network_master(self):
+			NetworkBridge.n_rpc(self, "set_door", [stop, open])
+		else:
+			NetworkBridge.n_rpc(self, "network_use")

@@ -111,9 +111,9 @@ var died = false
 var pain_sound
 var psychocounter = 0
 class Cmd:
-	var forward_move:float
-	var right_move:float
-	var up_move:float
+	var forward_move:float = 0.0
+	var right_move:float = 0.0
+	var up_move:float = 0.0
 var snap_variable = 1
 var cmd
 var weapon
@@ -193,10 +193,11 @@ remote func send_death_nofify(id, killerId):
 
 remote func _spawn_gib(id, parentPath, gib, gibName, gibPos, recivedDamage):
 	var new_gib = gibs[gib].instance()
+	NetworkBridge.inherit_damage_source(new_gib, self)
 	new_gib.set_name(gibName)
 	get_node(parentPath).add_child(new_gib)
 	new_gib.global_transform.origin = gibPos
-	new_gib.damage(recivedDamage[0], recivedDamage[1], recivedDamage[2], recivedDamage[3])
+	NetworkBridge.apply_damage(self, new_gib, "damage", [recivedDamage[0], recivedDamage[1], recivedDamage[2], recivedDamage[3]])
 
 remote func _play_sound(id, soundName):
 	Multiplayer.players[id].puppet.get_node("Puppet/PlayerModel/SFX/" + soundName).play()
@@ -207,6 +208,7 @@ remote func _play_death_sound(id):
 remote func _spawn_explosion(id, pos):
 	if NetworkBridge.get_id() != id:
 		var n_explosion = preload("res://MOD_CONTENT/CruS Online/effects/fake_self_destruct_explosion.tscn").instance()
+		NetworkBridge.inherit_damage_source(n_explosion, self)
 		get_parent().add_child(n_explosion)
 		n_explosion.global_transform.origin = pos
 		
@@ -485,7 +487,8 @@ func grapple(pos3d:Position3D):
 	var distance = global_transform.origin.distance_to(point)
 	var orb_res = 4
 	
-	playerPuppet.set_grapple(pos3d.global_transform.origin)
+	if is_instance_valid(playerPuppet):
+		playerPuppet.set_grapple(pos3d.global_transform.origin)
 	
 
 	var wanted_orbs = int(distance) * orb_res
@@ -661,13 +664,13 @@ func _physics_process(delta):
 	if GLOBAL.implants.arm_implant.cursed_torch:
 		curse_torch.show()
 		curse_torch.light_energy = (sin(time) + 1.2) * 0.5
-	if Input.is_action_just_pressed("Vision") and GLOBAL.debug:
+	if _gameplay_just_pressed("Vision") and GLOBAL.debug:
 		special_vision = not special_vision
 		if GLOBAL.implants.head_implant.nightmare:
 			shader_screen.material.set_shader_param("nightmare_vision", special_vision)
 		if GLOBAL.implants.head_implant.holy:
 			shader_screen.material.set_shader_param("holy_mode", special_vision)
-	if Input.is_action_just_pressed("crouch") or cancer_count >= 10:
+	if _gameplay_just_pressed("crouch") or cancer_count >= 10:
 		if $Top_Checkr / RayCast.is_colliding():
 			top_touching = true
 		else :
@@ -700,21 +703,22 @@ func _physics_process(delta):
 			$Crush_Check / CrouchCrush.disabled = true
 			rotation_helper.transform.origin.y = 0
 			set_move_speed()
-		playerPuppet.set_crouch(null, crouch_flag)
+		if is_instance_valid(playerPuppet):
+			playerPuppet.set_crouch(null, crouch_flag)
 	if toxic and not crouch_flag and not tranquilize_flag:
 		move_speed = 7 + sin(time_2)
-	if Input.is_action_pressed("Lean_Left"):
+	if _gameplay_pressed("Lean_Left"):
 		lean = - 1
 		set_move_speed()
-	elif Input.is_action_pressed("Lean_Right"):
+	elif _gameplay_pressed("Lean_Right"):
 		lean = 1
 		set_move_speed()
 	else :
 		lean = 0
-	if Input.is_action_just_released("Lean_Left") or Input.is_action_just_released("Lean_Right"):
+	if _gameplay_just_released("Lean_Left") or _gameplay_just_released("Lean_Right"):
 		lean = 0
 		set_move_speed()
-	if Input.is_action_just_pressed("Suicide"):
+	if _gameplay_just_pressed("Suicide"):
 		suicide()
 	time += delta
 	if died:
@@ -746,7 +750,7 @@ func detox():
 	set_move_speed()
 
 func _process(delta):
-	if (Input.is_action_just_pressed("Tertiary_Weapon") and Global.implants.arm_implant.grav and cancer_count < 10) or drug_gravity_flag == true:
+	if (_gameplay_just_pressed("Tertiary_Weapon") and Global.implants.arm_implant.grav and cancer_count < 10) or drug_gravity_flag == true:
 		max_gravity *= - 1
 		$Top_Checkr / RayCast.cast_to *= - 1
 		stair = not stair
@@ -760,7 +764,8 @@ func _process(delta):
 			if crouch_flag:
 				rotation_helper.transform.origin.y = - 0.7
 		drug_gravity_flag = false
-		playerPuppet.set_gravity(null, max_gravity)
+		if is_instance_valid(playerPuppet):
+			playerPuppet.set_gravity(null, max_gravity)
 	queue_jump()
 
 func suicide():
@@ -776,7 +781,8 @@ func move(delta):
 
 	if on_floor != is_on_floor():
 		on_floor = is_on_floor()
-		playerPuppet.set_is_on_floor(null, on_floor)
+		if is_instance_valid(playerPuppet):
+			playerPuppet.set_is_on_floor(null, on_floor)
 	
 	if Vector3(cmd.right_move, 0, cmd.forward_move).length() != 0:
 		ray_rotation.look_at(global_transform.origin + Vector3(cmd.right_move, 0, cmd.forward_move), Vector3.UP)
@@ -858,7 +864,7 @@ func move(delta):
 	else :
 		rotation_helper.translation.x = lerp(rotation_helper.translation.x, 0, 5 * delta)
 	
-	if on_floor and not Input.is_action_pressed("movement_jump"):
+	if on_floor and not _gameplay_pressed("movement_jump"):
 		foot_step_counter += Vector3(player_velocity.x, 0, player_velocity.z).length() * delta
 		if foot_step_counter > 4:
 			$Foot_Step.pitch_scale = 0.8 + rand_range( - 0.2, 0.2)
@@ -925,7 +931,7 @@ func move(delta):
 		snap = Vector3.ZERO
 	elif player_velocity.y < 0 and max_gravity < 0:
 		snap = Vector3.ZERO
-	if is_on_floor() and not Input.is_action_pressed("movement_jump") and not (Global.implants.torso_implant.jetpack and Input.is_action_pressed("kick")):
+	if is_on_floor() and not _gameplay_pressed("movement_jump") and not (Global.implants.torso_implant.jetpack and _gameplay_pressed("kick")):
 		player_velocity.y = 0
 	player_velocity = move_and_slide_with_snap(player_velocity, snap, floor_direction, false, 4, deg2rad(46), false)
 
@@ -937,6 +943,11 @@ func move(delta):
 		player_top_velocity = udp.length()
 
 func set_movement_dir():
+	if not _gameplay_input_enabled():
+		cmd.forward_move = 0.0
+		cmd.right_move = 0.0
+		wish_jump = false
+		return
 	if amp < 0:
 		cmd.forward_move = Input.get_action_strength("movement_backward") - Input.get_action_strength("movement_forward")
 		cmd.right_move = Input.get_action_strength("movement_right") - Input.get_action_strength("movement_left")
@@ -946,12 +957,12 @@ func set_movement_dir():
 func queue_jump():
 	if not dead:
 		if hold_jump_to_bhop or water:
-			wish_jump = Input.is_action_pressed("movement_jump")
+			wish_jump = _gameplay_pressed("movement_jump")
 			return 
-		if Input.is_action_just_pressed("movement_jump") and not wish_jump:
+		if _gameplay_just_pressed("movement_jump") and not wish_jump:
 			
 			wish_jump = true
-		if not Input.is_action_pressed("movement_jump"):
+		if not _gameplay_pressed("movement_jump"):
 			wish_jump = false
 
 func air_move(delta):
@@ -984,7 +995,7 @@ func air_move(delta):
 	accelerate(wishdir, wishspeed, accel, delta)
 	if air_control:
 		air_control(wishdir, wishspeed, delta)
-	if (Input.is_action_just_pressed("movement_jump") and double_jump_flag > 0):
+	if (_gameplay_just_pressed("movement_jump") and double_jump_flag > 0):
 		var space = get_world().direct_space_state
 		var result = space.intersect_ray(global_transform.origin, global_transform.origin + Vector3.DOWN * 10, [self])
 		if result:
@@ -1001,7 +1012,7 @@ func air_move(delta):
 		player_velocity += get_floor_velocity()
 		double_jump_flag -= 1
 		wish_jump = false
-	elif Input.is_action_just_pressed("movement_jump") and is_on_wall() and r:
+	elif _gameplay_just_pressed("movement_jump") and is_on_wall() and r:
 		var count: = get_slide_count()
 		if count != 0:
 			var norm = get_slide_collision(0).normal
@@ -1067,7 +1078,7 @@ func ground_move(delta):
 	player_velocity.y = 0
 
 	if (wish_jump):
-		var jetpack = Input.is_action_pressed("kick") and Global.implants.torso_implant.jetpack
+		var jetpack = _gameplay_pressed("kick") and Global.implants.torso_implant.jetpack
 		if jump_bonus > 0 and not water and not jetpack:
 			$Boostjump.play()
 		elif not water and not jetpack:
@@ -1126,9 +1137,11 @@ func accelerate(wishdir, wishspeed, accel, delta):
 	player_velocity.z += accelspeed * wishdir.z
 
 func _input(event):
+	if NetworkBridge.check_connection() and Global.get_node("Multiplayer").Flow.result_active:
+		return
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		if not Input.is_action_pressed("reload"):
-			var sensitivity = x_mouse_sensitivity * player_view.fov / Global.FOV
+		if not _gameplay_pressed("reload"):
+			var sensitivity = (Global.mouse_sensitivity if dead else x_mouse_sensitivity) * player_view.fov / Global.FOV
 			
 			var rot_deg_y = deg2rad(event.relative.y * sensitivity)
 			if GLOBAL.invert_y:
@@ -1204,6 +1217,8 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 		return 
 	dead = true
 	died = true
+	grab_hand.hide()
+	player_view.fov = Global.FOV
 	health = 0
 	$SFX / IED1.stop()
 	$SFX / IED2.stop()
@@ -1215,6 +1230,7 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 	weapon.hide()
 	NetworkBridge.n_rpc(self, "_spawn_explosion", [global_transform.origin])
 	var n_explosion = EXPLOSION.instance()
+	NetworkBridge.inherit_damage_source(n_explosion, self)
 	get_parent().add_child(n_explosion)
 	n_explosion.global_transform.origin = global_transform.origin
 
@@ -1222,8 +1238,14 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 
 
 	UI.hide()
+	if not NetworkBridge.check_connection():
+		UI.set_dead()
+		yield(get_tree(), "idle_frame")
+		GLOBAL.level_finished()
+		return
 	GLOBAL.get_node('DeathScreen').player_died()
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	set_process_input(true)
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
 	NetworkBridge.n_rpc(self, "send_death_nofify", [lastDamagerId])
 
@@ -1241,7 +1263,7 @@ func _on_Water_Check_area_exited(area):
 	water = false
 	AudioServer.set_bus_effect_enabled(1, 0, false)
 	AudioServer.set_bus_effect_enabled(1, 1, false)
-	if Input.is_action_pressed("movement_jump"):
+	if _gameplay_pressed("movement_jump"):
 		player_velocity.y += jump_speed * 2
 	shader_screen.material.set_shader_param("water", false)
 
@@ -1252,11 +1274,12 @@ func spawn_gib(gib, count, damage, collision_n, collision_p):
 	for i_gib in range(count):
 		
 		var new_gib = gibs[gib].instance()
+		NetworkBridge.inherit_damage_source(new_gib, self)
 		new_gib.set_name(new_gib.name + "#" + str(new_gib.get_instance_id()))
 		get_parent().add_child(new_gib)
 		new_gib.global_transform.origin = global_transform.origin
 		var damageArgs = [damage * 10, - collision_n + Vector3(rand_range(0, 0.1), rand_range(0, 0.1), rand_range(0, 0.1)), collision_p, Vector3.ZERO]
-		new_gib.damage(damageArgs[0], damageArgs[1], damageArgs[2], damageArgs[3])
+		NetworkBridge.apply_damage(self, new_gib, "damage", [damageArgs[0], damageArgs[1], damageArgs[2], damageArgs[3]])
 
 		NetworkBridge.n_rpc(self, "_spawn_gib", [get_parent().get_path(), gib, new_gib.name, new_gib.global_transform.origin, damageArgs])
 		return new_gib
@@ -1307,3 +1330,15 @@ func set_toxic():
 		return 
 	toxic = true
 	UI.toxic = true
+
+func _gameplay_input_enabled():
+	return not NetworkBridge.check_connection() or not Multiplayer.Menu.visible
+
+func _gameplay_pressed(action):
+	return _gameplay_input_enabled() and Input.is_action_pressed(action)
+
+func _gameplay_just_pressed(action):
+	return _gameplay_input_enabled() and Input.is_action_just_pressed(action)
+
+func _gameplay_just_released(action):
+	return _gameplay_input_enabled() and Input.is_action_just_released(action)

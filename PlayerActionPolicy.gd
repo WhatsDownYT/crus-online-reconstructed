@@ -2,7 +2,7 @@ extends Reference
 
 
 
-const ACTIONS = {"_do_damage": 5, "_set_tranquilize": 0, "_set_cancer": 0,
+const ACTIONS = {"_do_damage": 6, "_set_tranquilize": 0, "_set_cancer": 0,
 	"_set_toxic": 0, "_drop_weapon": 0, "_set_fire": 1, "_respawn_player": 0}
 
 static func is_action(method):
@@ -19,6 +19,8 @@ static func validate(method, args, can_damage, dead):
 	if dead or not can_damage:
 		return false
 	if method == "_do_damage":
+		if typeof(args[5]) != TYPE_INT or args[5] < 0:
+			return false
 		if not typeof(args[0]) in [TYPE_INT, TYPE_REAL] or is_nan(args[0]) or is_inf(args[0]) or args[0] < 0 or args[0] > 10000:
 			return false
 		if not finite_vector(args[1]) or not finite_vector(args[2]) or not finite_vector(args[3]):

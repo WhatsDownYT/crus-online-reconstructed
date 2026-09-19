@@ -24,7 +24,12 @@ func _ready():
 		["set_material", NetworkBridge.PERMISSION.SERVER]
 	])
 	
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	call_deferred("_sync_material")
+
+func _sync_material():
+	if materials.empty():
+		return
+	if not NetworkBridge.check_connection() or NetworkBridge.n_is_network_master(self):
 		materialId = randi() % materials.size()
 		var material = load(materials[materialId])
 		$Armature / Skeleton / Head_Mesh.material_override = material

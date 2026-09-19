@@ -14,7 +14,6 @@ func hide_menu(type = null):
 	hide()
 	get_parent().Hint.hide()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	Global.player.weapon.disabled = false
 	
 	Global.player.set_process(true)
 	Global.player.set_physics_process(true)
@@ -22,13 +21,14 @@ func hide_menu(type = null):
 	Global.player.set_process_unhandled_key_input(true)
 
 func show_menu(type = null):
+	if not NetworkBridge.check_connection():
+		return
 	_layout_menu()
 	show()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	Global.player.weapon.disabled = true
 	
-	Global.player.set_process(false)
-	Global.player.set_physics_process(false)
+	Global.player.set_process(true)
+	Global.player.set_physics_process(true)
 	Global.player.set_process_input(false)
 	Global.player.set_process_unhandled_key_input(false)
 
@@ -49,25 +49,27 @@ func _layout_menu():
 			child.fit_in_parent()
 
 func _input(event):
+	if parent.Flow.result_active:
+		return
+	if not NetworkBridge.check_connection():
+		return
 	if Input.is_action_just_pressed("ui_cancel"):
 		if visible:
 			hide_menu()
 		else:
 			show_menu()
 
-func leave_server(type):
-	hide_menu()
-	set_process_input(false)
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+func exit_to_level_select(type):
+	_exit_group(true)
 
-	if NetworkBridge.n_is_network_master(self):
-		parent.goto_menu_host()
-	else:
-		for child in parent.Players.get_children():
-			child.queue_free()
-		
-		parent.goto_menu_client(null)
-		parent.leave_server()
+func exit_to_menu(type):
+	_exit_group(false)
+
+func _exit_group(level_select):
+	if not NetworkBridge.check_connection():
+		return
+	hide_menu()
+	parent.Flow.exit_to_menu(level_select)
 
 func leave_game(type):
 	hide_menu()

@@ -18,7 +18,7 @@ func _ready():
 
 func _on_Area_body_entered(body):
 	if body == Global.player:
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+		if NetworkBridge.n_is_network_master(self):
 			if Global.BONUS_UNLOCK.find(level_name) == -1:
 				Global.BONUS_UNLOCK.append(level_name)
 				NetworkBridge.n_rpc(self, "unlock_level")

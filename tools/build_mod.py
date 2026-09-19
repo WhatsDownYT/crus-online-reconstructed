@@ -18,6 +18,10 @@ if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
 with zipfile.ZipFile(args.base_package) as base:
     entries = {name: base.read(name) for name in base.namelist()
                if not name.endswith('/') and not name.startswith(prefix)}
+    entries.pop('Menu/Main_Menu.tscn.remap', None)
+    entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remaped/Switch.gd"\n'
+    for source, target in [('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+        entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remaped/' + target + '"\n').encode()
     for path in root.rglob('*'):
         relative = path.relative_to(root)
         if not path.is_file() or any(part in excluded for part in relative.parts):

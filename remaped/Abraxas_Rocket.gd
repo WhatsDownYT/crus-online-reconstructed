@@ -35,7 +35,7 @@ func _ready():
 	])
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		t += 1
 		if destroyed:
 			return 
@@ -90,7 +90,7 @@ func damage(dmg, nrml, pos, shoot_pos):
 	network_damage(null, dmg, nrml, pos, shoot_pos)
 
 master func network_damage(id, dmg, nrml, pos, shoot_pos):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not activated:
 			return 
 		health -= dmg

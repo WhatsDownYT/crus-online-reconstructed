@@ -46,6 +46,12 @@ func _ready():
 		"res://MOD_CONTENT/CruS Online/menu.tscn",
 		"res://MOD_CONTENT/CruS Online/death_screen.tscn",
 		"res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn",
+		"res://MOD_CONTENT/CruS Online/maps_stuff/respawn_point.tscn",
+		"res://Player_Manager.gd", "res://Scripts/E_Grunt_Movement_New.gd",
+		"res://Scripts/material_randomizer.gd", "res://Scripts/Enemy_Melee_Weapon.gd",
+		"res://Scripts/Grenade.gd", "res://Scripts/weapon.gd", "res://Scripts/new_vehicle.gd",
+		"res://Explosion.gd", "res://MissileKinematic.gd", "res://Fire.gd",
+		"res://Entities/Bullets/Fire_Child.gd", "res://Radiation.gd",
 		"res://Cancerball.tscn", "res://Entities/Physics_Objects/Chest_Gib.tscn",
 		"res://Scripts/Player.gd", "res://Scripts/Enemy_Torso.gd",
 		"res://Scripts/Divine_Door.gd", "res://Scripts/Profane_Door.gd",
@@ -69,10 +75,19 @@ func _ready():
 					failures += 1
 					printerr("STALE_SCRIPT ", path)
 				source.close()
+	for path in EXTRA_SCRIPTS:
+		var script = load(path)
+		if script == null or not script.can_instance():
+			failures += 1
+			printerr("SCRIPT_FAIL ", path)
 	print("RESOURCE_TEST_RESULT failures=", failures)
 	get_tree().quit(1 if failures else 0)
 '''.replace('GAME_PACK', json.dumps(args.game_pack.resolve().as_posix())).replace(
         'MOD_PACKAGE', json.dumps(args.mod_package.resolve().as_posix()))
+    root = Path(__file__).resolve().parents[1]
+    extra_scripts = ['res://MOD_CONTENT/CruS Online/' + path.relative_to(root).as_posix()
+                     for folder in ('remaped', 'entities') for path in sorted((root / folder).glob('*.gd'))]
+    script = script.replace('EXTRA_SCRIPTS', json.dumps(extra_scripts))
     (project / 'resource_check.gd').write_text(script, encoding='utf-8')
     result = subprocess.run([str(engine), '--no-window', '--path', str(project)],
                             capture_output=True, text=True, timeout=90,

@@ -16,12 +16,23 @@ puppet func play_sound(id):
 	$Attack_Sound.play()
 
 func AI_shoot()->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	var body = get_parent().get_parent()
+	if body.get("dead") or body.get("tranq") or body.get_parent().get("dead"):
+		return
+	if NetworkBridge.n_is_network_master(self):
+		if not raycast.enabled:
+			return
+		raycast.force_raycast_update()
 		if raycast.is_colliding():
 			if raycast.get_collider().name == "Player" or raycast.get_collider().has_meta("puppet"):
-				if velocity_booster:
-					Global.player.player_velocity -= (global_transform.origin - Vector3.UP * 0.5 - Global.player.global_transform.origin).normalized() * damage
 				var collider = raycast.get_collider()
+				if velocity_booster:
+					if collider == Global.player:
+						Global.player.player_velocity -= (global_transform.origin - Vector3.UP * 0.5 - Global.player.global_transform.origin).normalized() * damage
+					elif is_instance_valid(collider.get("client")):
+						var client = collider.client
+						var impulse = -(global_transform.origin - Vector3.UP * 0.5 - client.global_transform.origin).normalized() * damage
+						NetworkBridge.n_rpc_id(client, int(client.name), "_add_velocity", [impulse])
 				raycast.force_raycast_update()
 				if toxic and collider.has_method("set_toxic"):
 					collider.set_toxic()
@@ -31,8 +42,8 @@ func AI_shoot()->void :
 				if is_instance_valid($Attack_Sound) and not $Attack_Sound.playing:
 					$Attack_Sound.play()
 					NetworkBridge.n_rpc(self, "play_sound")
-				if get_parent().get_parent().anim_player.current_animation != "Attack":
+				if get_parent().get_parent().anim_player.has_animation("Attack") and get_parent().get_parent().anim_player.current_animation != "Attack":
 					get_parent().get_parent().anim_player.play("Attack", - 1, 2)
-					NetworkBridge.n_rpc(get_parent().get_parent(), "set_animation", "Attack", 2)
+					NetworkBridge.n_rpc(get_parent().get_parent(), "set_animation", ["Attack", 2])
 				yield (get_tree().create_timer(0.5), "timeout")
 				raycast.enabled = true

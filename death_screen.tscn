@@ -63,6 +63,7 @@ func player_died():
 	
 	Global.player.move_speed = 10
 	
+func apply_team_wipe():
 	if Multiplayer.hostSettings.changeModeOnDeath:
 		var diff = get_diff()
 	
@@ -97,6 +98,8 @@ func get_diff() -> String:
 		return \"fa\"
 
 func _input(event):
+	if not is_visible_in_tree() or Multiplayer.Flow.result_active:
+		return
 	if $RespawnButton.visible and Input.is_action_just_pressed(\"movement_jump\"):
 		respawn()
 
@@ -332,7 +335,7 @@ custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
 custom_fonts/font = SubResource( 1 )
-text = "You died lol"
+text = "You died"
 align = 1
 valign = 1
 __meta__ = {

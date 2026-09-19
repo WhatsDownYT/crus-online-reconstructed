@@ -8,18 +8,27 @@ func is_target_action(method):
 func is_owner_state(method):
 	return method in ["_update_puppet", "respawn_puppet", "set_current_weapon",
 		"set_is_on_floor", "set_kick", "set_sit", "set_crouch", "set_gravity",
-		"shoot_commit", "set_flashlight", "_set_death"]
+		"shoot_commit", "sync_implants", "set_flashlight", "_set_death", "hideHelpLabel"]
 
 func validate_network_action(sender, target, method, args):
 	if not Multiplayer.players.has(sender) or not Multiplayer.players.has(target):
 		return false
 	if str(name) != str(target) or get_parent() != Multiplayer.Players:
 		return false
-	if not ActionPolicy.validate(method, args, canDamage, death):
+	var target_dead = Multiplayer.died_players.has(target)
+	if not ActionPolicy.validate(method, args, canDamage, target_dead):
+		return false
+	if method == "_do_damage":
+		if sender != NetworkBridge.get_host_id() and args[5] != sender:
+			return false
+		if not NetworkBridge.damage_allowed(args[5], target):
+			return false
+	elif method != "_respawn_player" and sender != NetworkBridge.get_host_id() and not NetworkBridge.damage_allowed(sender, target):
 		return false
 	if method == "_respawn_player":
-		var helper = Multiplayer.Players.get_node_or_null(str(sender))
-		if helper == null or helper.death or helper.global_transform.origin.distance_to(global_transform.origin) > 5.0:
+		var helper = NetworkBridge.get_peer_actor(sender)
+		var target_actor = Global.player if target == NetworkBridge.get_id() else self
+		if not is_instance_valid(helper) or not is_instance_valid(target_actor) or helper.global_transform.origin.distance_to(target_actor.global_transform.origin) > 5.0:
 			return false
 	return true
 
@@ -57,6 +66,9 @@ onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 onready var SteamInit = Global.get_node("Multiplayer/NetworkBridge")
 
 var canDamage = false
+var implant_state = {}
+var _implant_names = []
+var _implant_elapsed = 0.0
 
 var grapple_pos = null
 
@@ -67,8 +79,18 @@ onready var grapple_orb = preload("res://Entities/grappleorb.tscn")
 var grapple_orbs = []
 
 func _ready():
+	var proxy = preload("res://MOD_CONTENT/CruS Online/PlayerCollisionProxy.gd").new()
+	proxy.name = "GameplayCollision"
+	$Puppet.add_child(proxy)
+	var pending = [$Puppet/PlayerModel]
+	while not pending.empty():
+		var child = pending.pop_back()
+		pending.append_array(child.get_children())
+		if child is PhysicsBody:
+			child.set_collision_layer_bit(1, false)
 	NetworkBridge.register_rpcs(self, [
 		["_update_puppet", NetworkBridge.PERMISSION.ALL],
+		["sync_implants", NetworkBridge.PERMISSION.ALL],
 		["respawn_puppet", NetworkBridge.PERMISSION.ALL],
 		["set_current_weapon", NetworkBridge.PERMISSION.ALL],
 		["_set_toxic", NetworkBridge.PERMISSION.ALL],
@@ -86,7 +108,8 @@ func _ready():
 		["shoot_commit", NetworkBridge.PERMISSION.ALL],
 		["_respawn_player", NetworkBridge.PERMISSION.ALL],
 		["hideHelpLabel", NetworkBridge.PERMISSION.ALL],
-		["_set_tranquilize", NetworkBridge.PERMISSION.ALL]
+		["_set_tranquilize", NetworkBridge.PERMISSION.ALL],
+		["_add_velocity", NetworkBridge.PERMISSION.SERVER]
 	])
 	
 	weaponsMesh = $Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons.get_children()
@@ -109,6 +132,7 @@ func _ready():
 
 remote func _set_death(id, recived_death):
 	death = recived_death
+	_update_collision_stance()
 	
 	if death:
 		animTree.set("parameters/DEATH1/active", true)
@@ -117,6 +141,14 @@ remote func _set_death(id, recived_death):
 		animTree.active = true
 
 func player_restart():
+	_implant_names.clear()
+	_set_death(null, false)
+	player_sitting = false
+	playerCrouch = false
+	_update_collision_stance()
+	playerMovement = [0.0, 0.0]
+	for sound in ["IED1", "IED2", "IED_alert"]:
+		get_node("Puppet/PlayerModel/SFX/" + sound).stop()
 	$Puppet/PlayerModel/HelpLabel.hide()
 	$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
 	$Puppet/PlayerModel/HelpTimer.stop()
@@ -130,6 +162,7 @@ func play_death_sound():
 	$Puppet/PlayerModel/SFX/IED_alert.play()
 
 func play_explosion_sound():
+	death = true
 	$Puppet/PlayerModel/SFX/IED_explosion.play()
 	$Puppet/PlayerModel/SFX/IED_alert.stop()
 	$Puppet/PlayerModel/SFX/IED1.stop()
@@ -173,7 +206,8 @@ func _process(delta):
 	animTree.set("parameters/LOOK_DIRECTION/blend_amount", playerAim)
 	animTree.set("parameters/ARMS_BLEND/blend_amount", weaponBlend)
 	
-	global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
+	if not global_transform.is_equal_approx(transform_lerp):
+		global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
 	
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
 		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to help"
@@ -209,6 +243,16 @@ func delete_grapple_orbs():
 	grapple_orbs = []
 
 func _physics_process(delta):
+	if int(name) == NetworkBridge.get_id():
+		_implant_elapsed += delta
+		if _implant_elapsed >= 0.5:
+			_implant_elapsed = 0.0
+			var implants = Global.implants
+			var names = [implants.head_implant.i_name, implants.torso_implant.i_name, implants.arm_implant.i_name, implants.leg_implant.i_name]
+			if names != _implant_names:
+				_implant_names = names
+				sync_implants(null, names)
+				NetworkBridge.n_rpc(self, "sync_implants", [names])
 	if int(self.name) != NetworkBridge.get_id():
 		if grapple_pos != null and not death:
 			set_grapple_orbs()
@@ -223,6 +267,8 @@ func _physics_process(delta):
 remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedPlayerAim, recived_grapple_pos = null):
 	if int(self.name) != NetworkBridge.get_id():
 		transform_lerp = recivedTransform
+		if NetworkBridge.is_world_authority():
+			global_transform = recivedTransform
 		playerMovement = recivedPlayerMovement
 		playerAim = recivedPlayerAim
 		
@@ -232,6 +278,7 @@ remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedP
 		NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [recivedTransform, recivedPlayerMovement, recivedPlayerAim, grapple_pos])
 
 remote func respawn_puppet(id):
+	death = false
 	if int(self.name) == NetworkBridge.get_id():
 		NetworkBridge.n_rpc(self, "respawn_puppet")
 	else:
@@ -272,6 +319,7 @@ remote func set_crouch(id, value):
 		NetworkBridge.n_rpc(self, "set_crouch", [value])
 	else:
 		playerCrouch = value
+		_update_collision_stance()
 
 remote func set_gravity(id, value):
 	if int(self.name) == NetworkBridge.get_id():
@@ -284,10 +332,17 @@ remote func set_gravity(id, value):
 
 func do_damage(damage, collision_n, collision_p, shooter_pos, weapon_type = null):
 	if canDamage:
-		NetworkBridge.n_rpc_id(self, int(self.name), "_do_damage", [damage, collision_n, collision_p, shooter_pos, weapon_type])
+		var source_id = NetworkBridge.damage_source_context
+		if NetworkBridge.damage_allowed(source_id, int(name)):
+			NetworkBridge.n_rpc_id(self, int(self.name), "_do_damage", [damage, collision_n, collision_p, shooter_pos, weapon_type, source_id])
 
-remote func _do_damage(id, damage, collision_n, collision_p, shooter_pos, weapon_type):
-	Global.player.set_last_damager_id(id, weapon_type)
+remote func _do_damage(id, damage, collision_n, collision_p, shooter_pos, weapon_type, source_id):
+	var sender = NetworkBridge.request_sender(id)
+	if sender != NetworkBridge.get_host_id() and source_id != sender:
+		return
+	if not NetworkBridge.damage_allowed(source_id, NetworkBridge.get_id()):
+		return
+	Global.player.set_last_damager_id(source_id if source_id > 0 else null, weapon_type)
 	Global.player.damage(damage, collision_n, collision_p, shooter_pos)
 
 func set_tranquilize():
@@ -322,12 +377,12 @@ remote func _set_fire(id, value):
 
 func respawn_player():
 	NetworkBridge.n_rpc_id(self, int(self.name), "_respawn_player")
-	hideHelpLabel()
-	NetworkBridge.n_rpc(self, "hideHelpLabel")
 
 remote func _respawn_player(id):
 	if Global.player.died:
 		Global.get_node('DeathScreen').respawn()
+		hideHelpLabel()
+		NetworkBridge.n_rpc(self, "hideHelpLabel")
 
 remote func hideHelpLabel(id = null):
 	$Puppet/PlayerModel/HelpSound.play()
@@ -349,13 +404,36 @@ remote func set_flashlight(id, state):
 	$Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons/Flashlight_Mesh/SpotLight.visible = state
 
 remote func shoot_commit(id, pitch, soundId):
-	weaponsMesh[currentWeaponId].get_child(0).show()
-	weaponsMesh[currentWeaponId].get_child(1 + soundId).pitch_scale = pitch
-	weaponsMesh[currentWeaponId].get_child(1 + soundId).play()
+	var weapon_mesh = weaponsMesh[currentWeaponId]
+	weapon_mesh.get_child(0).show()
+	var sound_index = 1 + int(soundId)
+	if sound_index < 1 or sound_index >= weapon_mesh.get_child_count():
+		sound_index = 1
+	if sound_index >= 1 and sound_index < weapon_mesh.get_child_count():
+		var sound = weapon_mesh.get_child(sound_index)
+		if sound is AudioStreamPlayer or sound is AudioStreamPlayer3D:
+			sound.pitch_scale = max(0.1, pitch)
+			sound.play()
 	$FlashBuffer.start()
 
 func flash_hide():
-	weaponsMesh[currentWeaponId].get_child(0).hide()
+	for mesh in weaponsMesh:
+		if mesh.get_child_count() > 0:
+			mesh.get_child(0).hide()
 
 func canDamageSet():
 	canDamage = true
+
+remote func sync_implants(id, names):
+	var state = preload("res://MOD_CONTENT/CruS Online/ImplantNetwork.gd").resolve(Global.implants.IMPLANTS, names)
+	if state != null:
+		implant_state = state
+
+func _update_collision_stance():
+	var proxy = get_node_or_null("Puppet/GameplayCollision")
+	if proxy != null:
+		proxy.update_stance()
+
+puppet func _add_velocity(id, velocity):
+	if int(name) == NetworkBridge.get_id() and ActionPolicy.finite_vector(velocity) and velocity.length() <= 2000 and is_instance_valid(Global.player):
+		Global.player.player_velocity += velocity

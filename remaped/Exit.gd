@@ -14,6 +14,7 @@ func _ready():
 	connect("body_entered", self, "_on_Body_entered")
 	connect("body_exited", self, "_on_Body_exited")
 
+	set_collision_mask_bit(1, true)
 	set_collision_mask_bit(2, true)
 	NetworkBridge.register_rpcs(self, [
 		["send_player_count", NetworkBridge.PERMISSION.SERVER],
@@ -43,6 +44,11 @@ func _on_Body_exited(body):
 		NetworkBridge.n_rpc_id(self, NetworkBridge.get_host_id(), "player_exited")
 
 func _on_Body_entered(body):
+	if not NetworkBridge.check_connection():
+		if body == Global.player and Global.objective_complete and not committed:
+			committed = true
+			Global.level_finished()
+		return
 	if NetworkBridge.is_world_authority():
 		call_deferred("_evaluate_exit")
 	elif body == Global.player:
@@ -77,16 +83,24 @@ func _collect_exit_peers():
 	return present
 
 func _evaluate_exit():
-	if committed or not NetworkBridge.is_world_authority():
+	if committed or not NetworkBridge.check_connection() or not NetworkBridge.is_world_authority():
 		return false
 	exitPlayers = _collect_exit_peers()
-	var required = ExitPolicy.required_players(Multiplayer.players, Multiplayer.died_players)
+	var absent = Multiplayer.died_players.duplicate()
+	if is_instance_valid(Multiplayer.Flow):
+		absent.append_array(Multiplayer.Flow.waiting_peers)
+	var required = ExitPolicy.required_players(Multiplayer.players, absent)
 	var can_exit = ExitPolicy.can_exit(Global.objective_complete, required, exitPlayers)
+	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.ending_path() != "":
+		can_exit = false
+		for peer in required:
+			if Global.objective_complete and exitPlayers.has(peer):
+				can_exit = true
 	if can_exit and not exiting:
 		exiting = true
 		send_exit_message(null)
 		NetworkBridge.n_rpc(self, "send_exit_message")
-		exitTimer.start()
+		call_deferred("exit_to_menu")
 	elif not can_exit and exiting:
 		exiting = false
 		exitTimer.stop()
@@ -108,7 +122,8 @@ puppet func send_player_count(id, exitCount, hostCount):
 
 puppet func send_exit_message(id):
 	Global.UI.notify("Exiting...", Color(1, 0, 0))
-	Global.UI.notify("All living players are at the exit", Color(1, 0, 0))
+	if not is_instance_valid(Multiplayer.Flow) or Multiplayer.Flow.ending_path() == "":
+		Global.UI.notify("All living players are at the exit", Color(1, 0, 0))
 
 puppet func send_exit_cancelled(id):
 	Global.UI.notify("Exit cancelled.", Color(1, 0, 0))

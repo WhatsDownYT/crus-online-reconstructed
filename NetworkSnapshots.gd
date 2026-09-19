@@ -14,6 +14,8 @@ func _init(owner):
 
 func queue(peer_id, caller, member, value, is_property):
 	var network = _owner.get_ref()
+	if network._waiting_world_target(peer_id, caller):
+		return
 	if not valid_value(member, value, is_property):
 		network.metrics.warn("invalid_snapshot_value", member)
 		return
@@ -36,27 +38,50 @@ func queue(peer_id, caller, member, value, is_property):
 func flush():
 	var network = _owner.get_ref()
 	var started = OS.get_ticks_usec()
-	var sent = 0
+	var processed = 0
+	var batches = {}
 	for key in network._pending_snapshots.keys():
-		if sent >= network.MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= network.PACKET_BUDGET_USEC:
+		if processed >= network.MAX_PENDING_SNAPSHOTS or OS.get_ticks_usec() - started >= network.SNAPSHOT_SEND_BUDGET_USEC:
 			network.metrics.count("send_budget_hits")
 			break
 		var state = network._pending_snapshots[key]
 		network._pending_snapshots.erase(key)
+		processed += 1
 		if not network._peers.has(state.peer) or not network._peers[state.peer].connected:
 			continue
 		if OS.get_ticks_msec() - state.time > network.SNAPSHOT_MAX_AGE_MSEC:
 			network.metrics.count("snapshots_expired")
 			continue
-		var packet = PoolByteArray([network.SNAPSHOT_PACKET])
-		packet.append_array(var2bytes([network.scene_epoch, state.sequence, state.path,
-			state.member, state.value, state.property]))
-		if packet.size() > network.MAX_UNRELIABLE_BYTES:
+		var value = [network.scene_epoch, state.sequence, state.path, state.member, state.value, state.property]
+		if var2bytes(value).size() + 1 > network.MAX_UNRELIABLE_BYTES:
 			network.metrics.warn("snapshot_oversize", state.member)
 			continue
+		var batch = batches.get(state.peer, [])
+		var candidate = batch.duplicate()
+		candidate.append(value)
+		if candidate.size() > 16 or var2bytes(candidate).size() + 1 > network.MAX_UNRELIABLE_BYTES:
+			_send_batch(state.peer, batch)
+			batch = []
+		batch.append(value)
+		batches[state.peer] = batch
+	for peer in batches:
+		_send_batch(peer, batches[peer])
 
-		network._send_p2p_packet(state.peer, packet, 1, network.SNAPSHOT_CHANNEL)
-		sent += 1
+func _send_batch(peer, batch):
+	if batch.empty():
+		return
+	var network = _owner.get_ref()
+	var packet = PoolByteArray([network.SNAPSHOT_PACKET if batch.size() == 1 else network.SNAPSHOT_BATCH])
+	packet.append_array(var2bytes(batch[0] if batch.size() == 1 else batch))
+	network._send_p2p_packet(peer, packet, 1, network.SNAPSHOT_CHANNEL)
+	network.metrics.count("snapshot_states_sent", batch.size())
+
+func receive_batch(sender_id, data):
+	if typeof(data) != TYPE_ARRAY or data.empty() or data.size() > 16:
+		_owner.get_ref().metrics.warn("invalid_snapshot_batch", "shape")
+		return
+	for state in data:
+		receive(sender_id, state)
 
 func receive(sender_id, data):
 	var network = _owner.get_ref()
@@ -90,6 +115,9 @@ func receive(sender_id, data):
 		network.metrics.warn("snapshot_owner", member)
 		return
 	if member == "set_lerp_transform" and sender_id != network.get_server_steam_id():
+		if "physics_revision" in node and data[4].size() == 2 and data[4][1] != node.physics_revision:
+			network.metrics.count("stale_snapshots")
+			return
 		var owner_id = node.get("drive_id") if "drive_id" in node else node.get("holdId")
 		if owner_id != sender_id:
 			network.metrics.warn("snapshot_owner", member)
@@ -118,7 +146,7 @@ func valid_value(member, value, is_property):
 		"_update_puppet":
 			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and typeof(value[1]) == TYPE_ARRAY and value[1].size() == 2 and number(value[1][0]) and number(value[1][1]) and number(value[2]) and (value[3] == null or typeof(value[3]) == TYPE_VECTOR3 and finite_value(value[3]))
 		"_set_transform":
-			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and (value.size() == 1 or typeof(value[1]) == TYPE_VECTOR3 and finite_value(value[1]))
+			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and (value.size() == 1 or typeof(value[1]) == TYPE_VECTOR3 and finite_value(value[1]) or typeof(value[1]) == TYPE_INT and value[1] >= 0)
 		"client_set_lerp_transform", "set_lerp_transform":
 			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and (value.size() == 1 or typeof(value[1]) == TYPE_INT and value[1] >= 0)
 		"set_puppet_transform":

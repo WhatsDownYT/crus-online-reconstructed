@@ -168,7 +168,7 @@ func lobby_join_requested(id):
 	
 	var password_require = SteamInit.Steam.getLobbyData(join_request_id, \"password\")
 	print(\"[CRUS ONLINE / LOBBY]: Password require: \", password_require)
-	if password_require == \"true\":
+	if password_require == \"True\":
 		join_request_id = id
 		$\"%PasswordInput\".steam_check_password()
 	else:
@@ -204,7 +204,7 @@ func connect_lobby():
 	LobbyInfo.hide()
 
 func leave_lobby():
-	SteamLobby.leave_lobby()
+	Multiplayer.leave_server()
 	Multiplayer.emit_signal(\"status_update\", \"Offline\")
 	$VBoxContainer/Buttons/Create.show()
 	$VBoxContainer/Buttons/Join.show()
@@ -715,8 +715,7 @@ custom_constants/separation = 50
 [node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer"]
 margin_right = 300.0
 margin_bottom = 55.0
-text = "Cruelty Squad Online
-Select mode"
+text = "Select Online Mode"
 align = 1
 
 [node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer"]
@@ -753,17 +752,12 @@ margin_bottom = 497.0
 mouse_filter = 2
 alignment = 2
 
-[node name="CruSOnline" type="Label" parent="CenterContainer/TabContainer/Main/Select/VBoxContainer/HBoxContainer"]
-margin_right = 299.0
-margin_bottom = 26.0
-text = "Cruelty Squad Online"
-
 [node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/Select/VBoxContainer/HBoxContainer"]
 margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Alpha 000000/0000"
+text = "Beta v0.3"
 script = SubResource( 18 )
 
 [node name="LAN" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -891,17 +885,12 @@ margin_top = 471.0
 margin_right = 641.0
 margin_bottom = 497.0
 
-[node name="CruSOnline" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/HBoxContainer"]
-margin_right = 299.0
-margin_bottom = 26.0
-text = "Cruelty Squad Online"
-
 [node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/HBoxContainer"]
 margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Alpha 000000/0000"
+text = "Beta v0.3"
 script = SubResource( 18 )
 
 [node name="Steam" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -1036,17 +1025,12 @@ margin_top = 471.0
 margin_right = 641.0
 margin_bottom = 497.0
 
-[node name="CruSOnline" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/HBoxContainer"]
-margin_right = 299.0
-margin_bottom = 26.0
-text = "Cruelty Squad Online"
-
 [node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/HBoxContainer"]
 margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Alpha 000000/0000"
+text = "Beta v0.3"
 script = SubResource( 18 )
 
 [node name="Host" type="PanelContainer" parent="CenterContainer/TabContainer"]
@@ -1160,6 +1144,32 @@ margin_bottom = 26.0
 rect_min_size = Vector2( 50, 0 )
 theme = ExtResource( 24 )
 text = "<<"
+
+[node name="ShareDifficulty" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty"]
+size_flags_horizontal = 3
+text = "Share difficulty:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = false
+text = "<<"
+hint_tooltip = "Allow players to hurt each other. Self-damage still applies when disabled."
+
+[node name="FriendlyFire" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire"]
+size_flags_horizontal = 3
+text = "Friendly Fire:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+hint_tooltip = "Allow players to hurt each other. Self-damage still applies when disabled."
 
 [node name="ChangeModeOnDeath" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
 margin_top = 144.0

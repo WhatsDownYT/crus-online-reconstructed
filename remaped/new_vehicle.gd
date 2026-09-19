@@ -179,7 +179,8 @@ func eject():
 		$CollisionShape.disabled = true
 		Global.player.global_transform.origin = $ExitPos.global_transform.origin
 		
-		Global.player.playerPuppet.set_sit(null, false)
+		if is_instance_valid(Global.player.playerPuppet):
+			Global.player.playerPuppet.set_sit(null, false)
 		Global.player.car = null
 		
 		set_in_use(null, false)
@@ -214,7 +215,8 @@ func player_use():
 		car_camera.current = true
 		init_player_basis = Global.player.transform.basis
 		
-		Global.player.playerPuppet.set_sit(null, true)
+		if is_instance_valid(Global.player.playerPuppet):
+			Global.player.playerPuppet.set_sit(null, true)
 		Global.player.car = self
 
 		Global.player.get_parent().hide()
@@ -240,7 +242,7 @@ func _on_Area_body_entered(body):
 	if velocity.length() < 15:
 		return 
 	if body.has_method("damage") and body != Global.player:
-		body.damage(200, (global_transform.origin - body.global_transform.origin).normalized(), body.global_transform.origin, global_transform.origin)
+		NetworkBridge.apply_damage(self, body, "damage", [200, (global_transform.origin - body.global_transform.origin).normalized(), body.global_transform.origin, global_transform.origin])
 
 remote func _set_master(id):
 

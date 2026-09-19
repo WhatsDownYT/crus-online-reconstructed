@@ -31,6 +31,7 @@ puppet func _delete(id):
 
 puppet func _create_object(id, recivedPath, recivedObject, recivedName, recivedTransform):
 	var newObject = load(recivedObject).instance()
+	NetworkBridge.inherit_damage_source(newObject, self)
 	newObject.set_name(recivedName)
 	get_node(recivedPath).add_child(newObject)
 	newObject.global_transform = recivedTransform
@@ -53,12 +54,15 @@ func _physics_process(delta):
 		var col = move_and_collide(velocity * delta)
 		if col:
 			var body = col.collider
+			if not NetworkBridge.damage_allowed(NetworkBridge.damage_source_id(self), NetworkBridge.damage_target_id(body)):
+				return
 			var new_fire_child = f.instance()
+			NetworkBridge.inherit_damage_source(new_fire_child, self)
 			new_fire_child.set_name("FireChild#" + str(new_fire_child.get_instance_id()))
 			
 			if body.has_meta("puppet_body"):
 				if not body.onFire:
-					body.set_fire(true)
+					NetworkBridge.apply_damage(self, body, "set_fire", [true])
 					body.add_child(new_fire_child)
 					new_fire_child.global_transform.origin = global_transform.origin
 					NetworkBridge.n_rpc(self, "_create_object", [body.get_path(), "res://Entities/Bullets/Fire_Child.tscn", new_fire_child.name, new_fire_child.global_transform])

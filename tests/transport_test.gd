@@ -7,6 +7,8 @@ var failures = 0
 
 class MultiplayerFixture:
 	extends Node
+	var Flow
+	var hostSettings = {"friendlyFire": true}
 	var players = {1: {}, 2: {}, 3: {}}
 	var died_players = []
 	var Players
@@ -14,17 +16,71 @@ class MultiplayerFixture:
 	func goto_menu_host(_complete = false):
 		completions += 1
 
+class FlashSoulFixture:
+	extends Spatial
+	var enabled = true
+
+class FlashBodyFixture:
+	extends Spatial
+	var dead = false
+	var muzzleflash
+
+class CollisionOwnerFixture:
+	extends Spatial
+	var playerCrouch = false
+	var death = false
+	var NetworkBridge
+
 class NotifyFixture:
 	extends Control
+	var wipes = 0
+	func apply_team_wipe():
+		wipes += 1
+	var messages = []
 	func set_health(_value):
 		pass
 	func notify(_text, _color):
-		pass
+		messages.append(_text)
 	func set_death_label():
 		pass
 
+class MenuExitFixture:
+	extends "res://MOD_CONTENT/CruS Online/multiplayer.gd"
+	var destinations = []
+	func goto_menu_host(completed = false, level_select = false):
+		destinations.append([completed, level_select])
+
+class WaitingFlowFixture:
+	extends Node
+	var requests = []
+	var waiting_peers = []
+	var ending = ""
+	func ending_path():
+		return ending
+	func request_wait(peer, level_select):
+		requests.append([peer, level_select])
+
+class MenuStateFixture:
+	extends Control
+	var in_game = true
+
+class DamageReceiver:
+	extends Spatial
+	var client = null
+	var health = 100
+	var bridge
+	var source_seen = -1
+	func damage(amount):
+		health -= amount
+		source_seen = bridge.damage_source_context
+
+class WeaponSource:
+	extends Node
+	var player = true
+
 class ObjectiveCounter:
 	extends Reference
+	var CURRENT_LEVEL = 0
 	var objectives = 0
 	var removals = 0
 	func add_objective():
@@ -41,9 +97,20 @@ class ExitFixture:
 
 class FakeSteam:
 	extends Reference
-	const P2P_SEND_RELIABLE = 2
+	var P2P_SEND_RELIABLE = null
 	var incoming = {0: [], 1: []}
 	var sent = []
+	var closed = []
+	var accepted = []
+	var joins = []
+	func closeP2PSessionWithUser(peer):
+		closed.append(peer)
+	func acceptP2PSessionWithUser(peer):
+		accepted.append(peer)
+	func joinLobby(lobby):
+		joins.append(lobby)
+	func leaveLobby(_lobby):
+		pass
 	func getAvailableP2PPacketSize(channel):
 		return 0 if incoming[channel].empty() else incoming[channel][0].data.size()
 	func readP2PPacket(_size, channel):
@@ -55,6 +122,18 @@ class FakeSteam:
 class SteamParent:
 	extends Node
 	var Steam = FakeSteam.new()
+	var steam_id = 1
+
+class LobbyFixture:
+	extends Node
+	var active = true
+	var lobby_owner = 1
+	func get_lobby_members():
+		return {1: "one", 2: "two", 3: "three"}
+	func in_lobby():
+		return active
+	func get_lobby_owner():
+		return lobby_owner
 
 class Entity:
 	extends Node
@@ -81,19 +160,25 @@ class OwnerState:
 
 class ElevatorBridge:
 	extends Node
+	var damage_source_context = 0
+	func inherit_damage_source(child, _source):
+		child.set_meta("crus_damage_source", 0)
 	enum PERMISSION {SERVER, ALL}
 	var authority = true
+	var online = true
 	var net
 	var events = []
 	var actor
 	func get_id():
+		return 1
+	func get_host_id():
 		return 1
 	func request_sender(id):
 		return 1 if id == null else id
 	func get_peer_actor(id):
 		return actor if id in [1, 2, 3] else null
 	func check_connection():
-		return true
+		return online
 	func is_world_authority():
 		return authority
 	func n_is_network_master(_node = null):
@@ -140,12 +225,51 @@ class CancerNpcFixture:
 	func remove_objective():
 		objective_removals += 1
 
+class LifePuppet:
+	extends Spatial
+	var death = false
+	var resets = 0
+	func is_owner_state(_method):
+		return true
+	func play_explosion_sound():
+		death = true
+	func _set_death(_id, value):
+		death = value
+	func player_restart():
+		death = false
+		resets += 1
+
+class SightActor:
+	extends Spatial
+	var aim_point
+
+class SightRay:
+	extends RayCast
+	var refreshed = 0
+	var collider = null
+	func force_raycast_update():
+		refreshed += 1
+	func is_colliding():
+		return collider != null
+	func get_collider():
+		return collider
+
 class PropFixture:
 	extends "res://MOD_CONTENT/CruS Online/remaped/Kinematic_Physics_Object.gd"
+	func step(delta):
+		._physics_process(delta)
+	var transform_changes = 0
+	func _notification(what):
+		if what == 44:
+			transform_changes += 1
 	func _ready():
 		glob = Global
 		register_all_rpcs()
 		set_physics_process(false)
+
+var host_departures = 0
+func record_host_departure():
+	host_departures += 1
 
 func _ready():
 	call_deferred("run")
@@ -166,7 +290,7 @@ func run():
 	var parent = SteamParent.new()
 	parent.name = "SteamInit"
 	multiplayer.add_child(parent)
-	var lobby = Node.new()
+	var lobby = LobbyFixture.new()
 	lobby.name = "SteamLobby"
 	parent.add_child(lobby)
 	var net = Network.new()
@@ -192,6 +316,20 @@ func run():
 	check(early_bridge._pending_registrations.empty(), "startup registrations flushed after bridge initializes")
 	check(net._registered_nodes.has(early_entity.get_instance_id()) and net._registered_nodes[early_entity.get_instance_id()].permissions.size() == 2, "early RPC and property permissions survive offline startup")
 	early_bridge._flush_registrations()
+	lobby.active = false
+	for offline_mode in [0, 1]:
+		early_bridge.set_mode(offline_mode)
+		check(not early_bridge.check_connection(), "no lobby or ENet peer means offline")
+		check(early_bridge.n_is_network_master() and early_bridge.is_world_authority(), "offline world simulates locally in either transport mode")
+		check(early_bridge.get_id() == 1, "offline actor ID is available without a network peer")
+		early_bridge.n_rpc(early_entity, "network_set_rotation", [12])
+		early_bridge.n_rpc_id(early_entity, 1, "network_set_rotation", [12])
+		early_bridge.n_rpc_unreliable(early_entity, "network_set_rotation", [12])
+		early_bridge.n_rpc_unreliable_id(early_entity, 1, "network_set_rotation", [12])
+		early_bridge.n_rset(early_entity, "state", 12)
+		early_bridge.n_rset_unreliable(early_entity, "state", 12)
+	check(parent.Steam.sent.empty() and early_entity.received.empty(), "offline replication sends nothing")
+	lobby.active = true
 	early_entity.free()
 	early_bridge.free()
 	for peer_id in [1, 2, 3]:
@@ -204,6 +342,28 @@ func run():
 	root.add_child(entity)
 	net.register_rpc(entity, "network_set_rotation", net.PERMISSION.ALL)
 	net.register_rset(entity, "state", net.PERMISSION.SERVER)
+	var waiting_level = Node.new()
+	waiting_level.name = "Level"
+	root.add_child(waiting_level)
+	var waiting_entity = Entity.new()
+	waiting_level.add_child(waiting_entity)
+	multiplayer.Flow = load("res://MOD_CONTENT/CruS Online/SessionFlow.gd").new()
+	multiplayer.Flow.Multiplayer = multiplayer
+	multiplayer.Flow.waiting_peers = [2]
+	multiplayer.Players = Node.new()
+	multiplayer.add_child(multiplayer.Players)
+	net.register_rpc(waiting_entity, "network_set_rotation", net.PERMISSION.ALL)
+	parent.Steam.sent.clear()
+	net._rpc(2, waiting_entity, "network_set_rotation", [1])
+	net.snapshot_rpc(waiting_entity, "network_set_rotation", [1])
+	check(parent.Steam.sent.empty() and net._pending_snapshots.size() == 1, "waiting Steam peer receives no world RPC or snapshot while active peer still does")
+	check(not multiplayer.Flow.waiting_world_target(2, multiplayer), "lobby control messages still reach waiting peers")
+	net._pending_snapshots.clear()
+	waiting_level.free()
+	multiplayer.Flow.free()
+	multiplayer.Flow = null
+	multiplayer.Players.free()
+	multiplayer.Players = null
 	var definitions = [["network_set_rotation", net.PERMISSION.ALL]]
 	net.register_rpcs(entity, definitions)
 	net.register_rpcs(entity, definitions)
@@ -226,6 +386,29 @@ func run():
 		check(packet[2] == 1 and packet[3] == 1, "disposable Steam channel")
 		var state = bytes2var(packet[1].subarray(1, packet[1].size() - 1))
 		check(state[4] == [99], "latest state retained")
+	parent.Steam.sent.clear()
+	var batch_entities = []
+	for number in range(20):
+		var batch_entity = Entity.new()
+		root.add_child(batch_entity)
+		net.register_rpc(batch_entity, "network_set_rotation", net.PERMISSION.ALL)
+		net.snapshot_rpc(batch_entity, "network_set_rotation", [number])
+		batch_entities.append(batch_entity)
+	for _flush in range(4):
+		net._flush_snapshots()
+	check(net._pending_snapshots.empty() and parent.Steam.sent.size() < 40, "multiple entity updates share packets instead of one packet per entity")
+	var sent_states = 0
+	for packed in parent.Steam.sent:
+		check(packed[1].size() <= net.MAX_UNRELIABLE_BYTES, "batched snapshots stay within packet limit")
+		var payload = bytes2var(packed[1].subarray(1, packed[1].size() - 1))
+		var states = payload if packed[1][0] == net.SNAPSHOT_BATCH else [payload]
+		sent_states += states.size()
+		if packed[0] == 2:
+			net._snapshots.receive_batch(2, states)
+	check(sent_states == 40, "snapshot batching preserves every entity and recipient")
+	for batch_entity in batch_entities:
+		check(batch_entity.received.size() == 1, "batched entity state applies once")
+		batch_entity.free()
 	var snapshot = [0, 5, entity.get_path(), "network_set_rotation", [42], false]
 	net._handle_snapshot(2, snapshot)
 	snapshot[1] = 4
@@ -243,8 +426,27 @@ func run():
 	parent.Steam.incoming[0].clear()
 	check(not net._valid_packet(net.PACKET_TYPE.RPC, var2bytes([1])), "truncated RPC rejected")
 	check(not net._valid_packet(255, var2bytes([])), "unknown packet rejected")
-	check(net._valid_packet(net.PACKET_TYPE.HANDSHAKE, var2bytes(2)), "versioned handshake")
+	check(net._valid_packet(net.PACKET_TYPE.HANDSHAKE, var2bytes(net.PROTOCOL_VERSION)), "versioned handshake")
 	check(not net._valid_packet(net.PACKET_TYPE.HANDSHAKE, null), "legacy handshake rejected")
+	var joining_client = Network.new()
+	parent.add_child(joining_client)
+	joining_client.set_process(false)
+	joining_client._my_steam_id = 2
+	joining_client.begin_scene(1)
+	for peer_id in [1, 2]:
+		var joining_peer = joining_client._create_peer(peer_id)
+		joining_peer.connected = true
+		joining_peer.host = peer_id == 1
+		joining_client._peers[peer_id] = joining_peer
+	parent.Steam.sent.clear()
+	net._server_send_peer_state()
+	check(parent.Steam.sent.size() == 2, "peer-state broadcast reaches every remote peer without native constants")
+	check(parent.Steam.sent[0][2] == 2 and parent.Steam.sent[0][3] == 0, "peer-state broadcast uses reliable channel zero")
+	var state_packet = parent.Steam.sent[0][1]
+	check(joining_client._valid_packet(net.PACKET_TYPE.PEER_STATE, state_packet.subarray(1, state_packet.size() - 1)), "host peer-state packet passes client validation")
+	joining_client._handle_packet(1, state_packet)
+	check(joining_client.scene_epoch == net.scene_epoch, "joining client adopts host epoch before gameplay RPCs")
+	joining_client.free()
 
 	net.register_rpc(entity, "test_rpc", net.PERMISSION.SERVER)
 	parent.Steam.sent.clear()
@@ -313,10 +515,19 @@ func run():
 	net._execute_rpc(net._peers[3], owner_path, "set_flashlight", [false])
 	check(owner.received.size() == 1, "other player cannot publish owner state")
 	owner.free()
-	check(Policy.validate("_do_damage", [25, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, 0], true, false), "valid player damage")
-	check(not Policy.validate("_do_damage", [-1, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, 0], true, false), "negative damage rejected")
+	check(Policy.validate("_do_damage", [25, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, 0, 2], true, false), "valid player damage")
+	check(not Policy.validate("_do_damage", [-1, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, 0, 2], true, false), "negative damage rejected")
 	check(not Policy.validate("_set_cancer", [], false, false), "invulnerable target protected")
 	check(not Policy.validate("give_money", [], true, false), "arbitrary gameplay method rejected")
+	check(net._snapshots.valid_value("_set_transform", [Transform.IDENTITY, 3], false), "door revision is accepted in movement snapshots")
+	check(not net._snapshots.valid_value("_set_transform", [Transform.IDENTITY, -1], false), "negative door revision rejected")
+	var command = load("res://MOD_CONTENT/CruS Online/remaped/Player.gd").Cmd.new()
+	check(net._snapshots.valid_value("_update_puppet", [Transform.IDENTITY, [command.forward_move, command.right_move], 0.0, null], false), "new player input is valid before first movement tick")
+	var old_entity_path = entity.get_path()
+	entity.name = "RenamedProjectile"
+	check(net.check_permission_hash(entity, "network_set_rotation"), "renamed projectile keeps RPC registration")
+	check(not net._permissions.has(net._get_permission_hash(old_entity_path, "network_set_rotation")), "renamed projectile discards old permission path")
+	check(net._get_path_cache(old_entity_path) == -1, "renamed projectile discards old path cache")
 
 	root.remove_child(entity)
 	check(net._permissions.empty(), "permissions removed on tree exit")
@@ -396,8 +607,195 @@ func run():
 	prop.request_hold(2, 0)
 	prop.request_release(2, Vector3.ZERO, Vector3.ZERO, Vector3(50, 0, 0), false)
 	check(prop.velocity == Vector3.ZERO, "ordinary drop has vanilla zero carried velocity")
+	for repeat in range(3):
+		prop.sync_hold_state(1, 0, Transform.IDENTITY, Vector3.ZERO, false, false, prop.physics_revision)
+	check(not prop.is_in_group("network_held_props"), "repeated release and settle updates safely leave held group")
+	elevator_bridge.authority = false
+	prop.set_notify_local_transform(true)
+	prop.sync_settled_pose(1, Transform.IDENTITY, Vector3.ZERO, prop.physics_revision + 1)
+	check(not prop.is_physics_processing(), "settled client prop suspends its physics callback")
+	prop.transform_changes = 0
+	for _frame in range(120):
+		prop.step(1.0 / 60.0)
+	check(prop.transform_changes == 0, "settled client prop does not rewrite its physics transform every frame")
+	prop.set_notify_local_transform(false)
+	prop.client_set_lerp_transform(1, Transform(Basis(), Vector3(1, 0, 0)), prop.physics_revision)
+	check(prop.is_physics_processing(), "fresh movement wakes a settled client prop")
+	prop.step(1.0)
+	check(is_equal_approx(prop.translation.x, 1.0), "new client pose moves a settled prop without overshooting on slow frames")
+	elevator_bridge.authority = true
 	prop.free()
 	elevator_bridge.actor.free()
+	var revive_bridge = Bridge.new()
+	revive_bridge.Multiplayer = multiplayer
+	revive_bridge.SteamInit = parent
+	revive_bridge.SteamLobby = lobby
+	revive_bridge.multiplayer_mode = revive_bridge.MULTIPLAYER_TYPE.STEAM
+	multiplayer.Players = Spatial.new()
+	root.add_child(multiplayer.Players)
+	var revive_targets = []
+	for peer_id in [1, 2, 3]:
+		var avatar = Spatial.new()
+		avatar.name = str(peer_id)
+		multiplayer.Players.add_child(avatar)
+		avatar.set_script(load("res://MOD_CONTENT/CruS Online/multiplayer_player.gd"))
+		avatar.Multiplayer = multiplayer
+		avatar.NetworkBridge = revive_bridge
+		avatar.set_process(false)
+		avatar.set_physics_process(false)
+		revive_targets.append(avatar)
+	var latest_pose = Transform(Basis(), Vector3(8, 0, 0))
+	revive_targets[1].NetworkBridge = elevator_bridge
+	revive_targets[1]._update_puppet(2, latest_pose, [0.0, 0.0], 0.0)
+	revive_targets[1].NetworkBridge = revive_bridge
+	check(revive_targets[1].global_transform == latest_pose, "host collision pose uses newest client update without visual smoothing delay")
+	Global.player = DamageReceiver.new()
+	Global.player.bridge = revive_bridge
+	root.add_child(Global.player)
+	Global.player.translation = Vector3(20, 0, 0)
+	revive_targets[0].translation = Vector3(200, 0, 0)
+	revive_targets[1].translation = Vector3(21, 0, 0)
+	multiplayer.died_players = [1]
+	check(revive_targets[0].validate_network_action(2, 1, "_respawn_player", []), "client can revive dead host despite stale local puppet pose and death flag")
+	multiplayer.died_players = [2]
+	check(revive_targets[1].validate_network_action(1, 2, "_respawn_player", []), "host can revive client using actual local player position")
+	revive_targets[2].translation = Vector3(22, 0, 0)
+	check(revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "client can revive another client")
+	multiplayer.died_players = [2, 3]
+	check(not revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "dead helper cannot revive")
+	multiplayer.died_players = [2]
+	revive_targets[2].translation = Vector3(100, 0, 0)
+	check(not revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "distant helper cannot revive")
+	multiplayer.died_players = []
+	check(not revive_targets[1].validate_network_action(1, 2, "_respawn_player", []), "living target cannot be revived")
+	multiplayer.hostSettings.friendlyFire = false
+	for avatar in revive_targets:
+		avatar.canDamage = true
+	var hit_args = [25, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, 0, 2]
+	check(not revive_targets[0].validate_network_action(2, 1, "_do_damage", hit_args), "friendly fire off rejects client shooting host")
+	check(not revive_targets[2].validate_network_action(2, 3, "_do_damage", hit_args), "friendly fire off rejects client shooting client")
+	hit_args[5] = 0
+	check(revive_targets[1].validate_network_action(1, 2, "_do_damage", hit_args), "host simulated enemy damage still reaches clients")
+	check(not revive_targets[0].validate_network_action(2, 1, "_do_damage", hit_args), "client cannot claim environmental damage to bypass friendly fire")
+	var weapon_source = WeaponSource.new()
+	var other_player_body = DamageReceiver.new()
+	other_player_body.client = revive_targets[1]
+	other_player_body.bridge = revive_bridge
+	var npc_body = DamageReceiver.new()
+	npc_body.bridge = revive_bridge
+	revive_bridge.apply_damage(weapon_source, other_player_body, "damage", [10])
+	check(other_player_body.health == 100, "friendly fire off prevents local weapon damaging another player")
+	var grenade_source = Node.new()
+	revive_bridge.inherit_damage_source(grenade_source, weapon_source)
+	var explosion_source = Node.new()
+	revive_bridge.inherit_damage_source(explosion_source, grenade_source)
+	revive_bridge.apply_damage(explosion_source, other_player_body, "damage", [10])
+	check(other_player_body.health == 100, "projectile explosion inherits shooter and cannot bypass friendly fire")
+	revive_bridge.apply_damage(explosion_source, Global.player, "damage", [10])
+	check(Global.player.health == 90 and Global.player.source_seen == 1, "own explosion still causes self damage")
+	revive_bridge.apply_damage(explosion_source, npc_body, "damage", [10])
+	check(npc_body.health == 90, "player can damage NPC with friendly fire disabled")
+	weapon_source.player = false
+	revive_bridge.apply_damage(weapon_source, other_player_body, "damage", [10])
+	check(other_player_body.health == 90 and other_player_body.source_seen == 0, "NPC weapon damage remains environmental rather than host friendly fire")
+	multiplayer.hostSettings.friendlyFire = true
+	revive_bridge.apply_damage(explosion_source, other_player_body, "damage", [10])
+	check(other_player_body.health == 80 and other_player_body.source_seen == 1, "friendly fire on restores player damage")
+	check(revive_bridge.damage_source_context == 0, "damage attribution does not leak into later environmental damage")
+	weapon_source.free()
+	grenade_source.free()
+	explosion_source.free()
+	other_player_body.free()
+	npc_body.free()
+	var test_weapon_mesh = Spatial.new()
+	revive_targets[1].add_child(test_weapon_mesh)
+	test_weapon_mesh.add_child(Spatial.new())
+	var shot_audio = AudioStreamPlayer3D.new()
+	test_weapon_mesh.add_child(shot_audio)
+	var flash_timer = Timer.new()
+	flash_timer.name = "FlashBuffer"
+	revive_targets[1].add_child(flash_timer)
+	revive_targets[1].weaponsMesh = [test_weapon_mesh]
+	revive_targets[1].shoot_commit(1, 1.5, 3)
+	check(shot_audio.pitch_scale == 1.5 and not flash_timer.is_stopped(), "missing alternate shot sound falls back without out-of-bounds access")
+	multiplayer.Players.free()
+	Global.player.free()
+	revive_bridge.free()
+	var anim_enemy = load("res://MOD_CONTENT/CruS Online/entities/E_Grunt_Movement_New.gd").new()
+	anim_enemy.anim_player = AnimationPlayer.new()
+	anim_enemy.anim_player.add_animation("Idle", Animation.new())
+	anim_enemy._configure_animations()
+	anim_enemy.set_animation(1, "Attack", 1.0)
+	check(not anim_enemy.has_anim_attack and anim_enemy.anim_player.get_animation("Idle").loop, "NPC without attack animation initializes and ignores missing animation")
+	anim_enemy.anim_player.add_animation("Attack", Animation.new())
+	anim_enemy._configure_animations()
+	check(anim_enemy.has_anim_attack and anim_enemy.anim_player.get_animation("Attack").loop, "NPC attack animation remains enabled when present")
+	anim_enemy.NetworkBridge = elevator_bridge
+	anim_enemy.player = null
+	anim_enemy.in_sight = true
+	anim_enemy.track_player(0.016)
+	check(not anim_enemy.in_sight, "missing enemy target clears previous visibility")
+	var sight_actor = SightActor.new()
+	root.add_child(sight_actor)
+	sight_actor.aim_point = Spatial.new()
+	sight_actor.add_child(sight_actor.aim_point)
+	sight_actor.aim_point.translation.z = -5
+	var sight_ray = SightRay.new()
+	root.add_child(sight_ray)
+	anim_enemy.player = sight_actor
+	anim_enemy.player_ray = sight_ray
+	anim_enemy.in_sight = true
+	anim_enemy.track_player(0.016)
+	check(sight_ray.refreshed == 1 and not anim_enemy.in_sight, "fresh empty ray clears stale enemy line of sight")
+	var sight_wall = StaticBody.new()
+	root.add_child(sight_wall)
+	sight_ray.collider = sight_wall
+	anim_enemy.in_sight = true
+	anim_enemy.track_player(0.016)
+	check(sight_ray.refreshed == 2 and not anim_enemy.in_sight, "sight_wall blocks selected target even after earlier visibility")
+	anim_enemy.dead = true
+	anim_enemy.track_player(0.016)
+	check(sight_ray.refreshed == 2 and not anim_enemy.in_sight, "dead enemy cannot acquire a firing target")
+	sight_wall.free()
+	sight_ray.free()
+	sight_actor.free()
+	anim_enemy.anim_player.free()
+	anim_enemy.free()
+	var flash_soul = FlashSoulFixture.new()
+	root.add_child(flash_soul)
+	var flash_body = FlashBodyFixture.new()
+	flash_soul.add_child(flash_body)
+	flash_body.muzzleflash = Spatial.new()
+	flash_body.add_child(flash_body.muzzleflash)
+	var flash_rotation = Spatial.new()
+	flash_body.add_child(flash_rotation)
+	var flash_weapon = Spatial.new()
+	flash_rotation.add_child(flash_weapon)
+	flash_weapon.set_script(load("res://MOD_CONTENT/CruS Online/remaped/weapon.gd"))
+	flash_weapon.set_process(false)
+	flash_weapon.set_physics_process(false)
+	var flash_sound = AudioStreamPlayer.new()
+	flash_weapon.add_child(flash_sound)
+	flash_weapon.audio = [[flash_sound], null]
+	flash_weapon.npc_muzzleflash(1, 0)
+	check(flash_body.muzzleflash.visible and not flash_weapon._npc_flash_timer.is_stopped(), "NPC flash schedules its own expiry with physics processing disabled and array audio")
+	flash_body.dead = true
+	flash_weapon.npc_muzzleflash(1, 0)
+	check(not flash_body.muzzleflash.visible and flash_weapon._npc_flash_timer.is_stopped(), "late shot cannot leave a muzzle flash on a corpse")
+	flash_soul.free()
+	var collision_owner = CollisionOwnerFixture.new()
+	collision_owner.name = "2"
+	collision_owner.NetworkBridge = elevator_bridge
+	root.add_child(collision_owner)
+	var collision_puppet = Spatial.new()
+	collision_owner.add_child(collision_puppet)
+	var collision_proxy = load("res://MOD_CONTENT/CruS Online/PlayerCollisionProxy.gd").new()
+	collision_puppet.add_child(collision_proxy)
+	check(is_equal_approx(collision_proxy.collision_shape.shape.extents.y, 0.903937), "remote standing gameplay collider matches the original player")
+	collision_owner.playerCrouch = true
+	collision_proxy.update_stance()
+	check(is_equal_approx(collision_proxy.collision_shape.shape.extents.y, 0.414648), "remote crouch updates gameplay collision without waiting for visual animation")
+	collision_owner.free()
 	var counter = ObjectiveCounter.new()
 	var enemy = load("res://MOD_CONTENT/CruS Online/entities/EnemyHandler.gd").new()
 	enemy.glob = counter
@@ -411,6 +809,9 @@ func run():
 	enemy._complete_objective()
 	enemy._complete_objective()
 	check(counter.objectives == 0 and counter.removals == 1, "DNA/death cannot remove same objective twice")
+	enemy.objective_registered = false
+	counter.CURRENT_LEVEL = 18
+	check(not enemy._register_objective() and counter.objectives == 0, "Trauma Loop completion is not blocked by NPC targets")
 	enemy.free()
 	Global.UI = NotifyFixture.new()
 	root.add_child(Global.UI)
@@ -422,6 +823,7 @@ func run():
 	check(not mission_exit._evaluate_exit(), "unfinished objectives block exit")
 	Global.objective_complete = true
 	check(mission_exit._evaluate_exit() and mission_exit.exiting, "final objective while already inside starts exit")
+	check(mission_exit.exitTimer.is_stopped(), "extraction is queued immediately without a countdown")
 	mission_exit.presence = [1]
 	check(not mission_exit._evaluate_exit() and mission_exit.exitTimer.is_stopped(), "leaving cancels countdown")
 	multiplayer.died_players = [2]
@@ -429,6 +831,14 @@ func run():
 	multiplayer.died_players = [1, 2]
 	check(not mission_exit._evaluate_exit(), "all dead cannot complete mission")
 	multiplayer.died_players = []
+	multiplayer.Flow = WaitingFlowFixture.new()
+	multiplayer.Flow.ending = "res://Cutscenes/CutsceneEnd3.tscn"
+	check(mission_exit._evaluate_exit(), "one living player can trigger an ending while another stays outside")
+	multiplayer.Flow.ending = ""
+	multiplayer.Flow.waiting_peers = [2]
+	check(mission_exit._evaluate_exit(), "players waiting in menus do not block mission extraction")
+	multiplayer.Flow.free()
+	multiplayer.Flow = null
 	multiplayer.players.erase(2)
 	check(mission_exit._evaluate_exit(), "disconnected player no longer blocks exit")
 	mission_exit.presence = []
@@ -441,6 +851,28 @@ func run():
 	mission_exit.free()
 	Global.UI.free()
 
+	Global.menu = MenuStateFixture.new()
+	var menu_exit = Node.new()
+	root.add_child(menu_exit)
+	menu_exit.set_script(MenuExitFixture)
+	menu_exit.NetworkBridge = elevator_bridge
+	menu_exit.players = {1: {}, 2: {}}
+	menu_exit.Flow = WaitingFlowFixture.new()
+	menu_exit.request_menu_exit(2, true)
+	menu_exit.request_menu_exit(1, false)
+	check(menu_exit.destinations == [[false, false]] and menu_exit.Flow.requests == [[2, true]], "client exits wait locally while host exits move the lobby")
+	menu_exit.request_menu_exit(99, true)
+	menu_exit.request_menu_exit(2, "invalid")
+	elevator_bridge.authority = false
+	menu_exit.request_menu_exit(2, true)
+	elevator_bridge.authority = true
+	Global.menu.in_game = false
+	menu_exit.request_menu_exit(2, true)
+	check(menu_exit.destinations.size() == 1 and menu_exit.Flow.requests.size() == 1, "group exits reject outsiders, malformed requests, non-host execution and duplicate menu transitions")
+	Global.menu.free()
+	menu_exit.Flow.free()
+	menu_exit.free()
+
 	var coordinator = Node.new()
 	root.add_child(coordinator)
 	coordinator.set_script(load("res://MOD_CONTENT/CruS Online/multiplayer.gd"))
@@ -450,20 +882,115 @@ func run():
 	restart_timer.name = "RestartTimer"
 	coordinator.add_child(restart_timer)
 	coordinator.players = {1: {}, 2: {}}
+	coordinator.config.friendlyFire = false
+	coordinator.apply_host_settings()
+	check(not coordinator.hostSettings.friendlyFire, "host option applies to live session settings")
+	coordinator.sync_host_settings(1, {"friendlyFire": true})
+	check(coordinator.hostSettings.friendlyFire, "client applies host friendly fire setting")
+	coordinator.sync_host_settings(2, {"friendlyFire": false})
+	check(coordinator.hostSettings.friendlyFire, "non-host cannot change friendly fire setting")
 	coordinator.hostSettings.canRespawn = true
 	coordinator._player_died(1)
+	check(coordinator.DeathScreen.wipes == 0, "one player dying does not lower difficulty")
 	coordinator._player_died(2)
+	check(coordinator.DeathScreen.wipes == 1, "last player dying applies difficulty loss once")
+	coordinator.apply_team_wipe(1)
+	check(coordinator.DeathScreen.wipes == 1, "duplicate team wipe cannot lower difficulty twice")
 	check(coordinator.died_players.size() == 2 and restart_timer.is_stopped(), "manual respawn tracks deaths without automatic restart")
 	coordinator._player_respawn(1)
 	coordinator.hostSettings.canRespawn = false
 	coordinator._player_died(1)
 	check(not restart_timer.is_stopped(), "all dead starts restart when manual respawn disabled")
+	check(coordinator.DeathScreen.wipes == 2, "a new team wipe counts after someone respawns")
 	coordinator._player_respawn(2)
 	check(restart_timer.is_stopped() and not coordinator.died_players.has(2), "revive cancels pending restart and clears dead membership")
+	var life_puppet = LifePuppet.new()
+	life_puppet.name = "3"
+	root.add_child(life_puppet)
+	coordinator.players[3] = {"puppet": life_puppet}
+	coordinator._player_died(3)
+	check(life_puppet.death and elevator_bridge.events.back()[0] == "sync_player_life", "third player death is applied locally and broadcast to every peer")
+	coordinator._player_respawn(3)
+	check(not life_puppet.death and life_puppet.resets == 1 and elevator_bridge.events.back()[1] == [3, false], "third player revive clears pose and broadcasts alive state")
+	var target_body = Spatial.new()
+	life_puppet.add_child(target_body)
+	var targeting = load("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd")
+	check(targeting.alive(target_body, null, 1, []), "AI can select a living third player")
+	check(not targeting.alive(target_body, null, 3, []), "AI ignores the local player's duplicate puppet")
+	check(not targeting.alive(target_body, null, 1, [3]), "AI ignores authoritative dead players")
+	life_puppet.death = true
+	check(not targeting.alive(target_body, null, 1, []), "AI ignores a visibly dead puppet")
+	var hitbox = StaticBody.new()
+	target_body.add_child(hitbox)
+	check(targeting.matches(hitbox, target_body) and not targeting.matches(coordinator, target_body), "target matching follows the selected player's hierarchy")
+	life_puppet.free()
 	coordinator._player_died(999)
 	check(not coordinator.died_players.has(999), "nonmember death ignored")
+	Global.UI = NotifyFixture.new()
+	coordinator.notify_host_difficulty(1, "Host difficulty: Hope Eradicated + Chaos")
+	check(Global.UI.messages == ["Host difficulty: Hope Eradicated + Chaos"], "difficulty goes to gameplay notifications")
+	elevator_bridge.online = false
+	coordinator.notify_host_difficulty(1, "stale announcement")
+	check(Global.UI.messages.size() == 1, "offline play ignores host announcements")
+	Global.UI.free()
+	Global.menu = Control.new()
+	root.add_child(Global.menu)
+	coordinator.Menu = Control.new()
+	coordinator.add_child(coordinator.Menu)
+	coordinator.Menu.show()
+	coordinator.Menu.set_process_input(true)
+	var sync_screen = Control.new()
+	sync_screen.name = "SyncLoad"
+	coordinator.add_child(sync_screen)
+	sync_screen.show()
+	check(coordinator.game_init("offline://level"), "solo mission start succeeds without hosting")
+	check(Global.last_scene == "offline://level", "solo start loads selected level")
+	check(not coordinator.Menu.visible and not coordinator.Menu.is_processing_input(), "solo disables multiplayer pause menu")
+	check(Global.menu.is_processing_input() and not sync_screen.visible, "solo uses vanilla menu without sync screen")
+	coordinator.player_scene_loaded = false
+	coordinator._scene_loaded()
+	check(coordinator.player_scene_loaded and not get_tree().paused and not sync_screen.visible, "solo level load never waits for other players")
+	Global.menu.free()
+	elevator_bridge.online = true
 	coordinator.DeathScreen.free()
 	coordinator.free()
+	var regular_door = KinematicBody.new()
+	root.add_child(regular_door)
+	regular_door.set_script(load("res://MOD_CONTENT/CruS Online/remaped/Door.gd"))
+	regular_door.NetworkBridge = elevator_bridge
+	elevator_bridge.authority = true
+	regular_door.network_use(2)
+	var moving_pose_revision = regular_door.pose_revision
+	regular_door._physics_process(10.0)
+	check(regular_door.stop and is_equal_approx(abs(regular_door.rotation.y), PI / 2), "ordinary door clamps a long frame to its final angle")
+	check(elevator_bridge.events.back()[0] == "sync_door_pose", "ordinary door reliably publishes final pose")
+	var stopped_pose = regular_door.global_transform
+	regular_door._set_transform(1, Transform.IDENTITY, moving_pose_revision)
+	check(regular_door.global_transform == stopped_pose, "ordinary door ignores snapshots from before it stopped")
+	elevator_bridge.authority = false
+	regular_door.network_damage(2, 999, Vector3.UP, Vector3.ZERO, Vector3.ZERO)
+	check(regular_door.visible and not regular_door.isDestroyed and regular_door.door_health == 100, "client door hit waits for host instead of hiding and later reappearing")
+	regular_door.remove_on_ready(1)
+	check(regular_door.isDestroyed and not regular_door.visible, "confirmed destruction stays hidden")
+	elevator_bridge.authority = true
+	regular_door.free()
+	for sliding_name in ["down_door", "down_switch_door"]:
+		var sliding = KinematicBody.new()
+		root.add_child(sliding)
+		sliding.set_script(load("res://MOD_CONTENT/CruS Online/remaped/" + sliding_name + ".gd"))
+		sliding.NetworkBridge = elevator_bridge
+		if sliding_name == "down_door":
+			sliding.timer = Timer.new()
+			sliding.add_child(sliding.timer)
+		var prior_events = elevator_bridge.events.size()
+		sliding._physics_process(1.0)
+		check(elevator_bridge.events.size() == prior_events, "stopped sliding door sends no redundant updates")
+		sliding.switch_use()
+		check(not sliding.stop, "vanilla no-argument switch activates a sliding platform")
+		sliding.sync_door_pose(1, Transform(Basis(), Vector3(0, 4, 0)), 2)
+		sliding._set_transform(1, Transform.IDENTITY, 1)
+		check(sliding.translation.y == 4, "sliding door ignores stale movement after final pose")
+		sliding.free()
 	var spiritual_states = [
 		{"soul_intact": true, "husk_mode": false, "hope_discarded": false},
 		{"soul_intact": false, "husk_mode": true, "hope_discarded": false},
@@ -794,5 +1321,47 @@ func run():
 	implant_player.update_implants()
 	check(is_equal_approx(implant_player.speed_bonus, 0.35) and implant_player.armor == 1 and not implant_player.hazmat, "stripped implants cannot leave old speed armor or protection behind")
 	implant_player.free()
+
+	net.connect("host_left", self, "record_host_departure")
+	net._my_steam_id = 2
+	net._migrate_host(1, 3)
+	check(host_departures == 1, "Steam owner change ends the session instead of migrating broken world authority")
+	net._my_steam_id = 2
+	lobby.lobby_owner = 1
+	net._reset_session()
+	net._init_joined_lobby(10)
+	check(net.get_server_steam_id() == 1 and net._peers.has(2), "joining seeds peers without waiting for a fresh native session callback")
+	check(parent.Steam.sent.back()[1][0] == net.PACKET_TYPE.HANDSHAKE_REPLY, "join starts handshake proactively")
+	var joined_peer = net._peers[2]
+	net._init_joined_lobby(10)
+	check(net._peers[2] == joined_peer, "duplicate lobby callback preserves the current connection")
+	net._close_p2p_session(2)
+	check(net._peers.empty() and net._server_steam_id == 0 and parent.Steam.closed.has(1), "leave clears peers and closes the old native session")
+	lobby.lobby_owner = 3
+	net._init_joined_lobby(11)
+	check(net.get_server_steam_id() == 3 and not net._peers.has(1), "joining a different host does not reuse stale peer state")
+	var packet = PoolByteArray([net.PACKET_TYPE.HANDSHAKE])
+	packet.append_array(var2bytes(net.PROTOCOL_VERSION))
+	net._handle_packet(3, packet)
+	check(parent.Steam.sent.back()[0] == 3 and parent.Steam.sent.back()[1][0] == net.PACKET_TYPE.HANDSHAKE_REPLY, "rejoined client responds to new host handshake")
+	net._init_p2p_host(12)
+	net._init_p2p_session(2)
+	check(net.is_server() and net._peers[2].connected, "local lobby-entered event cannot turn the host into an unconnected client")
+	lobby.active = false
+	net._on_p2p_session_request(3)
+	check(parent.Steam.closed.back() == 3, "late session request after leaving is closed instead of left pending")
+	lobby.active = true
+	lobby.lobby_owner = 1
+	var join_manager = Node.new()
+	root.add_child(join_manager)
+	join_manager.set_script(load("res://MOD_CONTENT/CruS Online/SteamLobby.gd"))
+	join_manager.SteamInit = parent
+	join_manager.join_lobby(10)
+	join_manager.join_lobby(10)
+	check(parent.Steam.joins == [10], "duplicate invite paths issue only one native join")
+	join_manager.leave_lobby()
+	join_manager.join_lobby(10)
+	check(parent.Steam.joins == [10, 10], "leaving clears pending join so same lobby can be joined again")
+	join_manager.free()
 	print("TRANSPORT_TEST_RESULT failures=", failures)
 	get_tree().quit(1 if failures else 0)

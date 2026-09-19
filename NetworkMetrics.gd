@@ -2,7 +2,7 @@ extends Reference
 
 
 
-var enabled = false
+var enabled = true
 var totals = {}
 var rates = {}
 var rpc_methods = {}

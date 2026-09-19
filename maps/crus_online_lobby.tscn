@@ -35,7 +35,7 @@
 script/source = "extends Spatial
 
 func _ready():
-	Global.music.stream = Global.LEVEL_SONGS[16]
+	Global.music.stream = preload(\"res://Sfx/Music/intro.ogg\")
 	Global.music.play()
 "
 

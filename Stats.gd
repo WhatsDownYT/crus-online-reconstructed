@@ -5,18 +5,21 @@ onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 onready var playersList = $VBoxContainer/PanelContainer/RichTextLabel
 
-var sizeRatio = 16
+var sizeRatio = 20
 
 func _ready():
+	playersList.clear()
 	hide()
 
 func set_size_ratio():
-	sizeRatio = 16
+	sizeRatio = 20
 	
 	$VBoxContainer/PanelContainer/RichTextLabel.get_font("normal_font").size = sizeRatio
 	$VBoxContainer/Label.get_font("font").size = sizeRatio
 
 func open_stats(type):
+	playersList.clear()
+	tick = 0
 	show()
 	set_size_ratio()
 	fit_in_parent()

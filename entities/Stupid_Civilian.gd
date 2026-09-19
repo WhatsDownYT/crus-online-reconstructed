@@ -2,6 +2,8 @@ extends KinematicBody
 
 
 
+const Targeting = preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd")
+
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 var GRAVITY = 22
@@ -58,12 +60,14 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 
 func get_near_player() -> Dictionary:
-	var oldDistance = null
+	var oldDistance = INF
 	var player = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors():
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
-		if oldDistance == null or oldDistance > distance:
+		if oldDistance > distance:
 			oldDistance = distance
 			player = selectedPlayer
 	
@@ -89,22 +93,25 @@ puppet func set_puppet_transform(id, recived_position, recived_rotation):
 	lerp_mesh_rotation = recived_rotation
 	
 var tick = 0
+var _snapshot_elapsed = 0.0
 
-func host_tick():
-	if (global_transform.origin - last_transform.origin).length() > 0.01 or (mesh.rotation - last_mesh_rotation).length() > 0.01:
-		tick += 1
-		if not soul.gibs_spawned and tick % 2 == 0:
-			NetworkBridge.n_rpc_unreliable(self, "set_puppet_transform", [global_transform.origin, mesh.rotation])
-			last_transform = global_transform
-			last_mesh_rotation = mesh.rotation
-			tick = 0
-
+func host_tick(delta = 0.016667):
+	_snapshot_elapsed += delta
+	var interval = 0.2 if typeof(player_distance) == TYPE_REAL and player_distance > 40 else 0.05
+	if _snapshot_elapsed < interval or soul.gibs_spawned:
+		return
+	_snapshot_elapsed = 0.0
+	if (global_transform.origin - last_transform.origin).length_squared() > 0.0001 or (mesh.rotation - last_mesh_rotation).length_squared() > 0.0001:
+		NetworkBridge.n_rpc_unreliable(self, "set_puppet_transform", [global_transform.origin, mesh.rotation])
+		last_transform = global_transform
+		last_mesh_rotation = mesh.rotation
 
 
 func _ready():
 	NetworkBridge.register_rpcs(self,[
 		["network_add_velocity", NetworkBridge.PERMISSION.ALL],
 		["network_set_flee", NetworkBridge.PERMISSION.ALL],
+		["sync_flee", NetworkBridge.PERMISSION.SERVER],
 		["network_set_dead", NetworkBridge.PERMISSION.ALL],
 		["network_set_tranquilized", NetworkBridge.PERMISSION.ALL],
 		["play_anim", NetworkBridge.PERMISSION.SERVER],
@@ -137,6 +144,8 @@ func _ready():
 	anim_player = get_parent().get_node_or_null("Nemesis/AnimationPlayer")
 	
 	anim_player.get_animation("Idle").loop = true
+	if anim_player.has_animation("Walk"):
+		anim_player.get_animation("Walk").loop = true
 	anim_player.get_animation("Run").loop = true
 	
 	mesh = get_parent().get_node_or_null("Nemesis/Armature/Skeleton")
@@ -170,116 +179,108 @@ func _on_Screen_Exited():
 
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection():
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-			host_tick()
-			
-			var playerData = get_near_player()
-			
-			if playerData.distance > glob.draw_distance + 10:
-				return 
-			
-			var fps = Global.fps
-			
-			if fmod(time, 22) == 0:
-				player_distance = playerData.distance
-				look_at_player = (player_distance < 4 or player_distance > 100)
-			
-			time += 1
-			
-			if player_distance > 40 and not dead and not tranq and not objective:
-				if anim_player.current_animation != "Idle":
-					anim_player.play("Idle")
-					NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
-				return 
-			
-			if fps < 30:
-				if Global.every_2:
-					return 
-			
-			var pos = global_transform.origin
-			var player_pos = playerData.player.global_transform.origin
-			
-			if not active and not dead and not flee and not free and not tranq:
-				return 
-			
-			setup = false
+	if NetworkBridge.n_is_network_master(self):
+		host_tick(delta)
 
-			if (look_at_player and not flee and not dead and not free and not tranq):
-				mesh.look_at(player_pos, Vector3.UP)
-				mesh.rotation.x = 0
+		var playerData = get_near_player()
 
-				velocity.x = 0
-				velocity.z = 0
-				if anim_player.current_animation != "Idle":
-					anim_player.play("Idle")
-					NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
-				return 
+		if playerData.distance > glob.draw_distance + 10:
+			return
 
-			if fmod(time, 200) == 0 and not flee and not tranq:
-				var rand = randi() % 3
-				match rand:
-					1:
-						velocity.x = 0
-						velocity.z = 0
-					2:
-						velocity = Vector3(move_speed, velocity.y, velocity.z).rotated(Vector3.UP, rand_range(0, deg2rad(360)))
-						mesh.look_at(pos + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
-						mesh.rotation.x = 0
-					3:
-						pass
-			if Vector3(velocity.x, 0, velocity.z).length() > 0.5 and not dead and not tranq:
-				if not flee:
-					if anim_player.current_animation != "Walk":
-						anim_player.play("Walk")
-						NetworkBridge.n_rpc(self, "play_anim", ["Walk"])
-				else :
-					if anim_player.current_animation != "Run":
-						anim_player.play("Run", - 1, 2)
-						NetworkBridge.n_rpc(self, "play_anim", ["Run", -1, 2])
-			elif not dead and not tranq:
-				if anim_player.current_animation != "Idle":
-					anim_player.play("Idle")
-					NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
-			if water:
-				if not dead:
-					GRAVITY = - 4
-				else :
-					GRAVITY = 1
+		var fps = Global.fps
+
+		player_distance = playerData.distance
+		look_at_player = (player_distance < 4 or player_distance > 100)
+
+		time += 1
+
+		if player_distance > 40 and not dead and not tranq and not objective:
+			if anim_player.current_animation != "Idle":
+				anim_player.play("Idle")
+				NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
+			return
+
+
+		var pos = global_transform.origin
+		var player_pos = playerData.player.global_transform.origin
+
+		if not active and not dead and not flee and not free and not tranq:
+			return
+
+		setup = false
+
+		if (look_at_player and not flee and not dead and not free and not tranq):
+			mesh.look_at(player_pos, Vector3.UP)
+			mesh.rotation.x = 0
+
+			velocity.x = 0
+			velocity.z = 0
+			if anim_player.current_animation != "Idle":
+				anim_player.play("Idle")
+				NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
+			return
+
+		if fmod(time, 200) == 0 and not flee and not tranq:
+			var rand = randi() % 3
+			match rand:
+				1:
+					velocity.x = 0
+					velocity.z = 0
+				2:
+					velocity = Vector3(move_speed, velocity.y, velocity.z).rotated(Vector3.UP, rand_range(0, deg2rad(360)))
+					mesh.look_at(pos + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
+					mesh.rotation.x = 0
+				3:
+					pass
+		if Vector3(velocity.x, 0, velocity.z).length() > 0.5 and not dead and not tranq:
+			if not flee:
+				if anim_player.current_animation != "Walk":
+					anim_player.play("Walk")
+					NetworkBridge.n_rpc(self, "play_anim", ["Walk"])
 			else :
-				GRAVITY = 22
-				if glob.CURRENT_LEVEL == 2000 and not objective:
-					GRAVITY = 22 * optimization_multiplier
-			velocity.y -= GRAVITY * delta
-			var a = 1
-			if not fmod(time, 3) == 0 and glob.CURRENT_LEVEL == 2000 and not objective:
-				return 
+				if anim_player.current_animation != "Run":
+					anim_player.play("Run", - 1, 2)
+					NetworkBridge.n_rpc(self, "play_anim", ["Run", -1, 2])
+		elif not dead and not tranq:
+			if anim_player.current_animation != "Idle":
+				anim_player.play("Idle")
+				NetworkBridge.n_rpc(self, "play_anim", ["Idle"])
+		if water:
+			if not dead:
+				GRAVITY = - 4
+			else :
+				GRAVITY = 1
+		else :
+			GRAVITY = 22
 			if glob.CURRENT_LEVEL == 2000 and not objective:
-				a = 1.5
-			var collision = move_and_collide(velocity * delta)
-			if collision:
-				if velocity.y < - 5 * optimization_multiplier and abs(global_transform.origin.y - last_pos.y) > 7 and not immune_to_fall_damage:
-					get_parent().damage(50, collision.normal, collision.position, collision.position)
-				elif collision.normal.y > 0.9:
-					velocity = velocity.slide(collision.normal)
-					if dead or tranq:
-						velocity.x *= 0.95
-						velocity.z *= 0.95
-				else :
-					velocity = velocity.bounce(collision.normal)
-					if Vector3(velocity.x, 0, velocity.z).length() > 0.5:
-						mesh.look_at(pos + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
-						mesh.rotation.x = 0
-				last_pos = global_transform.origin
-		else:
-			global_transform = global_transform.interpolate_with(lerp_transform, delta * 10.0)
-			mesh.rotation = lerp(mesh.rotation, lerp_mesh_rotation, delta * 10.0)
+				GRAVITY = 22 * optimization_multiplier
+		velocity.y -= GRAVITY * delta
+		var collision = move_and_collide(velocity * delta)
+		if collision:
+			if velocity.y < - 5 * optimization_multiplier and abs(global_transform.origin.y - last_pos.y) > 7 and not immune_to_fall_damage:
+				get_parent().damage(50, collision.normal, collision.position, collision.position)
+			elif collision.normal.y > 0.9:
+				velocity = velocity.slide(collision.normal)
+				if dead or tranq:
+					velocity.x *= 0.95
+					velocity.z *= 0.95
+			else :
+				velocity = velocity.bounce(collision.normal)
+				if Vector3(velocity.x, 0, velocity.z).length() > 0.5:
+					mesh.look_at(pos + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
+					mesh.rotation.x = 0
+			last_pos = global_transform.origin
+	else:
+		if not global_transform.is_equal_approx(lerp_transform):
+			global_transform = global_transform.interpolate_with(lerp_transform, clamp(delta * 10.0, 0.0, 1.0))
+		if not mesh.rotation.is_equal_approx(lerp_mesh_rotation):
+			mesh.rotation = lerp(mesh.rotation, lerp_mesh_rotation, clamp(delta * 10.0, 0.0, 1.0))
 
 func add_velocity(increase_velocity):
 	network_add_velocity(null, increase_velocity)
 
 master func network_add_velocity(id, increase_velocity):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not glob.CURRENT_LEVEL == 2000:
 			velocity -= increase_velocity
 		else :
@@ -291,7 +292,6 @@ func alert(peepee):
 	if LINES.size() != 0:
 		return 
 	set_flee()
-	NetworkBridge.n_rpc(self, "network_set_flee")
 
 func set_water(a):
 	water = a
@@ -301,10 +301,26 @@ func set_water(a):
 	velocity.y *= 0.1
 
 func set_flee():
-	network_set_flee(null)
+	if flee or dead or tranq:
+		return
+	if NetworkBridge.is_world_authority():
+		network_set_flee(null)
+	else:
+		NetworkBridge.request_host(self, "network_set_flee")
+
+puppet func sync_flee(id):
+	flee = true
+	set_collision_layer_bit(8, false)
 
 master func network_set_flee(id):
+	if not NetworkBridge.is_world_authority() or dead or tranq:
+		return
+	if flee:
+		if id != null:
+			NetworkBridge.n_rpc_id(self, id, "sync_flee")
+		return
 	if not flee:
+		NetworkBridge.n_rpc(self, "sync_flee")
 		flee = true
 		set_collision_layer_bit(8, 0)
 		if not water:
@@ -314,10 +330,13 @@ master func network_set_flee(id):
 		mesh.rotation.x = 0
 
 func set_dead():
+	if not NetworkBridge.is_world_authority():
+		dead = true
+		return
 	network_set_dead(null)
 
 master func network_set_dead(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not dead:
 			set_collision_layer_bit(8, 0)
 			dead = true
@@ -333,7 +352,7 @@ func tranquilize(id = null):
 	network_set_tranquilized(id)
 
 master func network_set_tranquilized(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not tranq:
 			set_collision_layer_bit(8, 0)
 			tranq = true
@@ -361,7 +380,6 @@ func player_use():
 	if not dead and not flee and not tranq:
 		if glob.implants.torso_implant.terror:
 			set_flee()
-			NetworkBridge.n_rpc(self, "network_set_flee")
 			return 
 		if LINES.size() == 0:
 			glob.player.UI.message(glob.DIALOGUE.DIALOGUE[glob.CURRENT_LEVEL][random_line], true)

@@ -34,7 +34,7 @@ func get_near_player(object) -> Dictionary:
 
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		
 		var space_state = get_world().direct_space_state
 		var result_down = space_state.intersect_ray(global_transform.origin, global_transform.origin + Vector3.DOWN * 1)

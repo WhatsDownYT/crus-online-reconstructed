@@ -35,6 +35,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	NetworkBridge.register_rpcs(self, [["network_set_rotation", NetworkBridge.PERMISSION.SERVER]])
 	rset_config("global_transform", MultiplayerAPI.RPC_MODE_PUPPET)
 	NetworkBridge.register_rset(self, "global_transform", NetworkBridge.PERMISSION.SERVER)
 	
@@ -44,13 +45,13 @@ func _ready():
 	next_pos = global_transform.origin + current_dir
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if get_near_player(self).distance > 20:
 			return 
 		
 		look()
 		
-		NetworkBridge.n_rset(self, "global_transform", global_transform)
+		NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
 		
 		step_count += 1
 		if step_count == 60:
@@ -79,6 +80,7 @@ func _physics_process(delta):
 			last_pos = global_transform.origin
 			next_pos = global_transform.origin + current_dir
 			mesh.look_at(global_transform.origin - current_dir, Vector3.UP)
+			NetworkBridge.n_rpc(self, "network_set_rotation", [mesh.rotation.y])
 		else :
 			if result_back and result_forward and result_left and result_right:
 				return 
@@ -115,3 +117,6 @@ func _on_Area_body_entered(body):
 		return 
 	if body.has_method("damage") and NetworkBridge.n_is_network_master(self):
 		body.damage(100, current_dir.normalized(), global_transform.origin, global_transform.origin)
+
+puppet func network_set_rotation(id, yaw):
+	mesh.rotation.y = yaw

@@ -6,11 +6,11 @@ export var in_game_chat = true
 
 onready var textBox = $VBoxContainer/PanelContainer/RichTextLabel
 onready var lineEdit = $VBoxContainer/LineEdit
-onready var labelText = $VBoxContainer/Label
+onready var labelText = get_node_or_null("VBoxContainer/Label")
 
 onready var parent = Global.get_node("Multiplayer")
 
-var sizeRatio = 16
+var sizeRatio = 20
 
 func _ready():
 	window_drag_enabled = in_game_chat
@@ -23,11 +23,12 @@ func _ready():
 		hide()
 
 func set_size_ratio():
-	sizeRatio = 16
+	sizeRatio = 20
 	
 	textBox.get_font("normal_font").size = sizeRatio
 	lineEdit.get_font("font").size = sizeRatio
-	labelText.get_font("font").size = sizeRatio
+	if labelText != null:
+		labelText.get_font("font").size = sizeRatio
 
 master func send_message_host(id, message, author, img = "null", color = "ff0000"):
 	NetworkBridge.n_rpc(self, "send_message", [message, author, img, color])

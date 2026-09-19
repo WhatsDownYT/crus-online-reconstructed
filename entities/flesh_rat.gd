@@ -1,5 +1,7 @@
 extends KinematicBody
 
+const Targeting = preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd")
+
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 var GRAVITY = 22
@@ -28,12 +30,14 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 
 func get_near_player() -> Dictionary:
-	var oldDistance = null
+	var oldDistance = INF
 	var player = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors():
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
-		if oldDistance == null or oldDistance > distance:
+		if oldDistance > distance:
 			oldDistance = distance
 			player = selectedPlayer
 	
@@ -53,7 +57,7 @@ var lerp_transform : Transform
 var last_transform : Transform
 
 func host_tick():
-	if (global_transform.origin - last_transform.origin).length() > 0.01:
+	if (global_transform.origin - last_transform.origin).length() > 0.01 or not global_transform.basis.is_equal_approx(last_transform.basis):
 		NetworkBridge.n_rset_unreliable(self, "lerp_transform", global_transform)
 		last_transform = global_transform
 
@@ -77,8 +81,12 @@ func _ready():
 	weapon = $Rotation_Helper / Weapon
 	time += round(rand_range(0, 50))
 	anim_player = get_parent().get_node_or_null("Nemesis/AnimationPlayer")
+	for animation_name in ["Idle", "Walk", "Run"]:
+		if anim_player.has_animation(animation_name):
+			anim_player.get_animation(animation_name).loop = true
 	anim_player.play("Idle")
-	NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
 	mesh = get_parent().get_node_or_null("Nemesis/Armature/Skeleton")
 	chatter_sound = get_node_or_null("SFX/Chatter")
 	chatter_on = is_instance_valid(chatter_sound)
@@ -88,98 +96,105 @@ func _ready():
 	get_parent().new_alert_sphere.get_node("CollisionShape").disabled = true
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection():
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-			host_tick()
+	if NetworkBridge.n_is_network_master(self):
+		host_tick()
+		var nearest = get_near_player()
+		if nearest.player == null:
+			return
+
+		if nearest.distance > Global.draw_distance + 10:
+			return
+		if immortal and dead:
+			immortal_death_time -= 1
+			if immortal_death_time == 0:
+				get_parent().dead = false
+				get_parent().dead_body.get_node("CollisionShape").disabled = true
+				get_parent().torso.get_node("CollisionShape").disabled = false
+				get_parent().health = 50
+				dead = false
+				immortal_death_time = 200
+				if anim_player.current_animation != "Undie":
+					anim_player.play("Undie")
+					NetworkBridge.n_rpc(self, "set_animation", ["Undie", 1])
+				yield (get_tree(), "idle_frame")
+		if nearest.distance > 20:
+			velocity.x = 0
+			velocity.z = 0
+		elif not dead:
+			if chatter_on:
+
+				if not chatter_sound.playing:
+					chatter_sound.play()
+					NetworkBridge.n_rpc(self, "play_chatter")
+		time += 1
+		if nearest.distance < 3 and not dead and _floor and nearest.distance > 1 and jumper:
+			velocity *= 2
+			velocity.y += 5
+		if (nearest.distance < attack_distance or nearest.distance > 20) and not flee and not dead and not anim_player.current_animation == "Undie":
+			look_at(nearest.player.global_transform.origin, Vector3.UP)
+			rotation.x = 0
+
+			velocity.x = 0
+			velocity.z = 0
 			
-			if get_near_player().distance > Global.draw_distance + 10:
-				return 
-			if immortal and dead:
-				immortal_death_time -= 1
-				if immortal_death_time == 0:
-					get_parent().dead = false
-					get_parent().dead_body.get_node("CollisionShape").disabled = true
-					get_parent().torso.get_node("CollisionShape").disabled = false
-					get_parent().health = 50
-					dead = false
-					immortal_death_time = 200
-					if anim_player.current_animation != "Undie":
-						anim_player.play("Undie")
-						NetworkBridge.n_rpc(self, "set_animation", ["Undie", 1])
-					yield (get_tree(), "idle_frame")
-			if get_near_player().distance > 20:
-				velocity.x = 0
-				velocity.z = 0
-			elif not dead:
-				if chatter_on:
-					
-					if not chatter_sound.playing:
-						chatter_sound.play()
-						NetworkBridge.n_rpc(self, "play_chatter")
-			time += 1
-			if get_near_player().distance < 3 and not dead and _floor and get_near_player().distance > 1 and jumper:
-				velocity *= 2
-				velocity.y += 5
-			if (get_near_player().distance < attack_distance or get_near_player().distance > 20) and not flee and not dead and not anim_player.current_animation == "Undie":
-				look_at(get_near_player().player.global_transform.origin, Vector3.UP)
+			if nearest.distance < attack_distance:
+				weapon.AI_shoot()
+				if anim_player.current_animation != "Attack":
+					anim_player.play("Attack", - 1, 1)
+					NetworkBridge.n_rpc(self, "set_animation", ["Attack", 1])
+		else :
+			if fmod(time, 20) == 0 and not dead and not anim_player.current_animation == "Undie":
+				var toward = nearest.player.global_transform.origin - global_transform.origin
+				toward.y = 0
+				var horizontal = toward.normalized() * move_speed
+				velocity.x = horizontal.x
+				velocity.z = horizontal.z
+				look_at(global_transform.origin + velocity, Vector3.UP)
 				rotation.x = 0
-
-				velocity.x = 0
-				velocity.z = 0
-				
-				if get_near_player().distance < attack_distance:
-					weapon.AI_shoot()
-					if anim_player.current_animation != "Attack":
-						anim_player.play("Attack", - 1, 1)
-						NetworkBridge.n_rpc(self, "set_animation", ["Attack", 1])
-			else :
-				if fmod(time, 20) == 0 and not dead and not anim_player.current_animation == "Undie":
-					velocity = - move_speed * (global_transform.origin - get_near_player().player.global_transform.origin).normalized()
-					look_at(global_transform.origin + velocity, Vector3.UP)
-					rotation.x = 0
-				if Vector3(velocity.x, 0, velocity.z).length() > 0.4 and not dead and not anim_player.current_animation == "Undie":
-					if not flee:
-						if anim_player.current_animation != "Walk":
-							anim_player.play("Walk", - 1, anim_speed)
-							NetworkBridge.n_rpc(self, "set_animation", ["Walk", anim_speed])
-					else :
-						if anim_player.current_animation != "Run":
-							anim_player.play("Run", - 1, 2)
-							NetworkBridge.n_rpc(self, "set_animation", ["Run", 2])
-				elif not dead and not anim_player.current_animation == "Undie":
-					if anim_player.current_animation != "Idle":
-						anim_player.play("Idle")
-						NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
-			if water:
-				GRAVITY = 2
-			else :
-				GRAVITY = 22
-			velocity.y -= GRAVITY * delta
-
-			if dead or anim_player.current_animation == "Undie":
-				velocity.x *= 0.9
-				velocity.z *= 0.9
-			var collision = move_and_collide(velocity * delta)
-			if collision:
-				if collision.normal.y > 0.9:
-					velocity = velocity.slide(collision.normal)
-					_floor = true
+			if Vector3(velocity.x, 0, velocity.z).length() > 0.4 and not dead and not anim_player.current_animation == "Undie":
+				if not flee:
+					if anim_player.current_animation != "Walk":
+						anim_player.play("Walk", - 1, anim_speed)
+						NetworkBridge.n_rpc(self, "set_animation", ["Walk", anim_speed])
 				else :
-					_floor = false
-					velocity = velocity.bounce(collision.normal)
-					if Vector3(velocity.x, 0, velocity.z).length() > 0.4:
-						look_at(global_transform.origin + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
-						rotation.x = 0
+					if anim_player.current_animation != "Run":
+						anim_player.play("Run", - 1, 2)
+						NetworkBridge.n_rpc(self, "set_animation", ["Run", 2])
+			elif not dead and not anim_player.current_animation == "Undie":
+				if anim_player.current_animation != "Idle":
+					anim_player.play("Idle")
+					NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
+		if water:
+			GRAVITY = 2
+		else :
+			GRAVITY = 22
+		velocity.y -= GRAVITY * delta
+
+		if dead or anim_player.current_animation == "Undie":
+			velocity.x *= 0.9
+			velocity.z *= 0.9
+		var collision = move_and_collide(velocity * delta)
+		if collision:
+			if collision.normal.y > 0.9:
+				velocity = velocity.slide(collision.normal)
+				_floor = true
 			else :
 				_floor = false
-		else:
-			global_transform = global_transform.interpolate_with(lerp_transform, delta * 10.0)
+				velocity = velocity.bounce(collision.normal)
+				if Vector3(velocity.x, 0, velocity.z).length() > 0.4:
+					look_at(global_transform.origin + Vector3(velocity.x, 0, velocity.z) + Vector3(0.0001, 0, 0), Vector3.UP)
+					rotation.x = 0
+		else :
+			_floor = false
+	else:
+		if not global_transform.is_equal_approx(lerp_transform):
+			global_transform = global_transform.interpolate_with(lerp_transform, clamp(delta * 10.0, 0.0, 1.0))
 
 func add_velocity(increase_velocity):
 	network_add_velocity(null, increase_velocity)
 
 master func network_add_velocity(id, increase_velocity):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		velocity -= increase_velocity
 	else:
 		NetworkBridge.n_rpc_id(self, 0, "network_add_velocity", [increase_velocity])
@@ -192,7 +207,7 @@ func set_flee():
 	pass
 	
 func set_dead():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not dead:
 			dead = true
 			if not immortal:

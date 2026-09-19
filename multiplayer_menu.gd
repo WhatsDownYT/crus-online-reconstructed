@@ -36,6 +36,8 @@ func _ready():
 	$CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value = int(clamp(Multiplayer.config.tickRate, 1, 60))
 	
 	$CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed = Multiplayer.config.canRespawn
+	$CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed = Multiplayer.config.friendlyFire
+	$CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed = Multiplayer.config.shareDifficulty
 	$CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed = Multiplayer.config.changeModeOnDeath
 	$CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer/HelpEdit.value = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
 	
@@ -63,7 +65,8 @@ func status_update(new_status):
 		enable_buttons()
 		$CenterContainer/TabContainer.current_tab = 0
 	
-		$CenterContainer/TabContainer/Main/VBoxContainer/PlayersList/PlayersListLabel.text = ""
+		$CenterContainer/TabContainer/Main/LAN/VBoxContainer/PlayersList/PlayersListLabel.text = ""
+		$CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList/PlayersListLabel.text = ""
 	else:
 		disable_buttons()
 		disable_tabs()
@@ -89,10 +92,14 @@ func save_host():
 	Multiplayer.config.tickRate = int($CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value)
 	
 	Multiplayer.config.canRespawn = $CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed
+	Multiplayer.config.friendlyFire = $CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed
+	Multiplayer.config.shareDifficulty = $CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed
 	Multiplayer.config.changeModeOnDeath = $CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed
 	Multiplayer.config.helpTimer = int($CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer/HelpEdit.value)
 	
 	save_data("config.save", Multiplayer.config)
+	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority():
+		Multiplayer.apply_host_settings()
 
 func get_data():
 	ip = IpEdit.text
@@ -161,3 +168,7 @@ func save_data(fileName, data):
 
 func load_data(fileName):
 	return profile_store.load_data(fileName)
+
+func close_menu():
+	disable_menu()
+	Global.menu.open_online_destination(false)

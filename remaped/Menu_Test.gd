@@ -11,6 +11,7 @@ func multiplayer_exit():
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 func multiplayer_enter():
+	_hide_online_navigation()
 	visible = false
 	in_game = true
 	menu[START].hide()
@@ -204,6 +205,9 @@ class Menu extends Control:
 	var elements:Array
 
 func _physics_process(delta):
+	_update_waiting_menu()
+	if not menu_changing and not active_menus.empty() and active_menus.back() == menu[START]:
+		_refresh_start_buttons()
 	time += 1
 	
 	if in_game:
@@ -373,7 +377,7 @@ func _ready():
 
 
 	
-	menu[START].buttons = [B_START, B_MULTIPLAYER_MENU, B_SETTINGS, B_QUIT]
+	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_MULTIPLAYER_MENU]
 	menu[SETTINGS].buttons = [B_RETURN]
 	menu[LEVEL_SELECT].buttons = [B_RETURN, B_CHARACTER, B_STOCKS, B_WEAPON_1, B_WEAPON_2, B_MISSION_START]
 	for level in Global.LEVELS:
@@ -435,7 +439,7 @@ func create_buttons(m:int):
 				level += 1
 			
 			B_MULTIPLAYER_MENU:
-				create_button(m, "Cruelty Squad Online", "_on_Multiplayer_Button_Pressed", 44)
+				create_button(m, "Online", "_on_Multiplayer_Button_Pressed", 44)
 			
 			B_SETTINGS:
 				create_button(m, "Settings", "_on_Settings_Button_Pressed", menu[m].buttons[i])
@@ -551,6 +555,7 @@ func create_button(m:int, n:String, connection:String, b:int):
 	var new_button = TextureButton.new()
 	menu[m].add_child(new_button)
 	new_button.name = n
+	new_button.set_meta("menu_button_type", b)
 	new_button.texture_normal = BUTTON_TEXTURES[b]
 	new_button.texture_hover = BUTTON_TEXTURES_H[0]
 	new_button.texture_disabled = BUTTON_TEXTURES_D[randi() % 3]
@@ -624,6 +629,11 @@ func _on_Stocks_Button_Pressed(m:int, button_id:TextureButton):
 
 
 func _on_Start_Button_Pressed(m:int, button_id:TextureButton):
+	_close_online_panel()
+	if not in_game and Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
+		goto_menu(m, LEVEL_SELECT, button_id)
+		_update_waiting_menu()
+		return
 	Global.save_settings()
 	if ( not in_game):
 		goto_menu(m, LEVEL_SELECT, button_id)
@@ -649,6 +659,8 @@ func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	$Settings.come()
 
 func level_end():
+	if Multiplayer.NetworkBridge.check_connection():
+		_hide_online_navigation()
 	active_element = $Level_End_Grid
 	$Level_End_Grid.rect_position.x = 512
 	$Level_End_Grid.come()
@@ -816,6 +828,14 @@ func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 
 func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
+	if Multiplayer.NetworkBridge.check_connection():
+		if not Multiplayer.NetworkBridge.is_world_authority():
+			return
+		Global.STOCKS.save_stocks("user://stocks.save")
+		Global.stock_mode = weapon_1 <= 3 and weapon_2 <= 3
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+		Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL])
+		return
 	if Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL]):
 		Global.STOCKS.save_stocks("user://stocks.save")
 		goto_menu(m, START, button_id)
@@ -865,6 +885,8 @@ func _on_Level_Pressed(m:int, button_id:TextureButton):
 	
 
 func go_back(m:int, b_id:TextureButton):
+	_navigation_generation += 1
+	var generation = _navigation_generation
 	
 	Global.STOCKS.save_stocks("user://stocks.save")
 	var counter = 0
@@ -888,6 +910,8 @@ func go_back(m:int, b_id:TextureButton):
 			active_menus[active_menus.size() - 1].get_children()[child].set_position(lerp(active_menus[active_menus.size() - 1].get_children()[child].rect_position, to_pos, 1))
 			hover_info.get_parent().hide()
 			yield (get_tree(), "idle_frame")
+			if generation != _navigation_generation:
+				return
 		active_menus[active_menus.size() - 1].get_children()[child].hide()
 	
 	for child in active_menus[active_menus.size() - 2].get_children():
@@ -909,6 +933,8 @@ func go_back(m:int, b_id:TextureButton):
 	
 
 func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
+	_navigation_generation += 1
+	var generation = _navigation_generation
 	Global.STOCKS.save_stocks("user://stocks.save")
 	if Global.LEVEL_PUNISHED[Global.CURRENT_LEVEL]:
 		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(1, 1, 1, 1)
@@ -927,7 +953,8 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 				for child in m.get_children():
 					child.disabled = false
 		active_menus.pop_back()
-		active_element.go()
+		if is_instance_valid(active_element):
+			active_element.go()
 		menu_changing = false
 		return 
 	active_menus.append(menu[to_menu])
@@ -938,6 +965,10 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 	for child in menu[from_menu].get_children():
 		child.disabled = true
 	for child in menu[to_menu].get_children():
+		if to_menu == LEVEL_SELECT and _client_mission_button(child):
+			child.hide()
+			child.disabled = true
+			continue
 		child.disabled = true
 		if fmod(menu[to_menu].get_children().find(child), 3) == 0:
 			$SFX / Open.pitch_scale = 0.43 + rand_range( - 0.3, 0.1)
@@ -992,6 +1023,8 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 			child.set_position(lerp(child.rect_position, to_pos, 1))
 			
 			yield (get_tree(), "idle_frame")
+			if generation != _navigation_generation:
+				return
 		child.disabled = false
 		button_state()
 		
@@ -999,6 +1032,13 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 	menu_changing = false
 
 func _input(event):
+	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.result_active:
+		return
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	if event.is_action_pressed("ui_cancel") and online_menu.get_node("CenterContainer").visible:
+		online_menu.close_menu()
+		get_tree().set_input_as_handled()
+		return
 	if menu_changing:
 		return 
 	if Global.cutscene:
@@ -1033,6 +1073,12 @@ func button_state():
 	if active_menus.size() <= 0:
 		return 
 	if active_menus[active_menus.size() - 1] == menu[LEVEL_SELECT]:
+		if Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
+			for button in menu[LEVEL_SELECT].get_children():
+				if _client_mission_button(button):
+					button.hide()
+					button.disabled = true
+			return
 		for button in range(level_buttons.size()):
 			if button <= Global.LEVELS_UNLOCKED:
 				level_buttons[button].show()
@@ -1204,15 +1250,15 @@ func update_level_info()->void :
 	$Level_Info_Grid / Level_Info_Vbox / Level_Image.texture = Global.LEVEL_IMAGES[Global.CURRENT_LEVEL]
 
 func toggle_menu():
+	_refresh_start_buttons()
 	if (active_menus[active_menus.size() - 1] == menu[START] and active_element != $Level_End_Grid):
 		visible = not visible
 		if (Input.get_mouse_mode() == Input.MOUSE_MODE_VISIBLE):
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		else :
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		if (in_game):
-
-			pass
+		if in_game and not Multiplayer.NetworkBridge.check_connection():
+			get_tree().paused = visible
 
 func _on_Master_Volume_value_changed(value):
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), value)
@@ -1253,7 +1299,11 @@ func _on_Full_Screen_toggled(button_pressed):
 		
 
 
-func _on_Exit_Menu_Pressed(m:int, b:Button):
+func _on_Exit_Menu_Pressed(m:int, b:BaseButton):
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.Flow.exit_to_menu(false)
+		return
+	get_tree().paused = false
 	$Hover_Panel.hide()
 	get_node("Soul_Rended").hide()
 	
@@ -1262,15 +1312,20 @@ func _on_Exit_Menu_Pressed(m:int, b:Button):
 			Global.CURRENT_WEAPONS[w] = true
 		else :
 			Global.CURRENT_WEAPONS[w] = false
-	Global.goto_scene("res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn")
+	Global.goto_scene(Multiplayer.get_menu_scene())
 	in_game = false
 	menu[START].show()
 
-	active_element.hide()
-	active_element.go()
+	if active_element:
+		active_element.hide()
+		active_element.go()
 	hide_buttons(menu[START], 2, 4)
 
-func _on_Exit_Level_Select_Pressed(m:int, b:Button):
+func _on_Exit_Level_Select_Pressed(m:int, b:BaseButton):
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.Flow.exit_to_menu(true)
+		return
+	get_tree().paused = false
 	$Hover_Panel.hide()
 	get_node("Soul_Rended").hide()
 	Global.objective_complete = false
@@ -1280,7 +1335,7 @@ func _on_Exit_Level_Select_Pressed(m:int, b:Button):
 			Global.CURRENT_WEAPONS[w] = true
 		else :
 			Global.CURRENT_WEAPONS[w] = false
-	Global.goto_scene("res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn")
+	Global.goto_scene(Multiplayer.get_menu_scene())
 	in_game = false
 	menu[START].show()
 
@@ -1304,29 +1359,10 @@ func _on_qb():
 	_on_Quit_Button_Pressed(START, menu[START].get_child(0))
 
 func _on_Retry_Button_Pressed(m:int, b:TextureButton):
-	if Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL]):
-		Global.STOCKS.save_stocks("user://stocks.save")
-		$Hover_Panel.hide()
-		get_node("Soul_Rended").hide()
-		if active_element == $Level_End_Grid:
-			active_element.hide()
-			active_element = null
-			if ( not Global.objective_complete and not Global.player.died) or Global.objective_complete:
-				if Global.CURRENT_LEVEL < Global.L_PUNISHMENT:
-					Global.CURRENT_LEVEL -= 1
-			else :
-
-				pass
-		menu[START].show()
-		Global.objective_complete = false
-		Global.objectives = 0
-		toggle_menu()
-		
-		for w in range(Global.CURRENT_WEAPONS.size()):
-			if w == weapon_1 or w == weapon_2:
-				Global.CURRENT_WEAPONS[w] = true
-			else :
-				Global.CURRENT_WEAPONS[w] = false
+	if not Multiplayer.NetworkBridge.check_connection():
+		_retry_solo(m, b)
+	else:
+		Multiplayer.Flow.restart_mission()
 
 func _on_Key_List_item_activated(index):
 	wait_for_key = true
@@ -1554,3 +1590,108 @@ func _on_Timer_toggled(value):
 func _on_ResetTimer_pressed():
 	Global.play_time = 0
 	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / PlayTime.text = "Active Play Time:\n0.0.0"
+
+func _retry_solo(m:int, b:TextureButton):
+	Global.STOCKS.save_stocks("user://stocks.save")
+	$Hover_Panel.hide()
+	get_node("Soul_Rended").hide()
+	if active_element == $Level_End_Grid:
+		active_element.hide()
+		active_element = null
+		if ( not Global.objective_complete and not Global.player.died) or Global.objective_complete:
+			if Global.CURRENT_LEVEL < Global.L_PUNISHMENT:
+				Global.CURRENT_LEVEL -= 1
+		else :
+			get_tree().paused = true
+	menu[START].show()
+	Global.objective_complete = false
+	Global.objectives = 0
+	toggle_menu()
+
+	for w in range(Global.CURRENT_WEAPONS.size()):
+		if w == weapon_1 or w == weapon_2:
+			Global.CURRENT_WEAPONS[w] = true
+		else :
+			Global.CURRENT_WEAPONS[w] = false
+	get_tree().paused = false
+	Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL])
+
+func _refresh_start_buttons():
+	var buttons = menu[START].get_children()
+	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 6, 1, 5]
+	var origin = buttons[0].rect_position
+	buttons[0].name = "Unpause" if in_game else "Start"
+	for index in range(buttons.size()):
+		buttons[index].visible = order.has(index)
+	for index in range(order.size()):
+		var button = buttons[order[index]]
+		button.rect_position = origin + Vector2(button_size.x * index, 0)
+
+func open_online_destination(level_select):
+	_close_online_panel()
+	if active_element != null:
+		active_element.hide()
+	active_element = null
+	menu_changing = false
+	in_game = false
+	for entry in menu:
+		entry.show()
+		for button in entry.get_children():
+			button.hide()
+	menu[START].show()
+	active_menus = [menu[START]]
+	for button in menu[START].get_children():
+		button.disabled = false
+	_refresh_start_buttons()
+	show()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if level_select:
+		_on_Start_Button_Pressed(START, menu[START].get_child(0))
+
+var _waiting_label
+
+func _close_online_panel():
+	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
+		panel.disable_menu()
+
+func _update_waiting_menu():
+	var waiting = Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and not in_game and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if not is_instance_valid(_waiting_label):
+		if not waiting:
+			return
+		_waiting_label = Label.new()
+		_waiting_label.name = "WaitingForHost"
+		_waiting_label.text = "Waiting for the host\nto start a mission"
+		_waiting_label.align = Label.ALIGN_CENTER
+		_waiting_label.valign = Label.VALIGN_CENTER
+		_waiting_label.rect_size = Vector2(800, 120)
+		_waiting_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var font = DynamicFont.new()
+		font.font_data = load("res://Fonts/gamefont(1).ttf")
+		font.size = 20
+		_waiting_label.add_font_override("font", font)
+		add_child(_waiting_label)
+	_waiting_label.visible = waiting
+	if waiting:
+		_waiting_label.rect_position = (get_viewport_rect().size / rect_scale - _waiting_label.rect_size) * 0.5
+		$Level_Info_Grid.hide()
+		for button in menu[LEVEL_SELECT].get_children():
+			if _client_mission_button(button):
+				button.hide()
+
+var _navigation_generation = 0
+
+func _client_mission_button(button):
+	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START]
+
+func _hide_online_navigation():
+	_navigation_generation += 1
+	menu_changing = false
+	for entry in menu:
+		entry.hide()
+	for panel in [$Level_Info_Grid, $Character_Menu, $Stock_Menu, $Settings, $Hover_Panel]:
+		panel.hide()
+	if is_instance_valid(_waiting_label):
+		_waiting_label.hide()
+	active_element = null
+	active_menus = [menu[START]]

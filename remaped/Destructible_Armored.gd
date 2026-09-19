@@ -43,8 +43,8 @@ func _ready():
 	destroy_check_timer.one_shot = true
 	destroy_check_timer.connect("timeout", self, "respawn")
 
-	if not NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rpc(self, "check_removed")
+	if NetworkBridge.check_connection() and not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "check_removed")
 
 master func check_removed(id):
 	if isDestroyed:
@@ -54,7 +54,7 @@ func piercing_damage(damage, collision_n, collision_p, shooter_pos):
 	network_piercing_damage(null, damage, collision_n, collision_p, shooter_pos)
 
 master func network_piercing_damage(id, damage, collision_n, collision_p, shooter_pos):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		door_health -= damage
 		if door_health <= 0:
 			remove(null, collision_n, collision_p)

@@ -11,6 +11,6 @@ puppet func remove(id):
 	queue_free()
 
 func special_destroy():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		queue_free()
 		NetworkBridge.n_rpc(self, "remove")

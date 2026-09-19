@@ -20,6 +20,42 @@ var debug = false
 var rpc_debug_list = {}
 var rset_debug_list = {}
 var _pending_registrations = []
+var damage_source_context = 0
+const FriendlyFirePolicy = preload("res://MOD_CONTENT/CruS Online/FriendlyFire.gd")
+
+func damage_allowed(source, target):
+	return FriendlyFirePolicy.allows(Multiplayer.hostSettings.get("friendlyFire", true), source, target)
+
+func damage_source_id(source):
+	if source == Global.player:
+		return get_id()
+	if source.has_meta("crus_damage_source"):
+		return int(source.get_meta("crus_damage_source"))
+	if "drive_id" in source:
+		return int(source.drive_id) if source.drive_id != null else 0
+	if "player" in source and typeof(source.player) == TYPE_BOOL:
+		return get_id() if source.player else 0
+	return damage_source_context
+
+func inherit_damage_source(child, source):
+	child.set_meta("crus_damage_source", damage_source_id(source))
+
+func damage_target_id(target):
+	if target == Global.player:
+		return get_id()
+	if "client" in target and is_instance_valid(target.client):
+		return int(target.client.name)
+	return 0
+
+func apply_damage(source, target, method, args):
+	var source_id = damage_source_id(source)
+	var clearing_fire = method == "set_fire" and args == [false]
+	if not clearing_fire and not damage_allowed(source_id, damage_target_id(target)):
+		return
+	var previous_source = damage_source_context
+	damage_source_context = source_id
+	target.callv(method, args)
+	damage_source_context = previous_source
 
 func _ready():
 	call_deferred("_flush_registrations")
@@ -97,6 +133,8 @@ func get_peers():
 	return SteamNetwork.get_peers()
 
 func get_id():
+	if not check_connection():
+		return 1
 	match multiplayer_mode:
 		MULTIPLAYER_TYPE.LAN:
 			return get_tree().get_network_unique_id()
@@ -111,6 +149,8 @@ func get_host_id():
 			return SteamLobby.get_lobby_owner()
 
 func n_is_network_master(node = null):
+	if not check_connection():
+		return true
 	match multiplayer_mode:
 		MULTIPLAYER_TYPE.LAN:
 			return get_tree().is_network_server() if node == null else node.is_network_master()
@@ -119,6 +159,8 @@ func n_is_network_master(node = null):
 
 
 func is_world_authority():
+	if not check_connection():
+		return true
 	return get_tree().is_network_server() if is_lan() else SteamNetwork.is_server()
 
 func request_sender(claimed_id):
@@ -161,7 +203,7 @@ func register_rset(caller : Node, method, recived_permission):
 	SteamNetwork.register_rset(caller, method, recived_permission)
 
 func n_rpc(caller : Node, method = null, args = []):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	
 	Multiplayer.packages_count += 1
@@ -171,7 +213,7 @@ func n_rpc(caller : Node, method = null, args = []):
 			add_rpc_to_debug_list(caller, method)
 			var rpc_args = [method, get_tree().network_peer.get_unique_id()]
 			rpc_args.append_array(args)
-			caller.callv("rpc", rpc_args)
+			_lan_broadcast(caller, "rpc_id", rpc_args)
 		MULTIPLAYER_TYPE.STEAM:
 			add_rpc_to_debug_list(caller, method)
 			if SteamNetwork.is_server():
@@ -180,7 +222,7 @@ func n_rpc(caller : Node, method = null, args = []):
 				SteamNetwork.rpc_on_server(caller, method, args)
 
 func n_rpc_unreliable(caller : Node, method = null, args = []):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	
 	match multiplayer_mode:
@@ -188,14 +230,14 @@ func n_rpc_unreliable(caller : Node, method = null, args = []):
 			add_rpc_to_debug_list(caller, method)
 			var rpc_args = [method, get_tree().network_peer.get_unique_id()]
 			rpc_args.append_array(args)
-			caller.callv("rpc_unreliable", rpc_args)
+			_lan_broadcast(caller, "rpc_unreliable_id", rpc_args)
 			Multiplayer.packages_count += 1
 		MULTIPLAYER_TYPE.STEAM:
 			add_rpc_to_debug_list(caller, method)
 			SteamNetwork.snapshot_rpc(caller, method, args)
 
 func n_rpc_id(caller : Node, id = 0, method = null, args = []):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	if int(id) == 0:
 		id = get_host_id()
@@ -213,7 +255,7 @@ func n_rpc_id(caller : Node, id = 0, method = null, args = []):
 			SteamNetwork.rpc_target(int(id), caller, method, args)
 
 func n_rpc_unreliable_id(caller : Node, id = 0, method = null, args = []):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	
 	match multiplayer_mode:
@@ -228,7 +270,7 @@ func n_rpc_unreliable_id(caller : Node, id = 0, method = null, args = []):
 			SteamNetwork.snapshot_rpc(caller, method, args, int(id))
 
 func n_rset(caller : Node, method = null, recived_value = null):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	
 	Multiplayer.packages_count += 1
@@ -236,13 +278,13 @@ func n_rset(caller : Node, method = null, recived_value = null):
 	match multiplayer_mode:
 		MULTIPLAYER_TYPE.LAN:
 			add_rset_to_debug_list(caller, method)
-			caller.rset(method, recived_value)
+			_lan_broadcast(caller, "rset_id", [method, recived_value])
 		MULTIPLAYER_TYPE.STEAM:
 			add_rset_to_debug_list(caller, method)
 			SteamNetwork.remote_set(caller, method, recived_value)
 
 func n_rset_unreliable(caller : Node, method = null, recived_value = null):
-	if method == null:
+	if method == null or not check_connection():
 		return
 	
 	Multiplayer.packages_count += 1
@@ -250,7 +292,16 @@ func n_rset_unreliable(caller : Node, method = null, recived_value = null):
 	match multiplayer_mode:
 		MULTIPLAYER_TYPE.LAN:
 			add_rset_to_debug_list(caller, method)
-			caller.rset_unreliable(method, recived_value)
+			_lan_broadcast(caller, "rset_unreliable_id", [method, recived_value])
 		MULTIPLAYER_TYPE.STEAM:
 			add_rset_to_debug_list(caller, method)
 			SteamNetwork.snapshot_rset(caller, method, recived_value)
+
+func _lan_broadcast(caller, operation, args):
+	for peer in get_tree().get_network_connected_peers():
+		var flow = Multiplayer.get("Flow")
+		if is_instance_valid(flow) and flow.waiting_world_target(peer, caller):
+			continue
+		var values = [peer]
+		values.append_array(args)
+		caller.callv(operation, values)

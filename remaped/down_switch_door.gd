@@ -6,6 +6,7 @@ export  var door_health = 100
 export  var speed = 2
 var open = false
 var stop = true
+var pose_revision = 0
 var initrot = rotation
 var movement_counter = 0
 var mesh_instance
@@ -20,7 +21,9 @@ func _ready():
 	NetworkBridge.register_rset(self, "global_transform", NetworkBridge.PERMISSION.SERVER)
 	
 	NetworkBridge.register_rpcs(self, [
-		["switch_use", NetworkBridge.PERMISSION.ALL]
+		["_set_transform", NetworkBridge.PERMISSION.SERVER],
+		["sync_door_pose", NetworkBridge.PERMISSION.SERVER],
+		["network_switch_use", NetworkBridge.PERMISSION.ALL]
 	])
 	
 	audio_player = AudioStreamPlayer3D.new()
@@ -39,28 +42,48 @@ func _ready():
 	collision_shape.transform = t
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
+	if NetworkBridge.n_is_network_master(self):
+		if stop:
+			return
 		
 		if not open and not stop:
 			if not audio_player.playing:
 				audio_player.play()
-			translation.y += speed * delta
-			movement_counter += speed * delta
+			var step = min(speed * delta, mesh_instance.get_aabb().size.y + 0.1 - movement_counter)
+			translation.y += step
+			movement_counter += step
 		if open and not stop:
 			if not audio_player.playing:
 				audio_player.play()
-			translation.y -= speed * delta
-			movement_counter += speed * delta
-		if movement_counter > mesh_instance.get_aabb().size.y + 0.1:
+			var step = min(speed * delta, mesh_instance.get_aabb().size.y + 0.1 - movement_counter)
+			translation.y -= step
+			movement_counter += step
+		if movement_counter >= mesh_instance.get_aabb().size.y + 0.0999:
 			audio_player.stop()
 			movement_counter = 0
 			stop = true
+			pose_revision += 1
+			NetworkBridge.n_rpc(self, "sync_door_pose", [global_transform, pose_revision])
+		else:
+			NetworkBridge.n_rpc_unreliable(self, "_set_transform", [global_transform, pose_revision])
 
-master func switch_use(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+func switch_use():
+	NetworkBridge.request_host(self, "network_switch_use")
+
+master func network_switch_use(id):
+	if NetworkBridge.n_is_network_master(self):
 		if stop and not open:
 			open = not open
 			stop = not stop
 	else:
-		NetworkBridge.n_rpc(self, "switch_use")
+		NetworkBridge.request_host(self, "network_switch_use")
+
+puppet func _set_transform(id, value, revision):
+	if revision == pose_revision:
+			global_transform = value
+
+puppet func sync_door_pose(id, value, revision):
+	if revision < pose_revision:
+		return
+	pose_revision = revision
+	global_transform = value

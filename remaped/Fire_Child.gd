@@ -39,6 +39,7 @@ puppet func _delete(id):
 
 puppet func _create_object(id, recivedPath, recivedObject, recivedName, recivedTransform, recivedPlayerFire = null):
 	var newObject = load(recivedObject).instance()
+	NetworkBridge.inherit_damage_source(newObject, self)
 	newObject.set_name(recivedName)
 	get_node(recivedPath).add_child(newObject)
 	newObject.global_transform = recivedTransform
@@ -53,7 +54,7 @@ func _physics_process(delta):
 		if lifetime < t:
 			var parent = get_parent()
 			if parent.has_method("set_fire"):
-				parent.set_fire(false)
+				NetworkBridge.apply_damage(self, parent, "set_fire", [false])
 			
 			NetworkBridge.n_rpc(self, "_delete")
 			queue_free()
@@ -64,25 +65,27 @@ func _physics_process(delta):
 		var parent = get_parent()
 		
 		if parent.has_method("player_damage"):
-			parent.player_damage(5, Vector3.ZERO, global_transform.origin, global_transform.origin, "fire")
+			NetworkBridge.apply_damage(self, parent, "player_damage", [5, Vector3.ZERO, global_transform.origin, global_transform.origin, "fire"])
 		else:
 			if "soul" in parent and not "random_line" in parent:
 				if parent.soul.pain_sfx[0].stream != parent.soul.firesound:
 					parent.soul.pain_sfx[0].stream = parent.soul.firesound
-				parent.soul.damage(20.6, Vector3.ZERO, global_transform.origin, global_transform.origin)
+				NetworkBridge.apply_damage(self, parent.soul, "damage", [20.6, Vector3.ZERO, global_transform.origin, global_transform.origin])
 			elif "random_line" in parent:
 				if not "pain_sfx" in parent.get_parent():
 					return 
 				if parent.get_parent().pain_sfx[0].stream != parent.get_parent().firesound:
 					parent.get_parent().pain_sfx[0].stream = parent.get_parent().firesound
-				parent.get_parent().damage(5, Vector3.ZERO, global_transform.origin, global_transform.origin)
+				NetworkBridge.apply_damage(self, parent.get_parent(), "damage", [5, Vector3.ZERO, global_transform.origin, global_transform.origin])
 			else:
 				if parent.has_method("damage"):
-					parent.damage(5, Vector3.ZERO, global_transform.origin, global_transform.origin)
+					NetworkBridge.apply_damage(self, parent, "damage", [5, Vector3.ZERO, global_transform.origin, global_transform.origin])
 	else:
 		global_transform = global_transform.interpolate_with(lerp_transform, delta * 10.0)
 
 func _on_Area_body_entered(body):
+	if not NetworkBridge.damage_allowed(NetworkBridge.damage_source_id(self), NetworkBridge.damage_target_id(body)):
+		return
 	if NetworkBridge.n_is_network_master(self):
 		var parent = get_parent()
 		
@@ -91,6 +94,7 @@ func _on_Area_body_entered(body):
 				return
 			elif not body.has_meta("puppet_body") and "soul" in body:
 				var new_fire_child = f.instance()
+				NetworkBridge.inherit_damage_source(new_fire_child, self)
 				new_fire_child.set_name("FireChild#" + str(new_fire_child.get_instance_id()))
 				
 				if body.soul.on_fire:
@@ -103,6 +107,7 @@ func _on_Area_body_entered(body):
 				NetworkBridge.n_rpc(self, "_create_object", [body.soul.body.get_path(), "res://Entities/Bullets/Fire_Child.tscn", new_fire_child.name, new_fire_child.global_transform, true])
 			elif (body == Global.player or body.has_meta("puppet_body")) and not player_fire:
 				var new_fire_child = f.instance()
+				NetworkBridge.inherit_damage_source(new_fire_child, self)
 				new_fire_child.set_name("FireChild#" + str(new_fire_child.get_instance_id()))
 				
 				body.add_child(new_fire_child)

@@ -51,7 +51,7 @@ puppet func die(id):
 	Global.remove_objective()
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		t += 1
 		
 		if not activated and fmod(t, 20) == 0:

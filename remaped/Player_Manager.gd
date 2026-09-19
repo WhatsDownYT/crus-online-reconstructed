@@ -7,18 +7,22 @@ func _ready():
 	if Global.implants.head_implant.shrink:
 		scale = Vector3(0.1, 0.1, 0.1)
 	
-	var respawnPoint = load("res://MOD_CONTENT/CruS Online/respawn_point.tscn").instance()
+	if not Global.get_node("Multiplayer/NetworkBridge").check_connection():
+		return
+
+	var respawnPoint = preload("res://MOD_CONTENT/CruS Online/maps_stuff/respawn_point.tscn").instance()
 	get_node("..").call_deferred("add_child", respawnPoint)
-	respawnPoint.global_transform.origin = self.global_transform.origin
+	respawnPoint.transform = transform
 	
 	var respawnPoints = get_tree().get_nodes_in_group("Respawn")
 	respawnPoints.shuffle()
 	
-	player.global_transform.origin = respawnPoints[0].global_transform.origin
-	player.global_rotation.y = respawnPoints[0].global_rotation.y
+	if not respawnPoints.empty():
+		player.global_transform.origin = respawnPoints[0].global_transform.origin
+		player.global_rotation.y = respawnPoints[0].global_rotation.y
 
 func _process(delta):
-	if Input.is_action_just_pressed("Stocks"):
+	if Input.is_action_just_pressed("Stocks") and not Global.get_node("Multiplayer/Menu").visible:
 		$Stock_Menu.visible = not $Stock_Menu.visible
 		if $Stock_Menu.visible:
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)

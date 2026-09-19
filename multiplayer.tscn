@@ -28,15 +28,18 @@
 [ext_resource path="res://MOD_CONTENT/CruS Online/SteamNetwork.gd" type="Script" id=26]
 
 [sub_resource type="DynamicFont" id=12]
+size = 20
 use_filter = true
 font_data = ExtResource( 14 )
 
 [sub_resource type="DynamicFont" id=10]
+size = 20
 use_filter = true
 extra_spacing_bottom = 5
 font_data = ExtResource( 14 )
 
 [sub_resource type="DynamicFont" id=11]
+size = 20
 use_filter = true
 font_data = ExtResource( 14 )
 
@@ -145,15 +148,15 @@ idleTexture = ExtResource( 5 )
 labelText = "Start"
 buttonType = "Start"
 
-[node name="Disconnect" parent="Menu" instance=ExtResource( 4 )]
+[node name="ExitLevelSelect" parent="Menu" instance=ExtResource( 4 )]
 margin_left = 292.0
 margin_top = 100.0
 margin_right = 420.0
 margin_bottom = 228.0
 texture = ExtResource( 8 )
 idleTexture = ExtResource( 8 )
-labelText = "To menu"
-buttonType = "To menu"
+labelText = "Exit to Level Select"
+buttonType = "level_select"
 
 [node name="OpenChat" parent="Menu" instance=ExtResource( 4 )]
 margin_left = 164.0
@@ -213,10 +216,20 @@ stream = ExtResource( 18 )
 volume_db = 0.0
 pitch_scale = 1.0
 
-[node name="Exit" parent="Menu" instance=ExtResource( 4 )]
+[node name="ExitMenu" parent="Menu" instance=ExtResource( 4 )]
 margin_left = 356.0
 margin_top = 100.0
 margin_right = 484.0
+margin_bottom = 228.0
+texture = ExtResource( 19 )
+idleTexture = ExtResource( 19 )
+labelText = "Exit to Menu"
+buttonType = "menu"
+
+[node name="Exit" parent="Menu" instance=ExtResource( 4 )]
+margin_left = 420.0
+margin_top = 100.0
+margin_right = 548.0
 margin_bottom = 228.0
 texture = ExtResource( 19 )
 expand = true
@@ -225,13 +238,10 @@ labelText = "Exit"
 buttonType = "chat"
 
 [node name="ChatBox" type="PanelContainer" parent="Menu"]
-anchor_left = 0.395313
-anchor_top = 0.356945
-anchor_right = 0.636719
-anchor_bottom = 0.65625
-margin_right = 309.0
-margin_bottom = 215.5
-rect_scale = Vector2( 0.5, 0.5 )
+margin_left = 540.0
+margin_top = 320.0
+margin_right = 1160.0
+margin_bottom = 650.0
 theme = ExtResource( 11 )
 script = ExtResource( 13 )
 __meta__ = {
@@ -288,13 +298,10 @@ stream = SubResource( 13 )
 pitch_scale = 1.28
 
 [node name="Stats" type="PanelContainer" parent="Menu"]
-anchor_left = 0.396875
-anchor_top = 0.0722222
-anchor_right = 0.638281
-anchor_bottom = 0.350694
-margin_right = 309.0
-margin_bottom = 200.5
-rect_scale = Vector2( 0.5, 0.5 )
+margin_left = 540.0
+margin_top = 80.0
+margin_right = 1160.0
+margin_bottom = 300.0
 theme = ExtResource( 11 )
 script = ExtResource( 21 )
 __meta__ = {
@@ -331,10 +338,6 @@ margin_right = 601.0
 margin_bottom = 360.0
 custom_fonts/normal_font = SubResource( 10 )
 bbcode_enabled = true
-bbcode_text = "1: [color=#34ff98]TRIGGERED P [ALT][/color] (host)
-2: [color=#34ff98]TRIGGERED P[/color]"
-text = "1: TRIGGERED P [ALT] (host)
-2: TRIGGERED P"
 scroll_following = true
 
 [node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Menu/Stats"]
@@ -449,7 +452,7 @@ text = "FPS: 0"
 align = 2
 
 [connection signal="button_pressed" from="Menu/Start" to="Menu" method="hide_menu"]
-[connection signal="button_pressed" from="Menu/Disconnect" to="Menu" method="leave_server"]
+[connection signal="button_pressed" from="Menu/ExitLevelSelect" to="Menu" method="exit_to_level_select"]
 [connection signal="button_pressed" from="Menu/OpenChat" to="Menu/ChatBox" method="open_chat"]
 [connection signal="button_pressed" from="Menu/CloseChat" to="Menu/ChatBox" method="close_chat"]
 [connection signal="button_pressed" from="Menu/OpenStats" to="Menu/Stats" method="open_stats"]
@@ -461,3 +464,5 @@ align = 2
 
 [editable path="Menu/CloseChat"]
 [editable path="Menu/CloseStats"]
+
+[connection signal="button_pressed" from="Menu/ExitMenu" to="Menu" method="exit_to_menu"]

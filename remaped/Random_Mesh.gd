@@ -14,7 +14,7 @@ func _ready():
 	
 	collision.disabled = true
 	
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if randi() % 2 != 0:
 			foodType = randi() % get_child_count()
 			get_child(foodType).show()

@@ -18,8 +18,8 @@ var type = 1
 var audio_player
 
 var isDestroyed = false
+var pose_revision = 0
 
-var destroy_check_timer
 
 func _ready():
 	rset_config("global_transform",MultiplayerAPI.RPC_MODE_PUPPET)
@@ -28,6 +28,8 @@ func _ready():
 	NetworkBridge.register_rset(self, "door_health", NetworkBridge.PERMISSION.SERVER)
 	
 	NetworkBridge.register_rpcs(self, [
+		["_set_transform", NetworkBridge.PERMISSION.SERVER],
+		["sync_door_pose", NetworkBridge.PERMISSION.SERVER],
 		["remove_on_ready", NetworkBridge.PERMISSION.SERVER],
 		["remove", NetworkBridge.PERMISSION.SERVER],
 		["_get_transform", NetworkBridge.PERMISSION.ALL],
@@ -68,31 +70,41 @@ func _ready():
 	audio_player.max_db = 4
 	audio_player.pitch_scale = 0.6
 	
-	destroy_check_timer = Timer.new()
-	destroy_check_timer.wait_time = 2.0
-	destroy_check_timer.one_shot = true
-	destroy_check_timer.connect("timeout", self, "respawn")
-
-	if not NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.check_connection() and not NetworkBridge.n_is_network_master(self):
 		NetworkBridge.n_rpc(self, "_get_transform")
 		NetworkBridge.n_rpc(self, "check_removed")
 
 master func _get_transform(id):
-	NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
+	NetworkBridge.n_rpc_id(self, id, "sync_door_pose", [global_transform, pose_revision])
+
+puppet func _set_transform(id, value, revision):
+	if revision != pose_revision:
+		return
+	global_transform = value
+
+puppet func sync_door_pose(id, value, revision):
+	if revision < pose_revision:
+		return
+	pose_revision = revision
+	global_transform = value
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not open and not stop:
-			rotation.y += rotation_speed * delta
-			rotation_counter += rad2deg(rotation_speed * delta)
-			NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
+			var step = min(rotation_speed * delta, deg2rad(90 - rotation_counter))
+			rotation.y += step
+			rotation_counter += rad2deg(step)
+			NetworkBridge.n_rpc_unreliable(self, "_set_transform", [global_transform, pose_revision])
 		if open and not stop:
-			rotation.y -= rotation_speed * delta
-			rotation_counter += rad2deg(rotation_speed * delta)
-			NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
-		if rotation_counter > 90:
+			var step = min(rotation_speed * delta, deg2rad(90 - rotation_counter))
+			rotation.y -= step
+			rotation_counter += rad2deg(step)
+			NetworkBridge.n_rpc_unreliable(self, "_set_transform", [global_transform, pose_revision])
+		if rotation_counter >= 89.999:
 			rotation_counter = 0
 			stop = true
+			pose_revision += 1
+			NetworkBridge.n_rpc(self, "sync_door_pose", [global_transform, pose_revision])
 
 master func check_removed(id):
 	if isDestroyed:
@@ -102,27 +114,24 @@ func destroy(collision_n, collision_p):
 	network_destroy(null, collision_n, collision_p)
 
 master func network_destroy(id, collision_n, collision_p):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		damage(200, collision_n, collision_p, Vector3.ZERO)
 	else:
-		remove(null, collision_n, collision_p)
 		NetworkBridge.n_rpc(self, "network_destroy", [collision_n, collision_p])
 
 func damage(dmg, nrml, pos, shoot_pos):
 	network_damage(null, dmg, nrml, pos, shoot_pos)
 
 master func network_damage(id, damage, collision_n, collision_p, shooter_pos):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if isDestroyed:
+		return
+	if NetworkBridge.n_is_network_master(self):
 		door_health -= damage
 		if door_health <= 0:
 			remove(null, collision_n, collision_p)
 			NetworkBridge.n_rpc(self, "remove", [collision_n, collision_p, true])
 		NetworkBridge.n_rset(self, "door_health", door_health)
 	else:
-		door_health -= damage
-		if door_health <= 0:
-			remove(null, collision_n, collision_p)
-			destroy_check_timer.start()
 		NetworkBridge.n_rpc(self, "network_damage", [damage, collision_n, collision_p, shooter_pos])
 
 func get_type():
@@ -132,39 +141,34 @@ func use():
 	network_use(null)
 	
 master func network_use(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		stop = not stop
 		open = not open
+		pose_revision += 1
+		NetworkBridge.n_rpc(self, "sync_door_pose", [global_transform, pose_revision])
 	else:
 		NetworkBridge.n_rpc(self, "network_use")
 
 puppet func remove_on_ready(id):
+	isDestroyed = true
 	set_collision_layer_bit(0,false)
 	set_collision_mask_bit(0,false)
 	set_collision_layer_bit(8, false)
 	hide()
 
 puppet func remove(id, collision_n, collision_p, from_host = false):
-	if not visible and from_host:
-		destroy_check_timer.stop()
-	else:
-		isDestroyed = true
-		audio_player.global_transform.origin = collision_p
-		audio_player.play()
-		var new_particle = PARTICLE.instance()
-		get_parent().add_child(new_particle)
-		new_particle.global_transform.origin = collision_p
-		new_particle.look_at(global_transform.origin + collision_n * 5 + Vector3(1e-06, 0, 0), Vector3.UP)
-		new_particle.material_override = mesh_instance.mesh.surface_get_material(0)
-		new_particle.emitting = true
-		set_collision_layer_bit(0,false)
-		set_collision_mask_bit(0,false)
-		set_collision_layer_bit(8, false)
-		hide()
-
-func respawn():
-	isDestroyed = false
-	set_collision_layer_bit(0,true)
-	set_collision_mask_bit(0,true)
-	set_collision_layer_bit(8, true)
-	show()
+	if isDestroyed:
+		return
+	isDestroyed = true
+	audio_player.global_transform.origin = collision_p
+	audio_player.play()
+	var new_particle = PARTICLE.instance()
+	get_parent().add_child(new_particle)
+	new_particle.global_transform.origin = collision_p
+	new_particle.look_at(global_transform.origin + collision_n * 5 + Vector3(1e-06, 0, 0), Vector3.UP)
+	new_particle.material_override = mesh_instance.mesh.surface_get_material(0)
+	new_particle.emitting = true
+	set_collision_layer_bit(0,false)
+	set_collision_mask_bit(0,false)
+	set_collision_layer_bit(8, false)
+	hide()

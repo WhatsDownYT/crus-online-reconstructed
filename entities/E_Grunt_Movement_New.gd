@@ -2,6 +2,8 @@ extends KinematicBody
 
 
 
+const Targeting = preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd")
+
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 var rotation_helper:Spatial
@@ -49,6 +51,10 @@ var line_of_sight_y:float
 var heading:Vector3
 var heading_y:Vector3
 var spot_time = 0.5
+var _target_identity = 0
+var _target_camo = 0.0
+var _sight_notice_at = 0
+var _psychosis_notice_at = 0
 var sight_potential = false
 var has_anim_attack
 export  var fix_helper_pos = true
@@ -90,12 +96,14 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 
 func get_near_player(object) -> Dictionary:
-	var oldDistance = null
+	var oldDistance = INF
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors():
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
-		if oldDistance == null or oldDistance > distance:
+		if oldDistance > distance:
 			oldDistance = distance
 			checkPlayer = selectedPlayer
 	
@@ -111,6 +119,8 @@ puppet func set_psychosis(id, value):
 	Global.player.set_psychosis(value)
 
 puppet func set_animation(id, anim:String, speed:float)->void :
+	if not anim_player.has_animation(anim):
+		return
 	anim_player.play(anim)
 	anim_player.playback_speed = speed
 
@@ -121,16 +131,24 @@ puppet func set_puppet_transform(id, recived_position, recived_rotation):
 	lerp_transform.origin = recived_position
 
 var tick = 0
+var _snapshot_elapsed = 0.0
 
-func host_tick():
-	if (global_transform.origin - last_transform.origin).length() > 0.01:
-		tick += 1
-		if not soul.gibs_spawned and tick % 2 == 0:
-			NetworkBridge.n_rset_unreliable(self, "lerp_transform", global_transform)
-			last_transform = global_transform
-			tick = 0
+func host_tick(delta = 0.016667):
+	_snapshot_elapsed += delta
+	var interval = 0.2 if typeof(player_distance) == TYPE_REAL and player_distance > 40 else 0.05
+	if _snapshot_elapsed < interval or soul.gibs_spawned:
+		return
+	_snapshot_elapsed = 0.0
+	if (global_transform.origin - last_transform.origin).length_squared() > 0.0001 or not global_transform.basis.is_equal_approx(last_transform.basis):
+		NetworkBridge.n_rset_unreliable(self, "lerp_transform", global_transform)
+		last_transform = global_transform
 
 
+func _configure_animations():
+	for animation_name in ["Idle", "Run", "Attack"]:
+		if anim_player.has_animation(animation_name):
+			anim_player.get_animation(animation_name).loop = true
+	has_anim_attack = anim_player.has_animation("Attack")
 
 func _ready()->void :
 	NetworkBridge.register_rpcs(self,[
@@ -161,7 +179,6 @@ func _ready()->void :
 	tranqtimer.wait_time = 60
 	tranqtimer.one_shot = true
 	tranqtimer.connect("timeout", self, "tranq_timeout")
-	spot_time += glob.implants.torso_implant.camo
 	if move_speed != 0:
 		move_speed += rand_range( - 1, 1)
 	alertness = floor(rand_range(50, 200))
@@ -175,9 +192,7 @@ func _ready()->void :
 	
 	anim_player = get_parent().get_node("Nemesis/AnimationPlayer")
 	
-	anim_player.get_animation("Idle").loop = true
-	anim_player.get_animation("Run").loop = true
-	anim_player.get_animation("Attack").loop = true
+	_configure_animations()
 	
 	footstep = AudioStreamPlayer3D.new()
 	add_child(footstep)
@@ -225,7 +240,7 @@ func _ready()->void :
 		find_path(get_physics_process_delta_time())
 	stealthed = glob.implants.torso_implant.stealth and global_transform.origin.distance_to(glob.player.global_transform.origin) > 20
 	yield (get_tree(), "idle_frame")
-	nearby = soul.new_alert_sphere.get_overlapping_bodies()
+	nearby = soul.new_alert_sphere.get_overlapping_bodies() if soul.new_alert_sphere.monitoring else []
 	move()
 
 puppet func hide_muzzleflash(id, hideFlash):
@@ -233,101 +248,98 @@ puppet func hide_muzzleflash(id, hideFlash):
 		muzzleflash.hide()
 
 func _physics_process(delta)->void :
-	if NetworkBridge.check_connection():
-		if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-			host_tick()
-			
-			var nearest_player = get_near_player(self)
-			
-			player = nearest_player.player
-			player_distance = nearest_player.distance
-			
-			if player == null:
-				return 
-			if player_distance > glob.draw_distance + 10:
-				return 
-			if Global.every_20:
-				stealthed = glob.implants.torso_implant.stealth and player_distance > 20
-			if civ_killer:
-				player_spotted = true
-			var fps = Global.fps
-			if fps < 30:
-				if Global.every_2:
-					return 
-				if player_distance > 30:
-					return 
-			height_difference = player.global_transform.origin.y > global_transform.origin.y and abs(player.global_transform.origin.y - global_transform.origin.y) > 21
-			anim_counter += 1
-			time += 1
-			if muzzleflash.visible:
-				muzzleflash.hide()
-				NetworkBridge.n_rpc(self, "hide_muzzleflash", [true])
-			if player_distance > ai_distance:
-				return 
-			if player_distance > 50 and Global.every_2:
-				return 
-			elif player_distance > 50 and not Global.every_2:
-				delta *= 2
-			if Global.every_55:
-				if randi() % 2 == 1:
-					shoot_mode = true
-				elif not civ_killer:
-					shoot_mode = false
-			if move_speed == 0:
-				if player_spotted and not dead and not tranq:
-					rotate_towards = lerp(rotate_towards, player.global_transform.origin, 6 * delta)
-					look_at(rotate_towards, Vector3.UP)
-					rotation.x = 0
+	if NetworkBridge.n_is_network_master(self):
+		host_tick(delta)
+
+		var nearest_player = get_near_player(self)
+
+		player = nearest_player.player
+		player_distance = nearest_player.distance
+
+		if player == null:
+			return
+		if player_distance > glob.draw_distance + 10:
+			return
+		var target_implants = {"stealth": glob.implants.torso_implant.stealth, "camo": glob.implants.torso_implant.camo} if player == Global.player else player.get_parent().implant_state
+		stealthed = target_implants.get("stealth", false) and player_distance > 20
+		var camo = target_implants.get("camo", 0.0)
+		if _target_identity != player.get_instance_id() or camo != _target_camo:
+			_target_identity = player.get_instance_id()
+			_target_camo = camo
+			spot_time = 0.5 + camo
+		if civ_killer:
+			player_spotted = true
+		height_difference = player.global_transform.origin.y > global_transform.origin.y and abs(player.global_transform.origin.y - global_transform.origin.y) > 21
+		anim_counter += 1
+		time += 1
+		if muzzleflash.visible:
+			muzzleflash.hide()
+		if player_distance > ai_distance:
+			return
+		if player_distance > 50 and Global.every_2:
+			return
+		elif player_distance > 50 and not Global.every_2:
+			delta *= 2
+		if Global.every_55:
+			if randi() % 2 == 1:
 				shoot_mode = true
-			if not player_spotted and not dead and not tranq and (player_distance < 40 or move_speed != 0):
-				wait_for_player(delta)
-			track_player(delta)
-			if not sight_potential and player_distance > 20 and fmod(time, 20) != 0 and not alerted and not player_spotted:
-				return 
-			if fmod(time, 5) == 0 and sight_potential:
-				heading = - Vector3(player.global_transform.origin.x, 0, player.global_transform.origin.z).direction_to(Vector3(global_transform.origin.x, 0, global_transform.origin.z))
-				line_of_sight = global_transform.origin.direction_to(forward_helper.global_transform.origin).dot(heading)
-				heading_y = (player.global_transform.origin - global_transform.origin).normalized()
-				line_of_sight_y = transform.basis.xform(Vector3.UP).dot(heading_y)
-			if fmod(time, 20) == 0 and player_distance < 30:
-				if velocity_ray.is_colliding():
-					var collider = velocity_ray.get_collider()
-					var normal = velocity_ray.get_collision_normal()
-					var point = velocity_ray.get_collision_point()
-					if is_instance_valid(collider):
-						if collider.has_method("use") and collider.has_method("destroy") and not collider.get_collision_layer_bit(6) and (alerted or player_spotted):
-							collider.destroy(normal, point)
-						elif rand_patroller and collider.has_method("destroy") and collider.has_method("use") and ( not alerted and not player_spotted) and not pos_flag:
-							if pos_flag:
-								path = NavigationServer.map_get_path(navigation, global_transform.origin, pos2, true)
-								pos_flag = not pos_flag
-							else :
-								path = NavigationServer.map_get_path(navigation, global_transform.origin, pos1, true)
-								pos_flag = not pos_flag
-						elif collider.has_method("use") and not collider.has_method("destroy") and not collider.get_collision_layer_bit(6) and Vector2(velocity.x, velocity.z).length() > 0.2:
-							collider.use()
-						elif collider.has_method("piercing_damage") and player_spotted:
-							collider.piercing_damage(200, normal, point, global_transform.origin)
-			velocity.y -= gravity * delta
-			if not dead and not tranq:
-				if player_spotted:
-					player_spotted()
-				if path.size() > 0 and ((player_distance > engage_distance and ( not shoot_mode or melee)) or not in_sight) and player_spotted:
-						find_path(delta)
+			elif not civ_killer:
+				shoot_mode = false
+		if move_speed == 0:
+			if player_spotted and not dead and not tranq:
+				rotate_towards = lerp(rotate_towards, player.global_transform.origin, 6 * delta)
+				look_at(rotate_towards, Vector3.UP)
+				rotation.x = 0
+			shoot_mode = true
+		if not player_spotted and not dead and not tranq and (player_distance < 40 or move_speed != 0):
+			wait_for_player(delta)
+		heading = - Vector3(player.global_transform.origin.x, 0, player.global_transform.origin.z).direction_to(Vector3(global_transform.origin.x, 0, global_transform.origin.z))
+		line_of_sight = global_transform.origin.direction_to(forward_helper.global_transform.origin).dot(heading)
+		heading_y = (player.global_transform.origin - global_transform.origin).normalized()
+		line_of_sight_y = transform.basis.xform(Vector3.UP).dot(heading_y)
+		track_player(delta)
+		if not sight_potential and player_distance > 20 and fmod(time, 20) != 0 and not alerted and not player_spotted:
+			return
+		if fmod(time, 20) == 0 and player_distance < 30:
+			if velocity_ray.is_colliding():
+				var collider = velocity_ray.get_collider()
+				var normal = velocity_ray.get_collision_normal()
+				var point = velocity_ray.get_collision_point()
+				if is_instance_valid(collider):
+					if collider.has_method("use") and collider.has_method("destroy") and not collider.get_collision_layer_bit(6) and (alerted or player_spotted):
+						collider.destroy(normal, point)
+					elif rand_patroller and collider.has_method("destroy") and collider.has_method("use") and ( not alerted and not player_spotted) and not pos_flag:
+						if pos_flag:
+							path = NavigationServer.map_get_path(navigation, global_transform.origin, pos2, true)
+							pos_flag = not pos_flag
+						else :
+							path = NavigationServer.map_get_path(navigation, global_transform.origin, pos1, true)
+							pos_flag = not pos_flag
+					elif collider.has_method("use") and not collider.has_method("destroy") and not collider.get_collision_layer_bit(6) and Vector2(velocity.x, velocity.z).length() > 0.2:
+						collider.use()
+					elif collider.has_method("piercing_damage") and player_spotted:
+						collider.piercing_damage(200, normal, point, global_transform.origin)
+		velocity.y -= gravity * delta
+		if not dead and not tranq:
+			if player_spotted:
+				player_spotted()
+			if path.size() > 0 and ((player_distance > engage_distance and ( not shoot_mode or melee)) or not in_sight) and player_spotted:
+					find_path(delta)
+			else :
+				if in_sight:
+					active(delta)
 				else :
-					if in_sight:
-						active(delta)
-					else :
-						reaction_timer = clamp(reaction_timer, 0, reaction_time + 1) - 5 * delta
-			elif is_on_floor():
-					velocity.x *= 0.95
-					velocity.z *= 0.95
-			move()
-		else:
-			global_transform = global_transform.interpolate_with(lerp_transform, delta * 10.0)
+					reaction_timer = clamp(reaction_timer, 0, reaction_time + 1) - 5 * delta
+		elif is_on_floor():
+				velocity.x *= 0.95
+				velocity.z *= 0.95
+		move()
+	else:
+		if not global_transform.is_equal_approx(lerp_transform):
+			global_transform = global_transform.interpolate_with(lerp_transform, clamp(delta * 10.0, 0.0, 1.0))
 
 func move()->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if crusher:
 			for i in get_slide_count():
 				var collision = get_slide_collision(i)
@@ -337,7 +349,7 @@ func move()->void :
 		velocity = move_and_slide(velocity, Vector3.UP, false, 4, 0.785398)
 
 func wait_for_player(delta)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not patrol:
 			if move_speed == 0:
 				if anim_player.current_animation != "Idle":
@@ -393,25 +405,29 @@ func anim()->void :
 	pass
 
 func track_player(delta)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		var player_offset = Vector3(0, 1.5, 0)
-		if civ_killer:
-			player_offset = Vector3(0, - 1.5, 0)
-		if glob.menu.in_game:
-			if glob.player.crouch_flag:
-				player_offset = Vector3(0, 0.7, 0)
-		player_ray.look_at(player.aim_point.global_transform.origin, Vector3.UP)
+	if NetworkBridge.n_is_network_master(self):
+		in_sight = false
+		sight_potential = false
+		if dead or tranq or not is_instance_valid(player):
+			return
+		var aim_position = player.aim_point.global_transform.origin
+		if player_ray.global_transform.origin.distance_squared_to(aim_position) < 0.000001:
+			return
+		player_ray.look_at(aim_position, Vector3.UP)
+		player_ray.force_raycast_update()
 		if player_ray.is_colliding() and not dead and not tranq:
 			var collider = player_ray.get_collider()
-			if collider == player or collider.has_meta("puppetId"):
+			if Targeting.matches(collider, player):
 				sight_potential = true
-			if (collider == player or collider.has_meta("puppetId")) and line_of_sight > 0 and not height_difference and line_of_sight_y < 0.8 and not stealthed:
-				if not civ_killer:
+			if (Targeting.matches(collider, player)) and line_of_sight > 0 and not height_difference and line_of_sight_y < 0.8 and not stealthed:
+				if not civ_killer and OS.get_ticks_msec() >= _sight_notice_at:
+					_sight_notice_at = OS.get_ticks_msec() + 200
 					if collider.has_meta("puppetId"):
 						NetworkBridge.n_rpc_id(self, collider.get_meta("puppetId"), "set_in_sight", [true])
 					else:
 						Global.player.UI.set_in_sight(true)
-				if soul.psychosis_inducer:
+				if soul.psychosis_inducer and OS.get_ticks_msec() >= _psychosis_notice_at:
+					_psychosis_notice_at = OS.get_ticks_msec() + 200
 					if collider.has_meta("puppetId"):
 						NetworkBridge.n_rpc_id(self, collider.get_meta("puppetId"), "set_psychosis", [true])
 					else:
@@ -425,7 +441,7 @@ func track_player(delta)->void :
 						if is_instance_valid(knocksound):
 							$Knocksound.queue_free()
 					rotation_helper.look_at(player.global_transform.origin + Vector3(0, 2, 0), Vector3.UP)
-			elif not (collider == player or collider.has_meta("puppet")):
+			elif not (Targeting.matches(collider, player)):
 				in_sight = false
 				sight_potential = false
 		if not in_sight and player_spotted:
@@ -438,7 +454,7 @@ func track_player(delta)->void :
 			alerted_counter = 0
 
 func player_spotted()->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		glob.action_lerp_value += 1
 		if fmod(time, pathing_frequency) == 0:
 			var new_path = NavigationServer.map_get_path(navigation, global_transform.origin, player.global_transform.origin, true)
@@ -451,7 +467,7 @@ func add_velocity(incvelocity:Vector3):
 	network_add_velocity(null, incvelocity)
 
 master func network_add_velocity(id, incvelocity:Vector3)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		velocity -= incvelocity
 		if not dead and not tranq:
 			yield (get_tree(), "idle_frame")
@@ -467,7 +483,7 @@ func alert(pos:Vector3):
 	network_alert(null, pos)
 
 master func network_alert(id, pos:Vector3)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if player_spotted or alerted or dead or tranq:
 			return 
 		
@@ -484,7 +500,7 @@ master func network_alert(id, pos:Vector3)->void :
 		NetworkBridge.n_rpc(self, "network_alert", [pos])
 
 func active(delta:float)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if burst_counter >= burst_size:
 			burst_reloading = true
 		if burst_counter <= 0:
@@ -511,7 +527,7 @@ func active(delta:float)->void :
 				NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
 
 func find_path(delta)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if move_speed == 0:
 			if anim_player.current_animation != "Idle":
 				anim_player.play("Idle")
@@ -529,6 +545,7 @@ func find_path(delta)->void :
 						NetworkBridge.n_rpc(self, "set_animation", ["Run", anim_speed])
 				else :
 					if anim_player.current_animation != "Idle":
+						anim_player.play("Idle")
 						NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
 				if is_instance_valid(movement_sound):
 					if fmod(time, 5) == 0:
@@ -588,16 +605,24 @@ func set_flee():
 	network_set_flee(null)
 
 master func network_set_flee(id)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		flee = true
 	else:
 		NetworkBridge.n_rpc(self, "network_set_flee")
 
 func set_dead():
+	if is_instance_valid(muzzleflash):
+		muzzleflash.hide()
+	if not NetworkBridge.is_world_authority():
+		dead = true
+		weapon.hide()
+		return
 	network_set_dead(null)
 
 master func network_set_dead(id)->void :
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if is_instance_valid(muzzleflash):
+		muzzleflash.hide()
+	if NetworkBridge.n_is_network_master(self):
 		if not dead:
 			dead = true
 			weapon.hide()
@@ -613,7 +638,7 @@ func tranquilize(id = null):
 	network_set_tranquilized(id)
 
 master func network_set_tranquilized(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not tranq:
 			tranq = true
 			if anim_player.has_animation(DEATH_ANIMS[0]):
@@ -624,13 +649,17 @@ master func network_set_tranquilized(id):
 		NetworkBridge.n_rpc(self, "network_set_tranquilized")
 
 func tranq_timeout():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if dead:
 			return 
 		if anim_player.has_animation(DEATH_ANIMS[0]):
 			anim_player.play_backwards(DEATH_ANIMS[0])
 		while (anim_player.is_playing() and anim_player.current_animation == DEATH_ANIMS[0]):
 			yield (get_tree(), "physics_frame")
+		if dead:
+			return
 		tranq = false
+		set_animation(null, "Idle", 1)
+		NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
 		set_collision_layer_bit(4, true)
 		flee = false

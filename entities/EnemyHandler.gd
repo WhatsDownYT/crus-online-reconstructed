@@ -40,6 +40,7 @@ var weapon
 var weapon_drop = preload("res://Entities/Objects/Gun_Pickup.tscn")
 var grilled_material = preload("res://Materials/grilled.tres")
 var dead = false
+var last_damage_peer = 0
 var flee = false
 var on_fire = false
 var player_seen = false
@@ -122,6 +123,9 @@ var Multiplayer = Global.get_node("Multiplayer")
 
 
 var enabled = true
+var _suspended_nodes = []
+var _presentation_notifier
+var _presentation_animation
 
 var blood_particles
 
@@ -143,6 +147,8 @@ puppet func _die_client(id):
 		for particle in all_particles:
 			particle.queue_free()
 		body.set_dead()
+		if "disabled" in weapon:
+			weapon.disabled = true
 		
 		colliders.get_node("Head/CollisionShape").disabled = true
 		colliders.get_node("Torso/CollisionShape").disabled = true
@@ -179,6 +185,7 @@ puppet func _hide_npc_client(id):
 	body.set_collision_layer_bit(4, false)
 
 puppet func respawn(id, host_objective = null):
+	call_deferred("_update_simulation")
 	if host_objective != null:
 		objective = host_objective
 		$Body/Objective_Indicator.visible = objective
@@ -188,6 +195,7 @@ puppet func respawn(id, host_objective = null):
 	body.set_collision_layer_bit(4, true)
 
 puppet func cleanup(id, teleport_body = true):
+	call_deferred("_update_simulation")
 	enabled = false
 	hide()
 	dead = true
@@ -202,6 +210,10 @@ master func check_npc(id):
 		NetworkBridge.n_rpc_id(self, id, "cleanup")
 	else:
 		NetworkBridge.n_rpc_id(self, id, "respawn", [objective])
+		if dead:
+			NetworkBridge.n_rpc_id(self, id, "_die_client")
+		if gibs_spawned:
+			NetworkBridge.n_rpc_id(self, id, "_hide_npc_client")
 
 func set_stealth():
 	network_set_stealth(null)
@@ -210,7 +222,7 @@ puppet func network_set_stealth(id):
 	if not stealth:
 		return 
 	skeleton.get_node("Armature/Skeleton/Cube").material_override = stealthmat
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		NetworkBridge.n_rpc(self, "network_set_stealth")
 
 
@@ -224,6 +236,7 @@ func deathtimer_cleanup():
 	cleanup(null)
 
 func _ready():
+	call_deferred("_configure_replica")
 	glob = Global
 	body = $Body
 	
@@ -262,43 +275,45 @@ func _ready():
 	rset_config("health", MultiplayerAPI.RPC_MODE_PUPPET)
 	rset_config("armor", MultiplayerAPI.RPC_MODE_PUPPET)
 	
-	if NetworkBridge.check_connection():
-		if NetworkBridge.n_is_network_master(self):
-			if hell_objective and not glob.hope_discarded:
-				cleanup(null) 
-			elif hell_objective and (glob.hope_discarded):
+	if NetworkBridge.n_is_network_master(self):
+		if hell_objective and not glob.hope_discarded:
+			cleanup(null)
+		elif hell_objective and (glob.hope_discarded):
+			objective = true
+		if (chaos_objective and not glob.chaos_mode):
+			cleanup(null)
+		if chaos_objective and rand_range(0, 100) > 25:
+			cleanup(null)
+		if glob.chaos_mode:
+			if rand_range(0, 100) < 10:
+				stealth_random = true
+			if chaos_objective:
 				objective = true
-			if (chaos_objective and not glob.chaos_mode):
-				cleanup(null) 
-			if chaos_objective and rand_range(0, 100) > 25:
-				cleanup(null) 
-			if glob.chaos_mode:
-				if rand_range(0, 100) < 10:
-					stealth_random = true
-				if chaos_objective:
-					objective = true
-				if rand_range(0, 100) < 10:
-					poison_death = true
-				if rand_range(0, 100) < 10:
-					healthy_random = true
-				if rand_range(0, 100) < 10:
-					armored_random = true
-			if not civilian and glob.hope_discarded:
-				if health < 70 and health > 20:
-					health = 70
-			if glob.DEAD_CIVS.find(npc_name) != - 1:
+			if rand_range(0, 100) < 10:
+				poison_death = true
+			if rand_range(0, 100) < 10:
+				healthy_random = true
+			if rand_range(0, 100) < 10:
+				armored_random = true
+		if not civilian and glob.hope_discarded:
+			if health < 70 and health > 20:
+				health = 70
+		if civilian and not objective and not hell_objective and not chaos_objective and "LINES" in body and body.LINES.empty():
+			if glob.civilian_reduction != 101 and rand_range(0, 100) > glob.civilian_reduction:
 				cleanup(null)
-			if glob.hope_discarded:
-				pass
-			elif (glob.ending_1 or glob.punishment_mode) and random_spawn:
-				if randi() % 25 != 4:
-					cleanup(null)
-			elif random_spawn:
-				if randi() % 250 != 4:
-					cleanup(null)
-		else:
-			cleanup(null, false)
-	
+		if glob.DEAD_CIVS.find(npc_name) != - 1:
+			cleanup(null)
+		if glob.hope_discarded:
+			pass
+		elif (glob.ending_1 or glob.punishment_mode) and random_spawn:
+			if randi() % 25 != 4:
+				cleanup(null)
+		elif random_spawn:
+			if randi() % 250 != 4:
+				cleanup(null)
+	else:
+		cleanup(null, false)
+
 	nodamage = get_node_or_null("Body/SFX/NoDamage")
 	if nodamage == null:
 		nodamage = AudioStreamPlayer3D.new()
@@ -381,7 +396,7 @@ func _ready():
 		heartbeat = new_heartbeat
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if on_fire:
 			var dist_clamped = clamp(body.global_transform.origin.distance_to(glob.player.global_transform.origin), 0.1, 20)
 			pain_sfx[0].pitch_scale = 0.5 + ((dist_clamped - 0.1) / (20 - 0.1))
@@ -391,13 +406,13 @@ func set_tranquilized(dart = null):
 	network_set_tranquilized(null, dart)
 
 master func network_set_tranquilized(id, dart):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		tranqtimer.start()
 	else:
 		NetworkBridge.n_rpc_id(self, 0, "network_set_tranquilized", [dart])
 
 func tranq_timeout(dart):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if armored or poison_death:
 			return 
 		if not civilian and body.get("player_spotted"):
@@ -416,7 +431,7 @@ func add_velocity(amount, normal):
 	network_add_velocity(null, amount, normal)
 
 master func network_add_velocity(id, amount, normal):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not armored:
 			body.add_velocity(normal * amount)
 	else:
@@ -426,121 +441,127 @@ func piercing_damage(damage, collision_n, collision_p):
 	network_piercing_damage(null, damage, collision_n, collision_p)
 
 master func network_piercing_damage(id, damage, collision_n, collision_p):
-	if NetworkBridge.check_connection():
-		if not dead and armor > 0:
-			for body in new_alert_sphere.get_overlapping_bodies() and NetworkBridge.n_is_network_master(self):
-				if body.has_method("alert"):
-					body.alert(glob.player.global_transform.origin)
-			pain_sfx[0].play()
-		armor -= damage
-		
-		if NetworkBridge.n_is_network_master(self):
-			NetworkBridge.n_rset(self, "armor", armor)
-		
-		if health <= flee_health and damage > 0.5 and NetworkBridge.n_is_network_master(self):
-			body.set_flee()
-			flee = true
-		if health <= 0:
-			if not dead:
-				blood_particles.global_transform = torso.global_transform
-				blood_particles.emitting = true
-				die(damage, collision_n, collision_p)
-		if health <= gib_health and not gibs_spawned and gib:
-			gibs_spawned = true
-			gib_sfx.play()
+	if not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "network_piercing_damage", [damage, collision_n, collision_p])
+		return
+	last_damage_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+	if not dead and armor > 0:
+		for body in new_alert_sphere.get_overlapping_bodies():
+			if body.has_method("alert"):
+				body.alert(glob.player.global_transform.origin)
+		pain_sfx[0].play()
+	armor -= damage
+
+	if NetworkBridge.n_is_network_master(self):
+		NetworkBridge.n_rset(self, "armor", armor)
+
+	if health <= flee_health and damage > 0.5 and NetworkBridge.n_is_network_master(self):
+		body.set_flee()
+		flee = true
+	if health <= 0:
+		if not dead:
 			blood_particles.global_transform = torso.global_transform
 			blood_particles.emitting = true
-			if NetworkBridge.n_is_network_master(self):
-				spawn_gib(damage, collision_n, collision_p)
-				
-				NetworkBridge.n_rpc(self, "_hide_npc_client")
-			skeleton.hide()
-			colliders.get_node("Dead_Head/CollisionShape").disabled = true
-			colliders.get_node("Dead_Body/CollisionShape").disabled = true
-			deathtimer.start()
-			yield(gib_sfx, "finished")
-			if NetworkBridge.n_is_network_master(self):
-				global_transform.origin = Vector3(1000,1000,1000)
-				body.lerp_transform.origin = Vector3(1000,1000,1000)
-			body.set_collision_layer_bit(4, false)
-		if not NetworkBridge.n_is_network_master(self):
-			NetworkBridge.n_rpc_id(self, 0,"network_piercing_damage", [damage, collision_n, collision_p])
+			die(damage, collision_n, collision_p)
+	if health <= gib_health and not gibs_spawned and gib:
+		gibs_spawned = true
+		gib_sfx.play()
+		blood_particles.global_transform = torso.global_transform
+		blood_particles.emitting = true
+		if NetworkBridge.n_is_network_master(self):
+			spawn_gib(damage, collision_n, collision_p)
+
+			NetworkBridge.n_rpc(self, "_hide_npc_client")
+		skeleton.hide()
+		colliders.get_node("Dead_Head/CollisionShape").disabled = true
+		colliders.get_node("Dead_Body/CollisionShape").disabled = true
+		deathtimer.start()
+		yield(gib_sfx, "finished")
+		if NetworkBridge.n_is_network_master(self):
+			global_transform.origin = Vector3(1000,1000,1000)
+			body.lerp_transform.origin = Vector3(1000,1000,1000)
+		body.set_collision_layer_bit(4, false)
+	if not NetworkBridge.n_is_network_master(self):
+		NetworkBridge.n_rpc_id(self, 0,"network_piercing_damage", [damage, collision_n, collision_p])
 
 func alert_body_entered(b):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		nearby.append(b)
 
 func alert_body_exited(b):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		nearby.remove(nearby.find(b))
 
 func damage(damage, collision_n, collision_p, shooter_pos):
 	network_damage(null, damage, collision_n, collision_p, shooter_pos)
 
 master func network_damage(id, damage, collision_n, collision_p, shooter_pos):
-	if NetworkBridge.check_connection():
-		if on_fire and not grilled_flag:
-			if head_mesh:
-				head_mesh.material_override = grilled_material
-			if torso_mesh:
-				torso_mesh.material_override = grilled_material
-			grilled_flag = true
-		if health > 199 and civilian:
-			glob.player.UI.message("Stop that!", true)
-		if armor > 0:
-			if nodamage != null:
-				nodamage.pitch_scale = 1.2 + rand_range(0, 0.2)
-				nodamage.play()
-			for body in new_alert_sphere.get_overlapping_bodies() and NetworkBridge.n_is_network_master(self):
+	if not NetworkBridge.is_world_authority():
+		NetworkBridge.request_host(self, "network_damage", [damage, collision_n, collision_p, shooter_pos])
+		return
+	last_damage_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+	if on_fire and not grilled_flag:
+		if head_mesh:
+			head_mesh.material_override = grilled_material
+		if torso_mesh:
+			torso_mesh.material_override = grilled_material
+		grilled_flag = true
+	if health > 199 and civilian:
+		glob.player.UI.message("Stop that!", true)
+	if armor > 0:
+		if nodamage != null:
+			nodamage.pitch_scale = 1.2 + rand_range(0, 0.2)
+			nodamage.play()
+		for body in new_alert_sphere.get_overlapping_bodies():
+			if body.has_method("alert"):
+				body.alert(glob.player.global_transform.origin)
+		return
+	if not dead and damage > 0.5:
+		if not alerted:
+			for body in new_alert_sphere.get_overlapping_bodies():
 				if body.has_method("alert"):
 					body.alert(glob.player.global_transform.origin)
-			return 
-		if not dead and damage > 0.5:
-			if not alerted:
-				for body in new_alert_sphere.get_overlapping_bodies():
-					if body.has_method("alert"):
-						body.alert(glob.player.global_transform.origin)
-				alerted = true
-			if not pain_sfx[0].playing:
-				pain_sfx[0].play()
-		if damage > 0.5 and NetworkBridge.n_is_network_master(self):
-			body.add_velocity(collision_n * damage * 0.2)
-		health -= damage
-		
-		if NetworkBridge.n_is_network_master(self):
-			NetworkBridge.n_rset(self, "health", health)
-		
-		if health <= flee_health and damage > 0.5:
-			body.set_flee()
-			flee = true
-		if health <= 0 and NetworkBridge.n_is_network_master(self):
-			if not dead:
-				blood_particles.global_transform = torso.global_transform
-				blood_particles.emitting = true
-				die(damage, collision_n, collision_p)
-		if health <= gib_health and not gibs_spawned and gib and damage != 20.6:
-			gibs_spawned = true
-			gib_sfx.play()
+			alerted = true
+		if not pain_sfx[0].playing:
+			pain_sfx[0].play()
+	if damage > 0.5 and NetworkBridge.n_is_network_master(self):
+		body.add_velocity(collision_n * damage * 0.2)
+	health -= damage
+
+	if NetworkBridge.n_is_network_master(self):
+		NetworkBridge.n_rset(self, "health", health)
+
+	if health <= flee_health and damage > 0.5:
+		body.set_flee()
+		flee = true
+	if health <= 0 and NetworkBridge.n_is_network_master(self):
+		if not dead:
 			blood_particles.global_transform = torso.global_transform
 			blood_particles.emitting = true
-			if NetworkBridge.n_is_network_master(self):
-				if rand_range(0, 1) < drop_chance:
-					var i = 0
-					for d in len(DROPS):
-						if rand_range(0, 100) < DROP_CHANCE[i]:
-							spawn_drop(d, damage, collision_n, collision_p)
-						i += 1
-				spawn_gib(damage, collision_n, collision_p)
-				
-				NetworkBridge.n_rpc(self, "_hide_npc_client")
+			die(damage, collision_n, collision_p)
+	if health <= gib_health and not gibs_spawned and gib and damage != 20.6:
+		gibs_spawned = true
+		gib_sfx.play()
+		blood_particles.global_transform = torso.global_transform
+		blood_particles.emitting = true
+		if NetworkBridge.n_is_network_master(self):
+			if rand_range(0, 1) < drop_chance:
+				var i = 0
+				for d in len(DROPS):
+					if rand_range(0, 100) < DROP_CHANCE[i]:
+						spawn_drop(d, damage, collision_n, collision_p)
+					i += 1
+			spawn_gib(damage, collision_n, collision_p)
 			
-			skeleton.hide()
-			colliders.get_node("Dead_Head/CollisionShape").disabled = true
-			colliders.get_node("Dead_Body/CollisionShape").disabled = true
-			deathtimer.start()
+			NetworkBridge.n_rpc(self, "_hide_npc_client")
 		
-		if not NetworkBridge.n_is_network_master(self):
-			NetworkBridge.n_rpc_id(self, 0, "network_damage", [damage, collision_n, collision_p, shooter_pos])
+		skeleton.hide()
+		colliders.get_node("Dead_Head/CollisionShape").disabled = true
+		colliders.get_node("Dead_Body/CollisionShape").disabled = true
+		deathtimer.start()
+
+	if not NetworkBridge.n_is_network_master(self):
+		NetworkBridge.n_rpc_id(self, 0, "network_damage", [damage, collision_n, collision_p, shooter_pos])
 
 func remove_objective():
 	if dead:
@@ -562,7 +583,7 @@ puppet func _spawn_gib_client(id, parentPath, gibName, spawn_head):
 			count += 1
 
 func spawn_gib(damage, collision_n, collision_p):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		var gibs_names = []
 		
 		for gib in GIBS:
@@ -600,7 +621,7 @@ func remove_weapon():
 	network_remove_weapon(null)
 
 master func network_remove_weapon(id):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not civilian and "current_weapon" in weapon and not armored and health < 10000:
 			if weapon.disabled:
 				return 
@@ -620,12 +641,12 @@ master func network_remove_weapon(id):
 			new_weapon_drop.gun.current_weapon = weapon.current_weapon
 			new_weapon_drop.gun.ammo = weapon.MAX_MAG_AMMO[weapon.current_weapon]
 			new_weapon_drop.gun.MESH[weapon.current_weapon].show()
-			NetworkBridge.n_rpc(self, "_create_drop_weapon", [get_parent().get_path(), new_weapon_drop.global_transform.origin, new_weapon_drop.velocity, new_weapon_drop.gun.current_weapon, new_weapon_drop.gun.ammo, new_weapon_drop.name])
+			NetworkBridge.n_rpc(Multiplayer, "spawn_enemy_weapon", [get_parent().get_path(), new_weapon_drop.global_transform.origin, new_weapon_drop.velocity, new_weapon_drop.gun.current_weapon, new_weapon_drop.gun.ammo, new_weapon_drop.name])
 	else:
 		NetworkBridge.n_rpc_id(self, 0, "network_remove_weapon")
 	
 func die(damage, collision_n, collision_p):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if not dead:
 			if on_fire:
 				pain_sfx[0].max_db = - 40
@@ -634,10 +655,10 @@ func die(damage, collision_n, collision_p):
 				glob.player.UI.notify(npc_name + " is dead.", Color(1, 0, 0))
 				glob.save_game()
 			
-			if glob.implants.arm_implant.cursed_torch:
-				if glob.player.health < 100:
-					glob.player.health += 1
-					glob.player.UI.set_health(glob.player.health)
+			if last_damage_peer == NetworkBridge.get_id():
+				Multiplayer.reward_npc_kill(null)
+			elif last_damage_peer > 0:
+				NetworkBridge.n_rpc_id(Multiplayer, last_damage_peer, "reward_npc_kill")
 			if heartbeat:
 				heartbeat.hide()
 			var boneattachment = skeleton.get_node_or_null("Armature/Skeleton/BoneAttachment")
@@ -657,10 +678,12 @@ func die(damage, collision_n, collision_p):
 						new_weapon_drop.gun.ammo = weapon.MAX_MAG_AMMO[weapon.current_weapon]
 						new_weapon_drop.gun.MESH[weapon.current_weapon].show()
 
-						NetworkBridge.n_rpc(self, "_create_drop_weapon", [get_parent().get_path(), new_weapon_drop.global_transform.origin, new_weapon_drop.velocity, new_weapon_drop.gun.current_weapon, new_weapon_drop.gun.ammo, new_weapon_drop.name])
+						NetworkBridge.n_rpc(Multiplayer, "spawn_enemy_weapon", [get_parent().get_path(), new_weapon_drop.global_transform.origin, new_weapon_drop.velocity, new_weapon_drop.gun.current_weapon, new_weapon_drop.gun.ammo, new_weapon_drop.name])
 			for particle in all_particles:
 				particle.queue_free()
 			body.set_dead()
+			if "disabled" in weapon:
+				weapon.disabled = true
 			
 			colliders.get_node("Head/CollisionShape").disabled = true
 			colliders.get_node("Torso/CollisionShape").disabled = true
@@ -683,7 +706,7 @@ func die(damage, collision_n, collision_p):
 			NetworkBridge.n_rpc(self, "_die_client")
 
 func poison_timeout():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		var new_misery = SELF_DESTRUCT.instance()
 		add_child(new_misery)
 		new_misery.global_transform.origin = body.global_transform.origin
@@ -719,7 +742,7 @@ func _complete_objective():
 	glob.remove_objective()
 
 func _register_objective():
-	if not objective or not enabled or objective_registered or not NetworkBridge.is_world_authority():
+	if not objective or not enabled or objective_registered or not NetworkBridge.is_world_authority() or glob.CURRENT_LEVEL == 18:
 		return false
 	objective_registered = true
 	glob.add_objective()
@@ -733,3 +756,74 @@ func _remove_population():
 		glob.civ_count = max(0, glob.civ_count - 1)
 	else:
 		glob.enemy_count = max(0, glob.enemy_count - 1)
+
+func _update_simulation():
+	if enabled:
+		for state in _suspended_nodes:
+			var node = state[0]
+			if not is_instance_valid(node):
+				continue
+			node.set_process(state[1])
+			node.set_physics_process(state[2])
+			if node is AnimationPlayer:
+				node.playback_active = state[3]
+			elif node is AnimationTree:
+				node.active = state[3]
+			elif node is RayCast:
+				node.enabled = state[3]
+			elif node is CollisionObject:
+				node.collision_layer = state[3]
+				node.collision_mask = state[4]
+				if node is Area:
+					node.monitoring = state[5]
+		_suspended_nodes.clear()
+		return
+	if not _suspended_nodes.empty():
+		return
+	var pending = [self]
+	while not pending.empty():
+		var node = pending.pop_back()
+		pending.append_array(node.get_children())
+		var state = [node, node.is_processing(), node.is_physics_processing()]
+		node.set_process(false)
+		node.set_physics_process(false)
+		if node is AnimationPlayer:
+			state.append(node.playback_active)
+			node.playback_active = false
+		elif node is AnimationTree:
+			state.append(node.active)
+			node.active = false
+		elif node is RayCast:
+			state.append(node.enabled)
+			node.enabled = false
+		elif node is CollisionObject:
+			state.append(node.collision_layer)
+			state.append(node.collision_mask)
+			node.collision_layer = 0
+			node.collision_mask = 0
+			if node is Area:
+				state.append(node.monitoring)
+				node.monitoring = false
+		_suspended_nodes.append(state)
+
+func _configure_replica():
+	if not NetworkBridge.is_world_authority():
+		set_physics_process(false)
+		new_alert_sphere.monitoring = false
+		var pending = [body]
+		while not pending.empty():
+			var node = pending.pop_back()
+			pending.append_array(node.get_children())
+			if node is RayCast:
+				node.enabled = false
+		_presentation_animation = body.get("anim_player")
+		_presentation_notifier = VisibilityNotifier.new()
+		_presentation_notifier.aabb = AABB(Vector3(-2, -1, -2), Vector3(4, 5, 4))
+		body.add_child(_presentation_notifier)
+		_presentation_notifier.connect("screen_entered", self, "_replica_visible", [true])
+		_presentation_notifier.connect("screen_exited", self, "_replica_visible", [false])
+	_update_simulation()
+
+func _replica_visible(on_screen):
+	if is_instance_valid(_presentation_animation):
+		_presentation_animation.playback_active = enabled and on_screen

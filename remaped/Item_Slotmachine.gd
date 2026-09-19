@@ -36,7 +36,7 @@ puppet func play_audio(id):
 	$Audio.play()
 
 func _physics_process(delta):
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		if rotation_counter >= 0:
 			rotation_counter -= 1
 			if not $Audio.playing:
@@ -74,7 +74,7 @@ puppet func client_spawn_item(id, recivedItem, recivedPath, recivedName, recived
 	new_coin.global_transform = recivedTransform
 
 func player_use():
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		check_use(null, true)
 	else:
 		NetworkBridge.n_rpc(self, "check_use")
@@ -94,7 +94,7 @@ puppet func money_check(id):
 		return 
 	Global.money -= 10
 	
-	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
+	if NetworkBridge.n_is_network_master(self):
 		rotation_counter = 50
 	else:
 		NetworkBridge.n_rpc(self, "set_rotation_counter", [50])
