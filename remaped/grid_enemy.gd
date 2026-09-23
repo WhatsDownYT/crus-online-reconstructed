@@ -23,7 +23,9 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = null
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(self):
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
 		if oldDistance == null or oldDistance > distance:
 			oldDistance = distance
@@ -35,6 +37,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [["network_set_rotation", NetworkBridge.PERMISSION.SERVER]])
 	rset_config("global_transform", MultiplayerAPI.RPC_MODE_PUPPET)
 	NetworkBridge.register_rset(self, "global_transform", NetworkBridge.PERMISSION.SERVER)
@@ -46,7 +49,8 @@ func _ready():
 
 func _physics_process(delta):
 	if NetworkBridge.n_is_network_master(self):
-		if get_near_player(self).distance > 20:
+		var nearest = get_near_player(self)
+		if nearest.player == null or nearest.distance > 20:
 			return 
 		
 		look()
@@ -116,7 +120,7 @@ func _on_Area_body_entered(body):
 	if body.get_collision_layer_bit(0):
 		return 
 	if body.has_method("damage") and NetworkBridge.n_is_network_master(self):
-		body.damage(100, current_dir.normalized(), global_transform.origin, global_transform.origin)
+		NetworkBridge.apply_npc_damage(self, body, "damage", [100, current_dir.normalized(), global_transform.origin, global_transform.origin])
 
 puppet func network_set_rotation(id, yaw):
 	mesh.rotation.y = yaw

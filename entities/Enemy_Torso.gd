@@ -82,7 +82,7 @@ master func request_cancer(id, event_epoch):
 	if event_epoch != replication.epoch:
 		return
 	id = NetworkBridge.request_sender(id)
-	if NetworkBridge.get_peer_actor(id) == null:
+	if NetworkBridge.get_peer_actor(id) == null or not Global.get_node("Multiplayer").CounterOp.can_damage_npc(id, soul):
 		return
 	replication.convert_npc(soul, global_transform.origin)
 
@@ -109,6 +109,9 @@ func add_velocity(normal, amount):
 
 master func tranquilize(id, dart):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, soul):
+			return
 		soul.set_tranquilized(dart)
 	else:
 		NetworkBridge.n_rpc_id(self, 0, "tranquilize", [dart])
@@ -125,6 +128,9 @@ func damage(damage, collision_n, collision_p, shooter_pos):
 
 master func network_damage(id, damage, collision_n, collision_p, shooter_pos):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, soul):
+			return
 		if head and damage < 0.5 and not bored:
 			return
 		soul.network_damage(id, damage * damage_multiplier, collision_n, collision_p, shooter_pos)
@@ -186,6 +192,9 @@ func piercing_damage(damage, collision_n, collision_p, shooter_pos):
 
 master func network_piercing_damage(id, damage, collision_n, collision_p, shooter_pos):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, soul):
+			return
 		soul.network_piercing_damage(id, damage * damage_multiplier, collision_n, collision_p)
 		if head:
 			head_health = - 1

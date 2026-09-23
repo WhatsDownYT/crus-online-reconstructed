@@ -22,11 +22,13 @@ func _spread_spawn():
 		return
 	var peers = mp.players.keys()
 	peers.sort()
+	if mp.CounterOp.is_active():
+		var operative_peers = []
+		for peer in peers:
+			if mp.CounterOp.is_operative(peer):
+				operative_peers.append(peer)
+		peers = operative_peers
 	var origin = player.global_transform.origin
-	var candidates = [Vector3.ZERO]
-	for radius in [1.2, 2.2]:
-		for i in range(16):
-			candidates.append(Vector3(cos(i * TAU / 16.0), 0, sin(i * TAU / 16.0)) * radius)
 	var assigned = []
 	var space = get_world().direct_space_state
 	var shape = CapsuleShape.new()
@@ -36,6 +38,16 @@ func _spread_spawn():
 	query.set_shape(shape)
 	query.collision_mask = 1
 	query.exclude = [player.get_rid()]
+	if mp.CounterOp.is_active() and mp.CounterOp.is_counter_operative(mp.NetworkBridge.get_id()):
+		var counter_spawn = _counterop_spawn(mp, space, query)
+		if counter_spawn != null:
+			player.global_transform.origin = counter_spawn
+			cam_pos.global_transform.origin = counter_spawn + Vector3.UP * 1.481
+			return
+	var candidates = [Vector3.ZERO]
+	for radius in [1.2, 2.2]:
+		for i in range(16):
+			candidates.append(Vector3(cos(i * TAU / 16.0), 0, sin(i * TAU / 16.0)) * radius)
 	for peer in peers:
 		var spawn = origin
 		for offset in candidates:
@@ -61,6 +73,61 @@ func _spread_spawn():
 			player.global_transform.origin = spawn
 			cam_pos.global_transform.origin = spawn + Vector3.UP * 1.481
 			return
+
+func _counterop_spawn(mp, space, query):
+	var spots = []
+	var scene = get_tree().current_scene
+	if not is_instance_valid(scene):
+		return null
+	_collect_civilian_spots(scene, spots)
+	if spots.empty():
+		return null
+	var rng = RandomNumberGenerator.new()
+	rng.seed = int(mp.SteamNetwork.scene_epoch) * 1103515245 + int(Global.CURRENT_LEVEL) * 12345 + spots.size() * 97
+	for i in range(spots.size() - 1, 0, -1):
+		var j = rng.randi_range(0, i)
+		var swap = spots[i]
+		spots[i] = spots[j]
+		spots[j] = swap
+	var counter_peers = []
+	for peer in mp.players:
+		if mp.CounterOp.is_counter_operative(peer):
+			counter_peers.append(peer)
+	counter_peers.sort()
+	var local_index = counter_peers.find(mp.NetworkBridge.get_id())
+	if local_index < 0:
+		return null
+	for attempt in range(spots.size()):
+		var spot = spots[(local_index + attempt) % spots.size()]
+		var spawn = _safe_civilian_spawn(spot, space, query)
+		if spawn != null:
+			return spawn
+	return null
+
+func _collect_civilian_spots(node, result):
+	if node != self and "civilian" in node and bool(node.get("civilian")) and (not ("objective" in node) or not bool(node.get("objective"))):
+		var position = node.global_transform.origin
+		if position.distance_to(Vector3(1000, 1000, 1000)) > 10.0:
+			result.append(position)
+	for child in node.get_children():
+		_collect_civilian_spots(child, result)
+
+func _safe_civilian_spawn(origin, space, query):
+	var offsets = []
+	for radius in [0.9, 1.3, 1.8]:
+		for i in range(12):
+			offsets.append(Vector3(cos(i * TAU / 12.0), 0, sin(i * TAU / 12.0)) * radius)
+	for offset in offsets:
+		var floor_hit = space.intersect_ray(origin + offset + Vector3.UP * 2.5, origin + offset + Vector3.DOWN * 4, [player], 1)
+		if floor_hit.empty() or floor_hit.normal.y < 0.65:
+			continue
+		var point = floor_hit.position + Vector3.UP * 0.1
+		if abs(point.y - origin.y) > 2.5:
+			continue
+		query.transform = Transform(Basis(), point + Vector3.UP * 0.85)
+		if space.intersect_shape(query, 1).empty():
+			return point
+	return null
 
 func _process(delta):
 	if Input.is_action_just_pressed("Stocks") and not Global.get_node("Multiplayer/Menu").visible:

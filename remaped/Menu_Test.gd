@@ -199,6 +199,7 @@ var all_buttons:Array
 var hover_info
 var menu_creation_level_index:int = 0
 var menu_changing = false
+var counterop_locked_levels = {}
 onready var clear_button = $Settings / GridContainer / PanelContainer6 / VBoxContainer3 / ClearSave
 class Menu extends Control:
 	var buttons:Array
@@ -208,6 +209,7 @@ func _physics_process(delta):
 	_update_waiting_menu()
 	if not menu_changing and not active_menus.empty() and active_menus.back() == menu[START]:
 		_refresh_start_buttons()
+	_apply_counterop_level_lock()
 	time += 1
 	
 	if in_game:
@@ -403,6 +405,45 @@ func _ready():
 	set_res(Global.resolution[0], Global.resolution[1])
 	
 	
+func _ensure_counterop_overlay():
+	if not Multiplayer.NetworkBridge.check_connection() or not is_instance_valid(Multiplayer.CounterOp):
+		return
+	if not is_instance_valid(Multiplayer.CounterOp.overlay) or Multiplayer.CounterOp.menu_ref != self:
+		Multiplayer.CounterOp.attach_menu(self)
+
+func _counterop_level_locked(index):
+	if not is_instance_valid(Multiplayer.CounterOp) or not Multiplayer.CounterOp.is_active() or index < 0 or index >= Global.LEVELS.size():
+		return false
+	var level_path = str(Global.LEVELS[index])
+	return level_path == "res://Levels/Level1.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+
+func _apply_counterop_level_lock():
+	var on_level_select = not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	var should_lock = on_level_select and Multiplayer.NetworkBridge.check_connection() and is_instance_valid(Multiplayer.CounterOp) and Multiplayer.CounterOp.is_active()
+	for index in range(level_buttons.size()):
+		if index < 0 or index >= Global.LEVELS.size():
+			continue
+		var level_path = str(Global.LEVELS[index])
+		var blocked = level_path == "res://Levels/Level1.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+		if not blocked:
+			continue
+		var button = level_buttons[index]
+		if should_lock and button.visible:
+			button.disabled = true
+			button.texture_disabled = BUTTON_TEXTURES_D[0]
+			button.modulate = Color(0.35, 0.35, 0.35, 1)
+			counterop_locked_levels[index] = true
+		elif counterop_locked_levels.has(index):
+			button.modulate = Color(1, 1, 1, 1)
+			if index > Global.L_PUNISHMENT:
+				var bonus_index = index - Global.L_PUNISHMENT - 1
+				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != - 1
+				button.disabled = index == Global.CURRENT_LEVEL or not unlocked
+				button.texture_disabled = BUTTON_TEXTURES_D[0] if unlocked else MYSTERY
+			else:
+				button.disabled = index == Global.CURRENT_LEVEL
+			counterop_locked_levels.erase(index)
+
 func hide_buttons(m:Menu, a:int, b:int):
 	for ab in range(a, b + 1):
 		m.get_child(ab).hide()
@@ -630,6 +671,7 @@ func _on_Stocks_Button_Pressed(m:int, button_id:TextureButton):
 
 func _on_Start_Button_Pressed(m:int, button_id:TextureButton):
 	_close_online_panel()
+	_ensure_counterop_overlay()
 	if not in_game and Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
 		goto_menu(m, LEVEL_SELECT, button_id)
 		_update_waiting_menu()
@@ -828,6 +870,8 @@ func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 
 func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
+	if _counterop_level_locked(Global.CURRENT_LEVEL):
+		return
 	if Multiplayer.NetworkBridge.check_connection():
 		if not Multiplayer.NetworkBridge.is_world_authority():
 			return
@@ -853,6 +897,8 @@ func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
 func _on_Level_Pressed(m:int, button_id:TextureButton):
 	
 	var level_index = button_id.get_index() - 6
+	if _counterop_level_locked(level_index):
+		return
 	Global.CURRENT_LEVEL = level_index
 	if Global.LEVEL_PUNISHED[Global.CURRENT_LEVEL]:
 		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(1, 1, 1, 1)
@@ -1629,6 +1675,8 @@ func _refresh_start_buttons():
 
 func open_online_destination(level_select):
 	_hide_online_navigation()
+	if level_select:
+		_ensure_counterop_overlay()
 	_close_online_panel()
 	if active_element != null:
 		active_element.hide()

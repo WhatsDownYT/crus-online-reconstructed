@@ -82,6 +82,12 @@ func ending_path():
 func check_team_wipe():
 	if not NetworkBridge.is_world_authority() or not Global.menu.in_game or result_active or finishing:
 		return
+	if Multiplayer.CounterOp.is_active():
+		if Multiplayer.CounterOp.all_operatives_dead(waiting_peers):
+			call_deferred("finish_counterop", Multiplayer.CounterOp.TEAM_COUNTER_OPERATIVES)
+		return
+	if Multiplayer.hostSettings.get("canRespawn", true) and Multiplayer.hostSettings.get("selfRespawn", false):
+		return
 	var participants = 0
 	for peer in Multiplayer.players:
 		if waiting_peers.has(peer):
@@ -103,16 +109,25 @@ func lower_difficulty():
 	set_difficulty(difficulty())
 	return "misery" if not previous.husk_mode and Global.husk_mode else ("severed" if previous.soul_intact and not Global.soul_intact else "")
 
-func finish_mission(won):
+func finish_counterop(winner_team):
+	if not (winner_team in [Multiplayer.CounterOp.TEAM_OPERATIVES, Multiplayer.CounterOp.TEAM_COUNTER_OPERATIVES]):
+		return
+	finish_mission(winner_team == Multiplayer.CounterOp.TEAM_OPERATIVES, winner_team)
+
+func finish_mission(won, winner_team = ""):
 	if not NetworkBridge.is_world_authority() or result_active or finishing:
 		return
 	finishing = true
+	var competitive = winner_team != ""
 	var loss = ""
-	if won:
+	if competitive:
+		if Multiplayer.CounterOp.team_of(NetworkBridge.get_id()) == winner_team:
+			Global.record_multiplayer_win()
+	elif won:
 		Global.record_multiplayer_win()
 	else:
 		loss = lower_difficulty()
-	var state = {"won": won, "level": Global.CURRENT_LEVEL, "enemy_count": Global.enemy_count, "enemy_count_total": Global.enemy_count_total, "civ_count": Global.civ_count, "civ_count_total": Global.civ_count_total, "level_time": Global.level_time, "level_time_raw": Global.level_time_raw, "difficulty": difficulty(), "loss": loss, "ending": ending_path() if won else "", "epoch": Multiplayer.SteamNetwork.scene_epoch + 1}
+	var state = {"won": won, "winner_team": winner_team, "level": Global.CURRENT_LEVEL, "enemy_count": Global.enemy_count, "enemy_count_total": Global.enemy_count_total, "civ_count": Global.civ_count, "civ_count_total": Global.civ_count_total, "level_time": Global.level_time, "level_time_raw": Global.level_time_raw, "difficulty": difficulty(), "loss": loss, "ending": "" if competitive else (ending_path() if won else ""), "epoch": Multiplayer.SteamNetwork.scene_epoch + 1}
 	NetworkBridge.n_rpc(self, "show_result", [state])
 	show_result(null, state)
 
@@ -121,6 +136,9 @@ puppet func show_result(id, state):
 		return
 	result_active = true
 	finishing = false
+	var winner_team = state.get("winner_team", "")
+	var competitive = winner_team != ""
+	var local_won = state.won if not competitive else Multiplayer.CounterOp.team_of(NetworkBridge.get_id()) == winner_team
 	result_won = state.won
 	result_level = state.level
 	Multiplayer.get_node("RestartTimer").stop()
@@ -130,23 +148,26 @@ puppet func show_result(id, state):
 	var shared = Multiplayer.hostSettings.get("shareDifficulty", false)
 	if shared:
 		set_difficulty(state.difficulty)
-	elif not state.won and not NetworkBridge.is_world_authority():
+	elif not competitive and not state.won and not NetworkBridge.is_world_authority():
 		lower_difficulty()
 	misery_transition = shared and state.loss == "misery"
 	if misery_transition:
 		Global.money = max(Global.money, 0)
-	if state.won:
+	if local_won:
 		if not NetworkBridge.is_world_authority():
 			Global.record_multiplayer_win()
 			if shared:
 				set_difficulty(state.difficulty)
+	if state.won:
 		if state.ending != "":
 			Global.ending_1 = Global.ending_1 or state.ending.ends_with("End1.tscn")
 			Global.ending_2 = Global.ending_2 or state.ending.ends_with("End2.tscn")
 			Global.ending_3 = Global.ending_3 or state.ending.ends_with("End3.tscn")
-	else:
+	elif not competitive:
 		if not Global.husk_mode:
 			Global.money -= 500
+	if competitive and is_instance_valid(Global.UI):
+		Global.UI.notify("Operatives win." if winner_team == Multiplayer.CounterOp.TEAM_OPERATIVES else "Counter-Operatives win.", Color(1, 0, 1))
 	if state.ending.ends_with("End2.tscn"):
 		Global.character_mat.set_shader_param("albedoTex", load("res://Textures/NPC/bosssguy_clothes.png"))
 	Global.save_game()

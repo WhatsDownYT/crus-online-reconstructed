@@ -340,7 +340,6 @@ func cancer():
 	client.set_cancer()
 
 func player_use():
-	set_collision_layer_bit(8, false)
 	client.respawn_player()
 
 func tranquilize(garbage = null):
@@ -1003,7 +1002,7 @@ transform = Transform( -1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0, -0.1
 visible = false
 billboard = 2
 modulate = Color( 1, 0, 0, 1 )
-text = "Wait 99.99 to help"
+text = "Wait 99.99 to revive"
 font = SubResource( 34 )
 
 [node name="HelpTimer" type="Timer" parent="Puppet/PlayerModel"]

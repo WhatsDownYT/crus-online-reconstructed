@@ -4,7 +4,7 @@ static func alive(candidate, local_player, local_id, dead_players):
 	if not is_instance_valid(candidate):
 		return false
 	if candidate == local_player:
-		return not candidate.get("died") and not candidate.get("dead") and not dead_players.has(local_id)
+		return not candidate.get("dead") and not dead_players.has(local_id)
 	var puppet = candidate.get_parent()
 	if not is_instance_valid(puppet) or not puppet.has_method("is_owner_state"):
 		return false

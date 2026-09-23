@@ -1,5 +1,6 @@
 extends KinematicBody
 
+onready var Multiplayer = Global.get_node("Multiplayer")
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
 enum I{GOLEM, WEAPON, MONEY}
@@ -20,6 +21,7 @@ export  var line = "Triagon 01 is gone. (Golem Exosystem Received)"
 export  var line2 = "I bestow upon you power."
 
 func _ready():
+	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [
 		["network_damage", NetworkBridge.PERMISSION.ALL]
 	])
@@ -33,6 +35,9 @@ func _ready():
 
 func _process(delta):
 	t += 1
+	if Multiplayer.CounterOp.is_active() and Multiplayer.CounterOp.is_counter_operative(NetworkBridge.get_id()) and not Multiplayer.CounterOp.npc_is_hostile(self):
+		particle.hide()
+		return
 	if destroyed:
 		hide()
 		return 
@@ -56,7 +61,7 @@ func _process(delta):
 		laser.scale.z = lerp(laser.scale.z, global_transform.origin.distance_to(result.position) * 0.5, 0.2)
 		laser.look_at(result.position, Vector3.UP)
 		if result.collider == Global.player:
-			Global.player.damage(20, result.normal, result.position, global_transform.origin)
+			NetworkBridge.apply_npc_damage(self, Global.player, "damage", [20, result.normal, result.position, global_transform.origin])
 	else :
 		particle.hide()
 		laser.scale.z = 400
@@ -65,6 +70,9 @@ func damage(dmg, nrml, pos, shoot_pos):
 	network_damage(null, dmg, nrml, pos, shoot_pos)
 
 master func network_damage(id, dmg, nrml, pos, shoot_pos):
+	var source = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+	if not Multiplayer.CounterOp.can_damage_npc(source, self):
+		return
 	if death_flag:
 		return 
 	active = true

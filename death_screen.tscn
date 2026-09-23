@@ -33,12 +33,14 @@ func set_death_label():
 	$HelpLabel.text = \"All players are dead\\n\\nRestarting...\"
 
 func player_died():
-	if Multiplayer.hostSettings.canRespawn:
+	var can_respawn = Multiplayer.hostSettings.get(\"canRespawn\", true)
+	var self_respawn = can_respawn and Multiplayer.hostSettings.get(\"selfRespawn\", false) and not Multiplayer.CounterOp.is_active()
+	if self_respawn:
 		$RespawnButton.show()
 		$HelpLabel.hide()
 	else:
 		$RespawnButton.hide()
-		$HelpLabel.text = \"Wait until someone helps you\"
+		$HelpLabel.text = \"Wait until someone revives you\" if can_respawn else \"Respawning disabled\"
 		$HelpLabel.show()
 		
 	Multiplayer.player_died()
@@ -107,23 +109,28 @@ func _restart(event):
 	if event is InputEventMouseButton and event.pressed:
 		respawn()
 
-func respawn():
+func respawn(assisted = false):
 	if Global.player.died:
-		if Multiplayer.hostSettings.canRespawn:
+		if not Multiplayer.hostSettings.get(\"canRespawn\", true):
+			return
+		var self_respawn = Multiplayer.hostSettings.get(\"selfRespawn\", false) and not Multiplayer.CounterOp.is_active()
+		if assisted:
+			Global.player.health = 20
+			Global.player.UI.set_health(20)
+		elif self_respawn:
 			Global.player.health = 100
 			Global.player.UI.set_health(100)
-				
+			
 			var respawnPoint = get_tree().get_nodes_in_group(\"Respawn\")
 			respawnPoint.shuffle()
-				
+			
 			Global.player.global_transform.origin = respawnPoint[0].global_transform.origin
 			Global.player.global_rotation.y = respawnPoint[0].global_rotation.y
 			
 			Multiplayer.playerPuppet.player_restart()
 		else:
-			Global.player.health = 20
-			Global.player.UI.set_health(20)
-			
+			return
+		
 		Multiplayer.player_respawn()
 		
 		Multiplayer.playerPuppet.respawn_puppet(null)

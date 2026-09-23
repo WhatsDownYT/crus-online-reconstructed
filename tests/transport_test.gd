@@ -666,17 +666,9 @@ func run():
 	Global.player.translation = Vector3(20, 0, 0)
 	revive_targets[0].translation = Vector3(200, 0, 0)
 	revive_targets[1].translation = Vector3(21, 0, 0)
-	multiplayer.died_players = [1]
-	check(revive_targets[0].validate_network_action(2, 1, "_respawn_player", []), "client can revive dead host despite stale local puppet pose and death flag")
 	multiplayer.died_players = [2]
-	check(revive_targets[1].validate_network_action(1, 2, "_respawn_player", []), "host can revive client using actual local player position")
-	revive_targets[2].translation = Vector3(22, 0, 0)
-	check(revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "client can revive another client")
-	multiplayer.died_players = [2, 3]
-	check(not revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "dead helper cannot revive")
-	multiplayer.died_players = [2]
-	revive_targets[2].translation = Vector3(100, 0, 0)
-	check(not revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "distant helper cannot revive")
+	check(revive_targets[1].validate_network_action(1, 2, "_respawn_player", []), "host-authorized revive delivery is accepted")
+	check(not revive_targets[1].validate_network_action(3, 2, "_respawn_player", []), "client cannot directly deliver a revive")
 	multiplayer.died_players = []
 	check(not revive_targets[1].validate_network_action(1, 2, "_respawn_player", []), "living target cannot be revived")
 	multiplayer.hostSettings.friendlyFire = false
@@ -901,6 +893,7 @@ func run():
 	coordinator.sync_host_settings(2, {"friendlyFire": false})
 	check(coordinator.hostSettings.friendlyFire, "non-host cannot change friendly fire setting")
 	coordinator.hostSettings.canRespawn = true
+	coordinator.hostSettings.selfRespawn = true
 	coordinator._player_died(1)
 	check(coordinator.DeathScreen.wipes == 0, "one player dying does not lower difficulty")
 	coordinator._player_died(2)
@@ -1192,7 +1185,7 @@ func run():
 	var merged = profiles.merge_defaults({"nickname": "Default", "color": "ff00ff", "tickRate": 3}, {"nickname": "Saved", "tickRate": "bad"})
 	check(merged.nickname == "Saved" and merged.color == "ff00ff" and merged.tickRate == 3, "profile schema upgrades retain valid values")
 	check(not profiles.save_data("../savegame.save", {}), "profile store cannot address vanilla save")
-	for collection in ["playerNameImage", "playerSkins"]:
+	for collection in ["playerSkins"]:
 		var selector = load("res://" + collection + ".gd").new()
 		selector.set(collection, [["First", "path_a", null], ["Second", "path_b", null]])
 		var items = ItemList.new()
@@ -1203,7 +1196,7 @@ func run():
 		selector.add_child(texture)
 		root.add_child(selector)
 		selector.set_texture("path_b")
-		check(selector.get_texture() == "path_b" and selector.selected == 1, "restored selector saves same skin/image")
+		check(selector.get_texture() == "path_b" and selector.selected == 1, "restored selector saves same skin")
 		selector.free()
 	var viewport = Viewport.new()
 	viewport.size = Vector2(2560, 1440)

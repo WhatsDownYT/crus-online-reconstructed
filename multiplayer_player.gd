@@ -21,15 +21,12 @@ func validate_network_action(sender, target, method, args):
 	if method == "_do_damage":
 		if sender != NetworkBridge.get_host_id() and args[5] != sender:
 			return false
-		if not NetworkBridge.damage_allowed(args[5], target):
+		if not (sender == NetworkBridge.get_host_id() and args[5] == NetworkBridge.NPC_SOURCE_ID) and not NetworkBridge.damage_allowed(args[5], target):
 			return false
 	elif method != "_respawn_player" and sender != NetworkBridge.get_host_id() and not NetworkBridge.damage_allowed(sender, target):
 		return false
 	if method == "_respawn_player":
-		var helper = NetworkBridge.get_peer_actor(sender)
-		var target_actor = Global.player if target == NetworkBridge.get_id() else self
-		if not is_instance_valid(helper) or not is_instance_valid(target_actor) or helper.global_transform.origin.distance_to(target_actor.global_transform.origin) > 5.0:
-			return false
+		return sender == NetworkBridge.get_host_id()
 	return true
 
 var weaponsMesh
@@ -82,6 +79,7 @@ var voice_icon
 var voice_icon_elapsed = 0.0
 var label_font_ready = false
 var centered_name = ""
+var indicator_material = null
 
 func _ready():
 	$Puppet/PlayerModel/Nickname.set_as_toplevel(true)
@@ -121,7 +119,7 @@ func _ready():
 		["set_gravity", NetworkBridge.PERMISSION.ALL],
 		["set_flashlight", NetworkBridge.PERMISSION.ALL],
 		["shoot_commit", NetworkBridge.PERMISSION.ALL],
-		["_respawn_player", NetworkBridge.PERMISSION.ALL],
+		["_respawn_player", NetworkBridge.PERMISSION.SERVER],
 		["hideHelpLabel", NetworkBridge.PERMISSION.ALL],
 		["_set_tranquilize", NetworkBridge.PERMISSION.ALL],
 		["_add_velocity", NetworkBridge.PERMISSION.SERVER]
@@ -133,6 +131,11 @@ func _ready():
 	$Puppet/PlayerModel/Armature/Skeleton/Torso_Mesh.material_override = skinMaterial
 	$Puppet/PlayerModel/Nickname.text = nickname
 	$Puppet/PlayerModel/Nickname.modulate = Color(color)
+	var player_indicator = $Puppet/PlayerModel/Armature/Skeleton/Head/PlayerIndicator
+	var active_material = player_indicator.get_active_material(0)
+	if active_material != null:
+		indicator_material = active_material.duplicate()
+		player_indicator.material_override = indicator_material
 	
 
 	
@@ -188,14 +191,21 @@ func play_explosion_sound():
 	
 	animTree.set("parameters/DEATH1/active", true)
 	
-	if not Multiplayer.hostSettings.canRespawn:
+	if Multiplayer.can_peer_be_revived(int(name)):
 		$Puppet/PlayerModel/HelpTimer.wait_time = Multiplayer.hostSettings.helpTimer
-		
 		$Puppet/PlayerModel/HelpLabel.show()
 		$Puppet/PlayerModel/HelpTimer.start()
+	else:
+		$Puppet/PlayerModel/HelpTimer.stop()
+		$Puppet/PlayerModel/HelpLabel.hide()
+		$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
 
 func can_respawn():
-	$Puppet/PlayerModel/HelpLabel.text = "Press [Use] to help"
+	if not Multiplayer.can_peer_be_revived(int(name)):
+		$Puppet/PlayerModel/HelpLabel.hide()
+		$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
+		return
+	$Puppet/PlayerModel/HelpLabel.text = "Press [Use] to revive"
 	$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, true)
 
 remote func set_sit(id, recived_value):
@@ -205,6 +215,7 @@ remote func set_sit(id, recived_value):
 		player_sitting = recived_value
 
 func _process(delta):
+	_update_player_indicator()
 	if not label_font_ready:
 		_apply_label_font()
 	voice_icon_elapsed += delta
@@ -237,10 +248,28 @@ func _process(delta):
 		centered_name = $Puppet/PlayerModel/Nickname.text
 		call_deferred("_center_nickname")
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
-		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to help"
+		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to revive"
 	
 	if $Puppet/PlayerModel/SFX/IED_alert.playing:
 		$Puppet/PlayerModel/SFX/IED_alert.pitch_scale += 0.025
+
+func _update_player_indicator():
+	var indicator = $Puppet/PlayerModel/Armature/Skeleton/Head/PlayerIndicator
+	var target = int(name)
+	if not Multiplayer.CounterOp.should_show_player_indicator(NetworkBridge.get_id(), target):
+		indicator.hide()
+		return
+	if Multiplayer.died_players.has(target):
+		if not Multiplayer.can_peer_be_revived(target):
+			indicator.hide()
+			return
+		indicator.show()
+		if indicator_material is SpatialMaterial:
+			indicator_material.albedo_color = Color(0.5, 0.5, 0.5, 1)
+		return
+	indicator.show()
+	if indicator_material is SpatialMaterial:
+		indicator_material.albedo_color = Color(0, 1, 0.0156863, 1)
 
 func set_grapple_orbs():
 	grapple_point.global_transform.origin = grapple_pos
@@ -371,9 +400,10 @@ remote func _do_damage(id, damage, collision_n, collision_p, shooter_pos, weapon
 	var sender = NetworkBridge.request_sender(id)
 	if sender != NetworkBridge.get_host_id() and source_id != sender:
 		return
-	if not NetworkBridge.damage_allowed(source_id, NetworkBridge.get_id()):
+	if not (sender == NetworkBridge.get_host_id() and source_id == NetworkBridge.NPC_SOURCE_ID) and not NetworkBridge.damage_allowed(source_id, NetworkBridge.get_id()):
 		return
-	Global.player.set_last_damager_id(source_id if source_id > 0 else null, weapon_type)
+	var damager_id = source_id if source_id > 0 and source_id != NetworkBridge.NPC_SOURCE_ID else null
+	Global.player.set_last_damager_id(damager_id, weapon_type)
 	Global.player.damage(damage, collision_n, collision_p, shooter_pos)
 
 func set_tranquilize():
@@ -407,11 +437,13 @@ remote func _set_fire(id, value):
 	Global.player.fakeFire.emitting = value
 
 func respawn_player():
-	NetworkBridge.n_rpc_id(self, int(self.name), "_respawn_player")
+	Multiplayer.request_player_revive(int(name))
 
 remote func _respawn_player(id):
+	if NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
 	if Global.player.died:
-		Global.get_node('DeathScreen').respawn()
+		Global.get_node('DeathScreen').respawn(true)
 		hideHelpLabel()
 		NetworkBridge.n_rpc(self, "hideHelpLabel")
 

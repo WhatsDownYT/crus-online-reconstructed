@@ -16,7 +16,9 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = null
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(object.get_parent()):
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
 		if oldDistance == null or oldDistance > distance:
 			oldDistance = distance
@@ -48,7 +50,24 @@ func AI():
 			
 			mutex.lock()
 			if player == null:
-				return 
+				if Global.get_node("Multiplayer").CounterOp.is_active():
+					enemy.anim_counter += 1
+					enemy.time += 1
+					enemy.shoot_mode = false
+					enemy.player_spotted = false
+					enemy.in_sight = false
+					if is_instance_valid(enemy.muzzleflash):
+						enemy.muzzleflash.hide()
+					if not enemy.is_on_floor():
+						enemy.velocity.y -= enemy.gravity * delta
+					if not enemy.dead and not enemy.tranq:
+						enemy.wait_for_player(delta)
+					elif enemy.is_on_floor():
+						enemy.velocity.x *= 0.95
+						enemy.velocity.z *= 0.95
+					enemy.move()
+				mutex.unlock()
+				continue
 			if nearest_player.distance > glob.draw_distance + 10:
 				return 
 			if enemy.civ_killer:

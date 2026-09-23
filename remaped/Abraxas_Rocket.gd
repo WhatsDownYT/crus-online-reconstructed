@@ -16,7 +16,9 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = null
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(self):
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
 		if oldDistance == null or oldDistance > distance:
 			oldDistance = distance
@@ -28,6 +30,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [
 		["create_missile", NetworkBridge.PERMISSION.SERVER],
 		["died", NetworkBridge.PERMISSION.SERVER],
@@ -43,8 +46,11 @@ func _physics_process(delta):
 			return 
 		show()
 		if not activated and fmod(t, 50) == 0:
+			var nearest = get_near_player(self)
+			if nearest.player == null:
+				return
 			var space = get_world().direct_space_state
-			var result = space.intersect_ray(global_transform.origin, get_near_player(self).player.global_transform.origin + Vector3.UP * 1.0, [self])
+			var result = space.intersect_ray(global_transform.origin, nearest.player.global_transform.origin + Vector3.UP * 1.0, [self])
 			if result:
 				if result.collider == Global.player or result.collider.has_meta("puppet"):
 					activated = true
@@ -71,14 +77,18 @@ puppet func create_missile(id, parentPath, missileName, missileTransform):
 	missile_new.global_transform = missileTransform
 
 func rocket_launcher()->void :
+	var nearest = get_near_player(self)
+	if nearest.player == null:
+		return
 	var missile_new = BULLETS.instance()
+	NetworkBridge.inherit_damage_source(missile_new, self)
 	
 	missile_new.set_name(missile_new.name + "#" + str(missile_new.get_instance_id()))
 	
 	get_parent().get_parent().get_parent().add_child(missile_new)
 	missile_new.add_collision_exception_with(self)
 	missile_new.global_transform.origin = global_transform.origin
-	missile_new.set_velocity(30, (global_transform.origin - (Global.player.global_transform.origin + Vector3.UP * 50 + Vector3(0, 0, sin(t * 0.5) * 25))).normalized(), global_transform.origin)
+	missile_new.set_velocity(30, (global_transform.origin - (nearest.player.global_transform.origin + Vector3.UP * 50 + Vector3(0, 0, sin(t * 0.5) * 25))).normalized(), global_transform.origin)
 	
 	NetworkBridge.n_rpc(self, "create_missile", [get_parent().get_parent().get_parent().get_path(), missile_new.name, missile_new.global_transform])
 
@@ -91,6 +101,9 @@ func damage(dmg, nrml, pos, shoot_pos):
 
 master func network_damage(id, dmg, nrml, pos, shoot_pos):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, self):
+			return
 		if not activated:
 			return 
 		health -= dmg

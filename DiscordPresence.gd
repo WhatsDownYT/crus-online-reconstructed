@@ -113,7 +113,7 @@ func activity():
 	var portrait = "level_%02d" % index if in_level and index >= 0 and index < Global.LEVELS.size() else "game_icon"
 	var status = "Targets: %d/%d" % [Global.objectives, max(Global.objectives, Global.objectives_total)] if in_level else "Main Menu"
 	var difficulty = preload("res://MOD_CONTENT/CruS Online/DifficultyLabel.gd").describe(Global.soul_intact, Global.husk_mode, Global.hope_discarded, Global.punishment_mode, Global.chaos_mode).replace("Host difficulty: ", "")
-	var result = {"details": status, "state": "Playing Online" if online else "Playing Singleplayer", "assets": {"large_image": portrait, "large_text": title if in_level else "Cruelty Squad", "small_image": "loading_screen", "small_text": difficulty}, "buttons": [{"label": "Get on Steam", "url": "https://store.steampowered.com/app/1388770/Cruelty_Squad/"}, {"label": "Download CruS Online", "url": "http://purgateam.com/projects/crus-online-reconstructed/index.html"}]}
+	var result = {"details": status, "state": "Playing Online" if online else "Playing Singleplayer", "assets": {"large_image": portrait, "large_text": title if in_level else "Cruelty Squad", "small_image": "loading_screen", "small_text": difficulty}, "buttons": [{"label": "Get on Steam", "url": "https://store.steampowered.com/app/1388770/Cruelty_Squad/"}, {"label": "Play Online", "url": "http://purgateam.com/projects/crus-online-reconstructed/index.html"}]}
 	if online:
 		var capacity = 17
 		if bridge.is_steam():

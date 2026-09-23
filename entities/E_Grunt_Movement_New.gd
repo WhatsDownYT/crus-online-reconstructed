@@ -100,7 +100,7 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = INF
 	var checkPlayer = null
 	
-	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors():
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(soul):
 		if not is_instance_valid(selectedPlayer):
 			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
@@ -263,6 +263,8 @@ func _physics_process(delta)->void :
 		player_distance = nearest_player.distance
 
 		if player == null:
+			if Multiplayer.CounterOp.is_active():
+				_counterop_passive_tick(delta)
 			return
 		if player_distance > glob.draw_distance + 10:
 			return
@@ -344,6 +346,24 @@ func _physics_process(delta)->void :
 		if not global_transform.is_equal_approx(lerp_transform):
 			global_transform = global_transform.interpolate_with(lerp_transform, clamp(delta * 10.0, 0.0, 1.0))
 
+func _counterop_passive_tick(delta):
+	anim_counter += 1
+	time += 1
+	if is_instance_valid(muzzleflash) and muzzleflash.visible:
+		muzzleflash.hide()
+	shoot_mode = false
+	player_spotted = false
+	in_sight = false
+	sight_potential = false
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	if not dead and not tranq:
+		wait_for_player(delta)
+	elif is_on_floor():
+		velocity.x *= 0.95
+		velocity.z *= 0.95
+	move()
+
 func move()->void :
 	if NetworkBridge.n_is_network_master(self):
 		if crusher:
@@ -351,7 +371,7 @@ func move()->void :
 				var collision = get_slide_collision(i)
 				if collision.collider != null:
 					if collision.collider.has_method("damage") and Vector3(velocity.x, 0, velocity.y).length() > 2:
-						collision.collider.damage(100, collision.normal, collision.position, global_transform.origin)
+						NetworkBridge.apply_npc_damage(self, collision.collider, "damage", [100, collision.normal, collision.position, global_transform.origin])
 		velocity = move_and_slide(velocity, Vector3.UP, false, 4, 0.785398)
 
 func wait_for_player(delta)->void :

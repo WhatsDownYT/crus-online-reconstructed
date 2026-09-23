@@ -28,6 +28,7 @@ func _ready():
 	enabled.theme = host.get_node("VBoxContainer/CanRespawn/TickEdit").theme
 	enabled.pressed = voice.settings.enabled
 	_row(box, "Enable Voice Chat:", enabled)
+	_connect_description_tooltip(enabled.get_parent(), "Enable or disable voice chat for you. This does not enable or disable voice chat for other players.")
 	enabled.connect("toggled", self, "_enabled_changed")
 	volume = HSlider.new()
 	volume.min_value = 0
@@ -63,6 +64,35 @@ func _row(box, title, control):
 	control.rect_min_size.x = 50 if control is CheckBox else 240
 	row.add_child(control)
 	return label
+
+func _connect_description_tooltip(node, description):
+	if node is Control:
+		if not node.is_connected("mouse_entered", self, "_description_tooltip_entered"):
+			node.connect("mouse_entered", self, "_description_tooltip_entered", [description])
+		if not node.is_connected("mouse_exited", self, "_description_tooltip_exited"):
+			node.connect("mouse_exited", self, "_description_tooltip_exited")
+	for child in node.get_children():
+		_connect_description_tooltip(child, description)
+
+func _description_tooltip_entered(description):
+	if not is_instance_valid(Global.menu) or not is_instance_valid(Global.menu.hover_info):
+		return
+	var hover = Global.menu.hover_info
+	hover.get_node("Image").hide()
+	hover.get_node("Name").hide()
+	hover.get_node("Hint").show()
+	hover.get_node("Hint").text = description
+	hover.get_parent().rect_size = Vector2.ZERO
+	hover.get_parent().raise()
+	hover.get_parent().show()
+
+func _description_tooltip_exited():
+	if not is_instance_valid(Global.menu) or not is_instance_valid(Global.menu.hover_info):
+		return
+	var hover = Global.menu.hover_info
+	hover.get_node("Name").show()
+	hover.get_parent().hide()
+	hover.get_parent().rect_size = Vector2.ZERO
 
 func _volume_changed(value):
 	voice.change_setting("volume", value)

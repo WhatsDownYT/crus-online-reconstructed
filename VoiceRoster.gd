@@ -46,6 +46,17 @@ func _process(delta):
 			font.size = 20
 			label.add_font_override("font", font)
 			row.add_child(label)
+			var team = TextureButton.new()
+			team.name = "Team"
+			team.rect_min_size = Vector2(48, 48)
+			team.expand = true
+			team.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+			team.focus_mode = Control.FOCUS_NONE
+			team.texture_normal = load("res://MOD_CONTENT/CruS Online/target_white.png")
+			team.texture_hover = team.texture_normal
+			team.texture_pressed = team.texture_normal
+			team.connect("pressed", self, "_team_pressed", [peer])
+			row.add_child(team)
 			add_child(row)
 			rows[peer] = row
 		var row = rows[peer]
@@ -59,3 +70,12 @@ func _process(delta):
 		icon.texture_normal = voice.TALK_ICON if voice.is_talking(peer) else voice.QUIET_ICON
 		icon.modulate = Color(0.35, 0.35, 0.35) if voice.is_muted(peer) else Color.white
 		icon.hint_tooltip = "Your microphone" if peer == Multiplayer.NetworkBridge.get_id() else ("Unmute player" if voice.is_muted(peer) else "Mute player")
+		var team = row.get_node("Team")
+		team.visible = Multiplayer.CounterOp.is_active()
+		team.disabled = not Multiplayer.CounterOp.host_can_assign_team()
+		var team_color = Color(0, 1, 0, 1) if Multiplayer.CounterOp.is_operative(peer) else Color(1, 0, 0, 1)
+		team.modulate = team_color * (0.55 if team.disabled else 1.0)
+		team.hint_tooltip = ("Operative" if Multiplayer.CounterOp.is_operative(peer) else "Counter-Operative") + (". Enable Override Teams in Mode Settings to let the host reassign players." if team.disabled else ". Click to move this player to the other team.")
+
+func _team_pressed(peer):
+	Multiplayer.CounterOp.host_toggle_team(peer)

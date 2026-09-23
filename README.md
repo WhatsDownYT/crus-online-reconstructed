@@ -78,7 +78,7 @@ After everyone has entered the lobby, players must choose weapons and implants
 
 Once all the players are ready the host must select a level and press `Start misson` button to play map from the main game
 
-You can also play maps embedded in the modification, they can be found in the CruS Online menu in the `DM` tab
+While hosting a lobby, the `Modes` tab lets the host choose the active multiplayer mode.
 
 After the game starts, players will not be able to join the lobby
 

@@ -21,41 +21,90 @@ var rpc_debug_list = {}
 var rset_debug_list = {}
 var _pending_registrations = []
 var damage_source_context = 0
+var damage_source_node_context = null
+const NPC_SOURCE_ID = 2147483646
 const FriendlyFirePolicy = preload("res://MOD_CONTENT/CruS Online/FriendlyFire.gd")
 
-func damage_allowed(source, target):
+func _counterop():
+	if not is_instance_valid(Multiplayer) or not ("CounterOp" in Multiplayer):
+		return null
+	return Multiplayer.CounterOp
+
+func damage_allowed(source, target, source_node = null):
+	var counterop = _counterop()
+	if source == NPC_SOURCE_ID:
+		if is_instance_valid(counterop) and counterop.is_active() and target > 0 and Multiplayer.players.has(target):
+			var npc = source_node if is_instance_valid(source_node) else damage_source_node_context
+			return not counterop.is_counter_operative(target) or counterop.npc_is_hostile(npc)
+		return true
+	if is_instance_valid(counterop) and counterop.is_active() and Multiplayer.players.has(source) and Multiplayer.players.has(target):
+		return counterop.can_player_damage(source, target, Multiplayer.hostSettings.get("friendlyFire", true))
 	return FriendlyFirePolicy.allows(Multiplayer.hostSettings.get("friendlyFire", true), source, target)
+
+func npc_source_id():
+	var counterop = _counterop()
+	return NPC_SOURCE_ID if is_instance_valid(counterop) and counterop.is_active() else 0
 
 func damage_source_id(source):
 	if source == Global.player:
 		return get_id()
+	if not is_instance_valid(source):
+		return damage_source_context
 	if source.has_meta("crus_damage_source"):
 		return int(source.get_meta("crus_damage_source"))
+	if source.has_meta("counterop_npc"):
+		return npc_source_id()
 	if "drive_id" in source:
 		return int(source.drive_id) if source.drive_id != null else 0
 	if "player" in source and typeof(source.player) == TYPE_BOOL:
-		return get_id() if source.player else 0
+		return get_id() if source.player else npc_source_id()
+	var counterop = _counterop()
+	if is_instance_valid(counterop) and is_instance_valid(counterop.find_npc_handler(source)):
+		return npc_source_id()
 	return damage_source_context
 
 func inherit_damage_source(child, source):
 	child.set_meta("crus_damage_source", damage_source_id(source))
+	var counterop = _counterop()
+	if is_instance_valid(counterop) and counterop.npc_is_hostile(source):
+		child.set_meta("counterop_hostile", true)
 
 func damage_target_id(target):
 	if target == Global.player:
 		return get_id()
-	if "client" in target and is_instance_valid(target.client):
+	if is_instance_valid(target) and "client" in target and is_instance_valid(target.client):
 		return int(target.client.name)
 	return 0
+
+func npc_damage_allowed(source, target):
+	return damage_allowed(npc_source_id(), damage_target_id(target), source)
 
 func apply_damage(source, target, method, args):
 	var source_id = damage_source_id(source)
 	var clearing_fire = method == "set_fire" and args == [false]
-	if not clearing_fire and not damage_allowed(source_id, damage_target_id(target)):
+	var counterop = _counterop()
+	if not clearing_fire and is_instance_valid(counterop) and Multiplayer.players.has(source_id) and not counterop.allow_npc_action(source_id, target):
+		return
+	if not clearing_fire and not damage_allowed(source_id, damage_target_id(target), source):
 		return
 	var previous_source = damage_source_context
+	var previous_node = damage_source_node_context
 	damage_source_context = source_id
+	damage_source_node_context = source
 	target.callv(method, args)
 	damage_source_context = previous_source
+	damage_source_node_context = previous_node
+
+func apply_npc_damage(source, target, method, args):
+	if not npc_damage_allowed(source, target):
+		return
+	var previous_source = damage_source_context
+	var previous_node = damage_source_node_context
+	damage_source_context = npc_source_id()
+	damage_source_node_context = source
+	target.callv(method, args)
+	damage_source_context = previous_source
+	damage_source_node_context = previous_node
 
 func _ready():
 	call_deferred("_flush_registrations")

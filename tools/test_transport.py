@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
     menu_source = (root / 'menu.tscn').read_text(encoding='utf-8')
     for match in re.finditer(r'script/source = "((?:[^"\\]|\\.)*)"', menu_source):
         source = match.group(1).replace(r'\"', '"').replace('\\\\', '\\')
-        for collection in ('playerNameImage', 'playerSkins'):
+        for collection in ('playerSkins',):
             if f'var {collection}' in source:
                 (project / f'{collection}.gd').write_text(source, encoding='utf-8')
     shutil.copy2(root / 'tests/transport_test.gd', project / 'test.gd')

@@ -17,7 +17,9 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = null
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(self):
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
 		if oldDistance == null or oldDistance > distance:
 			oldDistance = distance
@@ -29,6 +31,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [
 		["particle_visible", NetworkBridge.PERMISSION.SERVER],
 		["died", NetworkBridge.PERMISSION.SERVER],
@@ -69,10 +72,13 @@ func _physics_process(delta):
 			NetworkBridge.n_rset_unreliable(laser, "global_transform", laser.global_transform)
 			return 
 		show()
-		look_towards = lerp(look_towards, get_near_player(self).player.global_transform.origin  + Vector3.UP * 1.0, follow_speed)
+		var nearest = get_near_player(self)
+		if nearest.player == null:
+			return
+		look_towards = lerp(look_towards, nearest.player.global_transform.origin + Vector3.UP * 1.0, follow_speed)
 		var space = get_world().direct_space_state
 		if not active:
-			var active_result = space.intersect_ray(global_transform.origin, get_near_player(self).player.global_transform.origin + Vector3.UP * 1.0, [self])
+			var active_result = space.intersect_ray(global_transform.origin, nearest.player.global_transform.origin + Vector3.UP * 1.0, [self])
 			if active_result:
 				if active_result.collider == Global.player or active_result.collider.has_meta("puppet"):
 					active = true
@@ -88,7 +94,7 @@ func _physics_process(delta):
 			NetworkBridge.n_rset_unreliable(laser, "global_transform", laser.global_transform)
 			NetworkBridge.n_rset_unreliable(particle, "global_transform", particle.global_transform)
 			if result.collider == Global.player or result.collider.has_meta("puppet"):
-				result.collider.damage(20, result.normal, result.position, global_transform.origin)
+				NetworkBridge.apply_npc_damage(self, result.collider, "damage", [20, result.normal, result.position, global_transform.origin])
 		else :
 			particle.hide()
 			laser.scale.z = 400
@@ -106,6 +112,9 @@ func damage(dmg, nrml, pos, shoot_pos):
 
 master func network_damage(id, dmg, nrml, pos, shoot_pos):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, self):
+			return
 		if not active:
 			return 
 		health -= dmg

@@ -10,6 +10,9 @@ var committed = false
 var evaluation_elapsed = 0.0
 var last_counts = []
 
+func _counterop():
+	return Multiplayer.CounterOp if "CounterOp" in Multiplayer else null
+
 func _ready():
 	connect("body_entered", self, "_on_Body_entered")
 	connect("body_exited", self, "_on_Body_exited")
@@ -89,9 +92,11 @@ func _evaluate_exit():
 	var absent = Multiplayer.died_players.duplicate()
 	if is_instance_valid(Multiplayer.Flow):
 		absent.append_array(Multiplayer.Flow.waiting_peers)
-	var required = ExitPolicy.required_players(Multiplayer.players, absent)
+	var counterop = _counterop()
+	var counterop_active = is_instance_valid(counterop) and counterop.is_active()
+	var required = counterop.required_exit_players(absent) if counterop_active else ExitPolicy.required_players(Multiplayer.players, absent)
 	var can_exit = ExitPolicy.can_exit(Global.objective_complete, required, exitPlayers)
-	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.ending_path() != "":
+	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.ending_path() != "" and not counterop_active:
 		can_exit = false
 		for peer in required:
 			if Global.objective_complete and exitPlayers.has(peer):
@@ -122,8 +127,10 @@ puppet func send_player_count(id, exitCount, hostCount):
 
 puppet func send_exit_message(id):
 	Global.UI.notify("Exiting...", Color(1, 0, 0))
-	if not is_instance_valid(Multiplayer.Flow) or Multiplayer.Flow.ending_path() == "":
-		Global.UI.notify("All living players are at the exit", Color(1, 0, 0))
+	var counterop = _counterop()
+	var counterop_active = is_instance_valid(counterop) and counterop.is_active()
+	if not is_instance_valid(Multiplayer.Flow) or Multiplayer.Flow.ending_path() == "" or counterop_active:
+		Global.UI.notify("All living Operatives are at the exit" if counterop_active else "All living players are at the exit", Color(1, 0, 0))
 
 puppet func send_exit_cancelled(id):
 	Global.UI.notify("Exit cancelled.", Color(1, 0, 0))

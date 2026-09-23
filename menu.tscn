@@ -1,4 +1,4 @@
-[gd_scene load_steps=56 format=2]
+[gd_scene load_steps=50 format=2]
 
 [ext_resource path="res://Menu/menu_theme.tres" type="Theme" id=1]
 [ext_resource path="res://Textures/Misc/mainguy_clothes.png" type="Texture" id=2]
@@ -6,12 +6,7 @@
 [ext_resource path="res://Textures/NPC/Enemy_Nude.png" type="Texture" id=4]
 [ext_resource path="res://MOD_CONTENT/CruS Online/multiplayer_menu.gd" type="Script" id=5]
 [ext_resource path="res://Textures/NPC/Enemy_Worker.png" type="Texture" id=6]
-[ext_resource path="res://Textures/Menu/Handler/1.png" type="Texture" id=7]
-[ext_resource path="res://Textures/Menu/Handler/3.png" type="Texture" id=8]
-[ext_resource path="res://Textures/Menu/Handler/4.png" type="Texture" id=9]
-[ext_resource path="res://Textures/Menu/Handler/2.png" type="Texture" id=10]
 [ext_resource path="res://MOD_CONTENT/CruS Online/redpanel.tres" type="StyleBox" id=11]
-[ext_resource path="res://Textures/Menu/return_normal.png" type="Texture" id=12]
 [ext_resource path="res://MOD_CONTENT/CruS Online/ChatBox.gd" type="Script" id=13]
 [ext_resource path="res://Sfx/NPCs/night_creep_pain_1.wav" type="AudioStream" id=14]
 [ext_resource path="res://Textures/NPC/cultist_civilian.png" type="Texture" id=15]
@@ -121,11 +116,13 @@ onready var playersList = $VBoxContainer/PlayersList/PlayersListLabel
 
 onready var LobbyList = $VBoxContainer/PlayersList/LobbyList
 onready var LobbyInfo = $VBoxContainer/LobbyInfo
+onready var LobbyPlayers = $VBoxContainer/LobbyInfo/PlayersInfo
+onready var LobbyPassword = $VBoxContainer/LobbyInfo/PasswordInfo
 
 onready var status = $VBoxContainer/Status/StatusLabel
 
 var lobbies = []
-var selected = 0
+var selected = -1
 
 var join_request_id = 0
 
@@ -147,6 +144,9 @@ func _ready():
 		[\"_rpc_client\", SteamNetwork.PERMISSION.SERVER],
 		[\"_rpc_server\", SteamNetwork.PERMISSION.CLIENT_ALL]
 	])
+	$VBoxContainer/Buttons/Join.disabled = true
+	$VBoxContainer/Status.hide()
+	LobbyInfo.hide()
 
 func create_lobby():
 	SteamLobby.create_lobby(2, 16)
@@ -154,6 +154,8 @@ func create_lobby():
 	$VBoxContainer/Buttons/Join.hide()
 	$VBoxContainer/Buttons/Refresh.hide()
 	$VBoxContainer/Buttons/Leave.show()
+	status.text = \"Creating lobby...\"
+	$VBoxContainer/Status.show()
 	
 	$VBoxContainer/PlayersList/PlayersListLabel.show()
 	LobbyList.hide()
@@ -175,6 +177,8 @@ func lobby_join_requested(id):
 		connect_lobby()
 
 func join_lobby():
+	if selected < 0 or selected >= lobbies.size():
+		return
 	var password_require = SteamInit.Steam.getLobbyData(lobbies[selected], \"password\")
 	print(\"[CRUS ONLINE / LOBBY]: Password require: \", password_require)
 	if password_require == \"True\":
@@ -190,6 +194,8 @@ func connect_lobby():
 		SteamLobby.join_lobby(join_request_id)
 		join_request_id = 0
 	else:
+		if selected < 0 or selected >= lobbies.size():
+			return
 		SteamLobby.join_lobby(lobbies[selected])
 	
 	$VBoxContainer/Buttons/Create.hide()
@@ -198,6 +204,7 @@ func connect_lobby():
 	$VBoxContainer/Buttons/Leave.show()
 	
 	Multiplayer.emit_signal(\"status_update\", \"Connecting...\")
+	$VBoxContainer/Status.show()
 	
 
 	LobbyList.hide()
@@ -208,40 +215,41 @@ func leave_lobby():
 	Multiplayer.emit_signal(\"status_update\", \"Offline\")
 	$VBoxContainer/Buttons/Create.show()
 	$VBoxContainer/Buttons/Join.show()
+	$VBoxContainer/Buttons/Join.disabled = true
 	$VBoxContainer/Buttons/Refresh.show()
 	$VBoxContainer/Buttons/Leave.hide()
+	selected = -1
 	
 	$VBoxContainer/PlayersList/PlayersListLabel.hide()
+	$VBoxContainer/Status.hide()
 	LobbyList.show()
-	LobbyInfo.show()
+	LobbyInfo.hide()
 
 func lobby_selected(id):
 	print(id)
+	if id < 0 or id >= lobbies.size():
+		selected = -1
+		$VBoxContainer/Buttons/Join.disabled = true
+		return
 	selected = id
-	
-	var lobby_max_players = SteamInit.Steam.getLobbyMemberLimit(lobbies[selected])
-	var lobby_num_members = SteamInit.Steam.getNumLobbyMembers(lobbies[selected])
-	var password_require = SteamInit.Steam.getLobbyData(lobbies[selected], \"password\")
-	
-	LobbyInfo.text = \"Players: \" + str(lobby_num_members) + \" / \" + str(lobby_max_players) + \"   Password: \" + str(password_require)
+	$VBoxContainer/Buttons/Join.disabled = false
 
 func get_lobbies():
+	selected = -1
+	$VBoxContainer/Buttons/Join.disabled = true
 	SteamLobby.request_lobby_list()
 
 func _on_match_list(recived_lobbies):
 	print(\"[CRUS ONLINE / STEAM] Recived a lobbies list\")
 	LobbyList.clear()
+	selected = -1
+	$VBoxContainer/Buttons/Join.disabled = true
 	var raw_lobbies = []
 	
 	for this_lobby in recived_lobbies:
 		if SteamInit.Steam.getLobbyData(this_lobby, \"crus_online\"):
 			raw_lobbies.append(this_lobby)
-			
 			var lobby_name = SteamInit.Steam.getLobbyData(this_lobby, \"name\")
-			var lobby_max_players = SteamInit.Steam.getLobbyMemberLimit(this_lobby)
-			var lobby_num_members = SteamInit.Steam.getNumLobbyMembers(this_lobby)
-			var password_require = SteamInit.Steam.getLobbyData(lobbies[selected], \"password\")
-			
 			LobbyList.add_item(lobby_name)
 	
 	lobbies = raw_lobbies
@@ -262,6 +270,19 @@ func player_list_update(placeholder):
 			playersList.bbcode_text += \"\\n\"
 		
 		playerNumber += 1
+	_refresh_lobby_info()
+
+func _refresh_lobby_info():
+	if not SteamLobby.in_lobby():
+		LobbyInfo.hide()
+		return
+	var lobby_id = SteamLobby.get_lobby_id()
+	var lobby_max_players = SteamInit.Steam.getLobbyMemberLimit(lobby_id)
+	var lobby_num_members = SteamInit.Steam.getNumLobbyMembers(lobby_id)
+	var password_require = SteamInit.Steam.getLobbyData(lobby_id, \"password\")
+	LobbyPlayers.text = \"Players: \" + str(lobby_num_members) + \" / \" + str(lobby_max_players)
+	LobbyPassword.text = \"Password: \" + str(password_require)
+	LobbyInfo.show()
 
 func back_to_menu():
 	main_tab.current_tab = 0
@@ -269,8 +290,14 @@ func back_to_menu():
 
 func update_status(new_status):
 	status.text = new_status
-	
-	if new_status == \"Connected to Lobby\":
+	if new_status == \"Offline\":
+		$VBoxContainer/Status.hide()
+		LobbyInfo.hide()
+		return
+	$VBoxContainer/Status.show()
+	if SteamLobby.in_lobby():
+		_refresh_lobby_info()
+	if new_status == \"Connected to Lobby\" or new_status == \"Lobby owner\":
 		show_player_list()
 
 func _rpc_test():
@@ -369,35 +396,6 @@ func focus_exited():
 	b_change($Blue.text)
 "
 
-[sub_resource type="GDScript" id=15]
-script/source = "extends HBoxContainer
-
-export (Array,Array) var playerNameImage
-
-var selected = 0
-
-func _ready():
-	for image in playerNameImage:
-		$ItemList.add_item(image[0])
-
-func _skin_selected(index):
-	$TextureRect.texture = playerNameImage[index][2]
-	selected = index
-
-func set_texture(path):
-	selected = 0
-	for index in range(playerNameImage.size()):
-		if playerNameImage[index][1] == path:
-			selected = index
-			break
-	if not playerNameImage.empty():
-		$ItemList.select(selected)
-		$TextureRect.texture = playerNameImage[selected][2]
-
-func get_texture():
-	return playerNameImage[selected][1]
-"
-
 [sub_resource type="GDScript" id=2]
 script/source = "extends HBoxContainer
 
@@ -442,43 +440,36 @@ func button_reset():
 script/source = "extends PanelContainer
 
 var gamemodesList = [
-	[\"Cruelty\",\"Gamemode without any special goals, kill each other until you get bored, is the standard mode for playing Deathmatch and CO-OP maps\"]
+	[\"Cruelty\",\"The default gameplay of Cruelty Squad. Eliminate all mission targets, then reach the exit.\",\"cruelty\"],
+	[\"Counter-Op\",\"Operatives must eliminate all mission targets and reach the exit. Counter-Operatives fight alongside hostile NPCs and win by eliminating every Operative.\",\"counter_op\"]
 ]
 
-var mapsList = [
-	\"res://MOD_CONTENT/CruS Online/maps/bonesquad_museum.tscn\",
-	\"res://MOD_CONTENT/CruS Online/maps/Construct_Blam.tscn\"
-]
-
-var mapsName = [
-	\"Debug map\",
-	\"Construct\"
-]
-
-var mapSelected = 0
+var gamemodeSelected = 0
 
 func _ready():
 	for gamemode in gamemodesList:
 		$HBoxContainer/LevelController/GamemodeList.add_item(gamemode[0])
 	
-	for map in mapsName:
-		$HBoxContainer/LevelController/MapList.add_item(map)
-	
-	$HBoxContainer/LevelController/GamemodeList.select(0)
-	$HBoxContainer/LevelController/MapList.select(0)
-	
-	_gamemode_select(0)
-	_map_select(0)
-
+	var multiplayer = get_tree().get_nodes_in_group(\"Multiplayer\")[0]
+	var current_mode = multiplayer.hostSettings.get(\"gameMode\", \"cruelty\")
+	for index in range(gamemodesList.size()):
+		if gamemodesList[index][2] == current_mode:
+			gamemodeSelected = index
+			break
+	$HBoxContainer/LevelController/GamemodeList.select(gamemodeSelected)
+	_gamemode_select(gamemodeSelected)
 
 func _gamemode_select(index):
+	gamemodeSelected = index
 	$HBoxContainer/GamemodeDescription/MapLabel.text = \"Gamemode description:\\n\\n\" + gamemodesList[index][1]
 
-func _map_select(index):
-	mapSelected = index
-
 func play_button_pressed():
-	get_tree().get_nodes_in_group(\"Multiplayer\")[0].game_init(mapsList[mapSelected])
+	var multiplayer = get_tree().get_nodes_in_group(\"Multiplayer\")[0]
+	if not multiplayer.NetworkBridge.check_connection() or not multiplayer.NetworkBridge.is_world_authority():
+		return
+	var selected_mode = gamemodesList[gamemodeSelected][2]
+	if multiplayer.hostSettings.get(\"gameMode\", \"cruelty\") != selected_mode:
+		multiplayer.CounterOp.host_apply_mode(selected_mode)
 "
 
 [sub_resource type="GDScript" id=13]
@@ -727,7 +718,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Beta v0.3"
+text = "Beta v1.0"
 script = SubResource( 18 )
 
 [node name="LAN" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -860,7 +851,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Beta v0.3"
+text = "Beta v1.0"
 script = SubResource( 18 )
 
 [node name="Steam" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -922,6 +913,7 @@ margin_bottom = 26.0
 text = " Test "
 
 [node name="Status" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+visible = false
 margin_top = 62.0
 margin_right = 641.0
 margin_bottom = 88.0
@@ -939,11 +931,25 @@ size_flags_horizontal = 3
 text = "Offline"
 align = 2
 
-[node name="LobbyInfo" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+[node name="LobbyInfo" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+visible = false
 margin_top = 93.0
 margin_right = 641.0
 margin_bottom = 119.0
-text = "Players: 0/0   Password: False"
+
+[node name="PlayersInfo" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/LobbyInfo"]
+margin_right = 320.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Players: 0/0"
+
+[node name="PasswordInfo" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/LobbyInfo"]
+margin_left = 320.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Password: False"
+align = 2
 
 [node name="PlayersList" type="PanelContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
 margin_top = 124.0
@@ -1000,7 +1006,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "Beta v0.3"
+text = "Beta v1.0"
 script = SubResource( 18 )
 
 [node name="Host" type="PanelContainer" parent="CenterContainer/TabContainer"]
@@ -1105,12 +1111,24 @@ margin_right = 591.0
 margin_bottom = 26.0
 rect_pivot_offset = Vector2( -179, -28 )
 size_flags_horizontal = 3
-text = "Deathmatch respawn:"
+text = "Can respawn:"
 
 [node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn"]
 margin_left = 591.0
 margin_right = 641.0
 margin_bottom = 26.0
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="SelfRespawn" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn"]
+size_flags_horizontal = 3
+text = "Self-respawning:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn"]
 rect_min_size = Vector2( 50, 0 )
 theme = ExtResource( 24 )
 text = "<<"
@@ -1126,7 +1144,6 @@ rect_min_size = Vector2( 50, 0 )
 theme = ExtResource( 24 )
 pressed = false
 text = "<<"
-hint_tooltip = "Allow players to hurt each other. Self-damage still applies when disabled."
 
 [node name="FriendlyFire" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
 
@@ -1139,7 +1156,6 @@ rect_min_size = Vector2( 50, 0 )
 theme = ExtResource( 24 )
 pressed = true
 text = "<<"
-hint_tooltip = "Allow players to hurt each other. Self-damage still applies when disabled."
 
 [node name="useVoiceChat" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
 
@@ -1198,19 +1214,19 @@ theme = ExtResource( 24 )
 pressed = true
 text = "<<"
 
-[node name="HelpTimer" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+[node name="ReviveTimer" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
 margin_top = 180.0
 margin_right = 641.0
 margin_bottom = 206.0
 alignment = 1
 
-[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer"]
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer"]
 margin_right = 457.0
 margin_bottom = 26.0
 size_flags_horizontal = 3
-text = "Help timer:"
+text = "Revive timer:"
 
-[node name="HelpEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/HelpTimer"]
+[node name="ReviveEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer"]
 margin_left = 457.0
 margin_right = 641.0
 margin_bottom = 26.0
@@ -1219,6 +1235,30 @@ min_value = 1.0
 max_value = 99.0
 value = 15.0
 allow_greater = true
+align = 1
+
+[node name="Lives" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 216.0
+margin_right = 641.0
+margin_bottom = 242.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/Lives"]
+margin_right = 457.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Lives:"
+
+[node name="LivesEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/Lives"]
+margin_left = 457.0
+margin_right = 641.0
+margin_bottom = 26.0
+theme = ExtResource( 24 )
+max_value = 5.0
+step = 1.0
+value = 0.0
+allow_greater = false
+allow_lesser = false
 align = 1
 
 [node name="Save" type="Button" parent="CenterContainer/TabContainer/Host"]
@@ -1349,40 +1389,10 @@ margin_bottom = 64.0
 rect_min_size = Vector2( 64, 64 )
 color = Color( 1, 0, 0, 1 )
 
-[node name="Image" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
+[node name="Skin" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
 margin_top = 141.0
 margin_right = 641.0
-margin_bottom = 205.0
-custom_constants/separation = 5
-script = SubResource( 15 )
-playerNameImage = [ [ "None", "null", ExtResource( 12 ) ], [ "Handler (1)", "res://Textures/Menu/Handler/1.png", ExtResource( 7 ) ], [ "Handler (2)", "res://Textures/Menu/Handler/2.png", ExtResource( 10 ) ], [ "Handler (3)", "res://Textures/Menu/Handler/3.png", ExtResource( 8 ) ], [ "Handler (4)", "res://Textures/Menu/Handler/4.png", ExtResource( 9 ) ] ]
-
-[node name="Label3" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer/Image"]
-margin_top = 19.0
-margin_right = 164.0
-margin_bottom = 45.0
-text = "Name image:"
-
-[node name="ItemList" type="ItemList" parent="CenterContainer/TabContainer/Player/VBoxContainer/Image"]
-margin_left = 169.0
-margin_right = 572.0
-margin_bottom = 64.0
-rect_pivot_offset = Vector2( -843, 287 )
-size_flags_horizontal = 3
-allow_reselect = true
-
-[node name="TextureRect" type="TextureRect" parent="CenterContainer/TabContainer/Player/VBoxContainer/Image"]
-margin_left = 577.0
-margin_right = 641.0
-margin_bottom = 64.0
-rect_min_size = Vector2( 64, 64 )
-texture = ExtResource( 12 )
-expand = true
-
-[node name="Skin" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
-margin_top = 210.0
-margin_right = 641.0
-margin_bottom = 466.0
+margin_bottom = 397.0
 custom_constants/separation = 5
 script = SubResource( 2 )
 playerSkins = [ [ "Default", "res://Textures/Misc/mainguy_clothes.png", ExtResource( 2 ) ], [ "Worker", "res://Textures/NPC/Enemy_Worker.png", ExtResource( 6 ) ], [ "Nude (FREE???)", "res://Textures/NPC/Enemy_Nude.png", ExtResource( 4 ) ], [ "Cultist", "res://Textures/NPC/cultist_civilian.png", ExtResource( 15 ) ], [ "Boss guy", "res://Textures/NPC/bosssguy_clothes.png", ExtResource( 16 ) ], [ "Assassin", "res://Textures/NPC/Enemy_Assassin.png", ExtResource( 20 ) ], [ "Assassin (Alt)", "res://Textures/NPC/Enemy_Assassin_Alt.png", ExtResource( 18 ) ], [ "Civilian", "res://Textures/NPC/Enemy_Civilian2.png", ExtResource( 17 ) ], [ "Cop", "res://Textures/NPC/Enemy_Cop1.png", ExtResource( 23 ) ], [ "Kevin", "res://Textures/NPC/Enemy_Kevin.png", ExtResource( 22 ) ], [ "CEO", "res://Textures/NPC/Objective_CEO.png", ExtResource( 21 ) ], [ "Elsa", "res://Textures/NPC/Elsa.png", ExtResource( 19 ) ] ]
@@ -1409,9 +1419,9 @@ texture = ExtResource( 2 )
 
 [node name="Save" type="Button" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
 margin_left = 260.0
-margin_top = 471.0
+margin_top = 402.0
 margin_right = 380.0
-margin_bottom = 497.0
+margin_bottom = 428.0
 size_flags_horizontal = 4
 text = "  Save  "
 icon_align = 1
@@ -1420,7 +1430,7 @@ script = SubResource( 26 )
 [node name="Timer" type="Timer" parent="CenterContainer/TabContainer/Player/VBoxContainer/Save"]
 one_shot = true
 
-[node name="DM" type="PanelContainer" parent="CenterContainer/TabContainer"]
+[node name="Modes" type="PanelContainer" parent="CenterContainer/TabContainer"]
 visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -1432,75 +1442,60 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = SubResource( 11 )
 
-[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/DM"]
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Modes"]
 margin_left = 3.0
 margin_top = 3.0
 margin_right = 644.0
 margin_bottom = 500.0
 alignment = 1
 
-[node name="LevelController" type="VBoxContainer" parent="CenterContainer/TabContainer/DM/HBoxContainer"]
+[node name="LevelController" type="VBoxContainer" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
 margin_right = 305.0
 margin_bottom = 497.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 alignment = 2
 
-[node name="GamemodeLabel" type="Label" parent="CenterContainer/TabContainer/DM/HBoxContainer/LevelController"]
+[node name="GamemodeLabel" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController"]
 margin_right = 305.0
 margin_bottom = 26.0
 text = "Gamemodes:"
 align = 1
 
-[node name="GamemodeList" type="ItemList" parent="CenterContainer/TabContainer/DM/HBoxContainer/LevelController"]
+[node name="GamemodeList" type="ItemList" parent="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController"]
 margin_top = 26.0
-margin_right = 305.0
-margin_bottom = 248.0
-rect_pivot_offset = Vector2( -843, 287 )
-size_flags_vertical = 3
-allow_reselect = true
-
-[node name="MapLabel" type="Label" parent="CenterContainer/TabContainer/DM/HBoxContainer/LevelController"]
-margin_top = 248.0
-margin_right = 305.0
-margin_bottom = 274.0
-text = "Maps:"
-align = 1
-
-[node name="MapList" type="ItemList" parent="CenterContainer/TabContainer/DM/HBoxContainer/LevelController"]
-margin_top = 274.0
 margin_right = 305.0
 margin_bottom = 497.0
 rect_pivot_offset = Vector2( -843, 287 )
 size_flags_vertical = 3
 allow_reselect = true
 
-[node name="Label" type="Label" parent="CenterContainer/TabContainer/DM/HBoxContainer"]
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
 margin_left = 305.0
 margin_top = 235.0
 margin_right = 335.0
 margin_bottom = 261.0
 text = "  "
 
-[node name="GamemodeDescription" type="VBoxContainer" parent="CenterContainer/TabContainer/DM/HBoxContainer"]
+[node name="GamemodeDescription" type="VBoxContainer" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
 margin_left = 335.0
 margin_right = 641.0
 margin_bottom = 497.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="MapLabel" type="Label" parent="CenterContainer/TabContainer/DM/HBoxContainer/GamemodeDescription"]
+[node name="MapLabel" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription"]
 margin_right = 306.0
 margin_bottom = 471.0
 size_flags_horizontal = 3
 size_flags_vertical = 7
 text = "Gamemode description:
 
-The mode without any special goals, kill each other until you get bored, is the standard mode for playing Deathmatch and CO-OP maps"
+The default gameplay of Cruelty Squad. Eliminate all mission targets, then reach the exit."
 align = 1
 autowrap = true
 
-[node name="Button" type="Button" parent="CenterContainer/TabContainer/DM/HBoxContainer/GamemodeDescription"]
+[node name="Button" type="Button" parent="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription"]
 margin_top = 471.0
 margin_right = 306.0
 margin_bottom = 497.0
@@ -1672,26 +1667,8 @@ margin_top = 3.0
 margin_right = 644.0
 margin_bottom = 500.0
 bbcode_enabled = true
-bbcode_text = "[center]Cruelty Squad Online: Reconstructed
-Created by [color=blue][url=https://www.youtube.com/@PurgaTeam]PurgaTeam[/url][/color]
-Developed by [color=blue][url=https://www.youtube.com/@WhatsDown]WhatsDown[/url][/color]
-
-Cruelty Squad Online
-Created by [color=blue][url=https://www.youtube.com/@triggeredp]TriggeredP[/url][/color]
-
-Special Thanks[/center]
-
-DX: [color=maroon]Helped with animations for the player, menu icon and CruS Online testing[/color]
-
-Keith Mason: [color=maroon]creator of Construct map[/color]
-
-Xuesos (4cne): [color=maroon]My IRL friend who helped me with CruS Online testing[/color]
-
-Chasmy: [color=maroon]Reconstructed testing[/color]
-
-PBF Guy: [color=maroon]Reconstructed testing[/color]
-
-"
+bbcode_text = ""
+text = ""
 
 [node name="HTTPRequest" type="HTTPRequest" parent="CenterContainer/TabContainer/Credits"]
 
@@ -1815,14 +1792,12 @@ secret = true
 [connection signal="text_entered" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Green" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="g_change"]
 [connection signal="focus_exited" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Blue" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="focus_exited"]
 [connection signal="text_entered" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Blue" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="b_change"]
-[connection signal="item_selected" from="CenterContainer/TabContainer/Player/VBoxContainer/Image/ItemList" to="CenterContainer/TabContainer/Player/VBoxContainer/Image" method="_skin_selected"]
 [connection signal="item_selected" from="CenterContainer/TabContainer/Player/VBoxContainer/Skin/ItemList" to="CenterContainer/TabContainer/Player/VBoxContainer/Skin" method="_skin_selected"]
 [connection signal="pressed" from="CenterContainer/TabContainer/Player/VBoxContainer/Save" to="." method="save_player"]
 [connection signal="pressed" from="CenterContainer/TabContainer/Player/VBoxContainer/Save" to="CenterContainer/TabContainer/Player/VBoxContainer/Save" method="button_pressed"]
 [connection signal="timeout" from="CenterContainer/TabContainer/Player/VBoxContainer/Save/Timer" to="CenterContainer/TabContainer/Player/VBoxContainer/Save" method="button_reset"]
-[connection signal="item_selected" from="CenterContainer/TabContainer/DM/HBoxContainer/LevelController/GamemodeList" to="CenterContainer/TabContainer/DM" method="_gamemode_select"]
-[connection signal="item_selected" from="CenterContainer/TabContainer/DM/HBoxContainer/LevelController/MapList" to="CenterContainer/TabContainer/DM" method="_map_select"]
-[connection signal="pressed" from="CenterContainer/TabContainer/DM/HBoxContainer/GamemodeDescription/Button" to="CenterContainer/TabContainer/DM" method="play_button_pressed"]
+[connection signal="item_selected" from="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController/GamemodeList" to="CenterContainer/TabContainer/Modes" method="_gamemode_select"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription/Button" to="CenterContainer/TabContainer/Modes" method="play_button_pressed"]
 [connection signal="item_selected" from="CenterContainer/TabContainer/Implants/HBoxContainer/ImplantsController/AllowedImplantsList" to="CenterContainer/TabContainer/Implants" method="toggle_implant"]
 [connection signal="pressed" from="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/Button3" to="CenterContainer/TabContainer/Implants" method="ban_all"]
 [connection signal="pressed" from="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/Button4" to="CenterContainer/TabContainer/Implants" method="allow_all"]

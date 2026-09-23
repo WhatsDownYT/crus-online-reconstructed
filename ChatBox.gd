@@ -30,15 +30,12 @@ func set_size_ratio():
 	if labelText != null:
 		labelText.get_font("font").size = sizeRatio
 
-master func send_message_host(id, message, author, img = "null", color = "ff0000"):
-	NetworkBridge.n_rpc(self, "send_message", [message, author, img, color])
-	send_message(null, message, author, img, color)
+master func send_message_host(id, message, author, color = "ff0000"):
+	NetworkBridge.n_rpc(self, "send_message", [message, author, color])
+	send_message(null, message, author, color)
 
-puppet func send_message(id, message, author, img = "null", color = "ff0000"):
+puppet func send_message(id, message, author, color = "ff0000"):
 	var rawText = '\n'
-	
-	if img != "null":
-		rawText = rawText + '[img=32]' + img + '[/img] '
 	
 	if color != "ff0000":
 		rawText = rawText + '[color=#' + color + ']'
@@ -55,9 +52,9 @@ puppet func send_message(id, message, author, img = "null", color = "ff0000"):
 func _text_entered(new_text):
 	if new_text != "":
 		if NetworkBridge.n_is_network_master(self):
-			send_message_host(null, new_text, parent.playerInfo.nickname, parent.playerInfo.image, parent.playerInfo.color)
+			send_message_host(null, new_text, parent.playerInfo.nickname, parent.playerInfo.color)
 		else:
-			NetworkBridge.n_rpc(self, "send_message_host", [new_text, parent.playerInfo.nickname, parent.playerInfo.image, parent.playerInfo.color])
+			NetworkBridge.n_rpc(self, "send_message_host", [new_text, parent.playerInfo.nickname, parent.playerInfo.color])
 		lineEdit.text = ""
 
 func open_chat(type):

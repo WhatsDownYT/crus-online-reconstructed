@@ -1,6 +1,6 @@
 extends Node
 
-var version = "Beta v0.3"
+var version = "Beta v1.0"
 
 enum errorType {UNKNOW, TIME_OUT, WRONG_PASSWORD, WRONG_VERSION, PASSWORD_REQUIRE, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
 
@@ -8,7 +8,6 @@ var profile_loaded = false
 var playerInfo = {
 	"nickname": "MT Foxtrot",
 	"color": "ff00ff",
-	"image": "null",
 	"skinPath": "res://Textures/Misc/mainguy_clothes.png"
 }
 
@@ -16,10 +15,13 @@ var hostSettings = {
 	"bannedImplants" : [],
 	"map" : null,
 	"helpTimer": 15,
-	"canRespawn": false,
+	"reviveLives": 0,
+	"canRespawn": true,
+	"selfRespawn": false,
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
 	"friendlyFire": true,
+	"gameMode": "cruelty",
 	"useVoiceChat": true,
 	"proximityVoiceChat": true,
 	"hearDeadPlayers": false
@@ -32,7 +34,10 @@ var config = {
 	"hostPassword": "",
 	"tickRate": 3,
 	"helpTimer": 15,
-	"canRespawn": false,
+	"reviveLives": 0,
+	"reviveLivesZeroInfinite": true,
+	"canRespawn": true,
+	"selfRespawn": false,
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
 	"friendlyFire": true,
@@ -57,7 +62,7 @@ func _public_players():
 	var result = {}
 	for peer in players:
 		result[peer] = {}
-		for field in ["nickname", "color", "image", "skinPath"]:
+		for field in ["nickname", "color", "skinPath"]:
 			result[peer][field] = players[peer].get(field, playerInfo[field])
 	return result
 
@@ -93,8 +98,12 @@ func _notification(what):
 
 var Flow
 var Voice
+var CounterOp
 
 func _ready():
+	CounterOp = preload("res://MOD_CONTENT/CruS Online/CounterOp.gd").new()
+	CounterOp.name = "CounterOp"
+	add_child(CounterOp)
 	Flow = preload("res://MOD_CONTENT/CruS Online/SessionFlow.gd").new()
 	Flow.name = "SessionFlow"
 	add_child(Flow)
@@ -131,6 +140,8 @@ func _ready():
 		["reward_npc_kill", SteamNetwork.PERMISSION.SERVER],
 		["spawn_enemy_weapon", SteamNetwork.PERMISSION.SERVER],
 		["_player_respawn", SteamNetwork.PERMISSION.ALL],
+		["_request_player_revive", SteamNetwork.PERMISSION.ALL],
+		["sync_revive_state", SteamNetwork.PERMISSION.SERVER],
 		["client_peer_connect", SteamNetwork.PERMISSION.SERVER],
 		["sync_mission_state", SteamNetwork.PERMISSION.SERVER],
 		["sync_host_settings", SteamNetwork.PERMISSION.SERVER],
@@ -165,6 +176,12 @@ func peer_update(steam_id):
 			Global.UI.notify(players[steam_id].nickname + " disconnected", Color(1, 0, 0))
 		
 		players.erase(steam_id)
+		revives_used.erase(int(steam_id))
+		revive_authorizations.erase(int(steam_id))
+		if NetworkBridge.is_world_authority():
+			_sync_revive_state_to_clients()
+		if NetworkBridge.is_world_authority() and is_instance_valid(CounterOp):
+			CounterOp.host_player_left(steam_id)
 	
 	Players.sync_players()
 	if NetworkBridge.is_world_authority():
@@ -231,7 +248,9 @@ func clear_connection(recivedError):
 
 func apply_host_settings():
 	hostSettings.helpTimer = config.helpTimer
+	hostSettings.reviveLives = int(clamp(config.reviveLives, 0, 5))
 	hostSettings.canRespawn = config.canRespawn
+	hostSettings.selfRespawn = config.selfRespawn
 	hostSettings.changeModeOnDeath = config.changeModeOnDeath
 	hostSettings.friendlyFire = config.friendlyFire
 	hostSettings.shareDifficulty = config.shareDifficulty
@@ -249,7 +268,9 @@ func host_server():
 	apply_host_settings()
 	if NetworkBridge.is_lan():
 		hostSettings.helpTimer = config.helpTimer
+		hostSettings.reviveLives = int(clamp(config.reviveLives, 0, 5))
 		hostSettings.canRespawn = config.canRespawn
+		hostSettings.selfRespawn = config.selfRespawn
 		hostSettings.changeModeOnDeath = config.changeModeOnDeath
 		
 		if UDPLagger.enabled:
@@ -263,6 +284,7 @@ func host_server():
 		get_tree().set_network_peer(server)
 
 		players[1] = playerInfo.duplicate(true)
+		CounterOp.host_player_joined(1)
 		
 		emit_signal("players_update", players)
 		emit_signal("status_update", "Hosting server")
@@ -284,6 +306,8 @@ func join_to_server(ip, port):
 		print("[CRUS ONLINE / MAIN]: Client try to connect")
 
 func leave_server():
+	if is_instance_valid(CounterOp):
+		CounterOp.reset_session()
 	if is_instance_valid(Voice):
 		Voice.reset_session()
 	if is_instance_valid(Flow):
@@ -292,6 +316,8 @@ func leave_server():
 	player_scene_loaded = true
 	loaded_players.clear()
 	died_players.clear()
+	revives_used.clear()
+	revive_authorizations.clear()
 	team_wipe_applied = false
 	playerPuppet = null
 	$RestartTimer.stop()
@@ -338,6 +364,7 @@ func steam_peers_connect():
 	if str(playerInfo.nickname).strip_edges().empty():
 		playerInfo.nickname = SteamInit.steam_username
 	players[NetworkBridge.get_host_id()] = playerInfo.duplicate(true)
+	CounterOp.host_player_joined(NetworkBridge.get_host_id())
 	
 	$Debug/VBoxContainer/GameType.text = "Player is host"
 	NetworkBridge.n_rpc(self, "client_peer_connect")
@@ -362,6 +389,12 @@ puppet func disconnected(id):
 				Global.UI.notify(players[id].nickname + " disconnected", Color(1, 0, 0))
 		
 		players.erase(id)
+		revives_used.erase(int(id))
+		revive_authorizations.erase(int(id))
+		if NetworkBridge.is_world_authority():
+			_sync_revive_state_to_clients()
+		if NetworkBridge.is_world_authority() and is_instance_valid(CounterOp):
+			CounterOp.host_player_left(id)
 		if is_instance_valid(Flow):
 			Flow.waiting_peers.erase(id)
 			Flow.check_team_wipe()
@@ -429,8 +462,12 @@ remote func connect_notify(id, nickname):
 func host_add_player(id, info):
 	if not players.has(id):
 		players[id] = info
+		revives_used[int(id)] = 0
+		CounterOp.host_player_joined(id)
 		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])
+		_sync_revive_state_to_clients()
 		Flow.send_world(id)
+		CounterOp.sync_to_peer(id)
 		print("[CRUS ONLINE / HOST]: Sync player info")
 		
 		emit_signal("players_update", players)
@@ -438,6 +475,10 @@ func host_add_player(id, info):
 func host_remove_player(id):
 	if players.has(id):
 		players.erase(id)
+		revives_used.erase(int(id))
+		revive_authorizations.erase(int(id))
+		_sync_revive_state_to_clients()
+		CounterOp.host_player_left(id)
 		Flow.waiting_peers.erase(id)
 		Flow.check_team_wipe()
 		Players.sync_players()
@@ -460,7 +501,10 @@ puppet func sync_players(id, info):
 
 func goto_menu_host(levelFinished = false, level_select = false):
 	if levelFinished:
-		Flow.finish_mission(true)
+		if CounterOp.is_active():
+			Flow.finish_counterop(CounterOp.TEAM_OPERATIVES)
+		else:
+			Flow.finish_mission(true)
 		return
 	Flow.clear_result()
 	_prepare_menu_return(level_select)
@@ -582,6 +626,7 @@ func goto_scene_host(scene):
 		Global.border.show()
 		game_init(scene)
 		return
+	CounterOp.prepare_round()
 	Flow.prepare_mission()
 	_announce_difficulty = not hostSettings.get("shareDifficulty", false)
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1)
@@ -591,6 +636,7 @@ func goto_scene_host(scene):
 	hostSettings.map = scene
 	
 	died_players = []
+	reset_revive_state()
 	team_wipe_applied = false
 	loaded_players = []
 	player_scene_loaded = false
@@ -616,6 +662,7 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	Flow.clear_result()
 	Flow.waiting_peers.clear()
 	died_players.clear()
+	reset_revive_state()
 	team_wipe_applied = false
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1 if epoch < 0 else epoch)
 	sync_load_progress(null, 0, players.size(), SteamNetwork.scene_epoch)
@@ -736,7 +783,83 @@ puppet func scene_loaded_signal(id):
 
 
 var died_players = []
+var revives_used = {}
+var revive_authorizations = {}
 var team_wipe_applied = false
+
+func revive_limit():
+	return int(clamp(hostSettings.get("reviveLives", 0), 0, 5))
+
+func revives_remaining(peer):
+	var limit = revive_limit()
+	if limit == 0:
+		return -1
+	return max(0, limit - int(revives_used.get(int(peer), 0)))
+
+func has_revives_remaining(peer):
+	if not hostSettings.get("canRespawn", true):
+		return false
+	var limit = revive_limit()
+	return limit == 0 or int(revives_used.get(int(peer), 0)) < limit
+
+func can_peer_be_revived(peer):
+	peer = int(peer)
+	return players.has(peer) and died_players.has(peer) and has_revives_remaining(peer)
+
+func reset_revive_state():
+	revives_used.clear()
+	revive_authorizations.clear()
+	for peer in players:
+		revives_used[int(peer)] = 0
+
+func _sync_revive_state_to_clients():
+	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc(self, "sync_revive_state", [revives_used])
+
+puppet func sync_revive_state(id, state):
+	if NetworkBridge.request_sender(id) != NetworkBridge.get_host_id() or typeof(state) != TYPE_DICTIONARY:
+		return
+	revives_used = state.duplicate(true)
+
+func request_player_revive(target):
+	NetworkBridge.request_host(self, "_request_player_revive", [int(target)])
+
+func _revive_actor(peer):
+	peer = int(peer)
+	if peer == NetworkBridge.get_id():
+		return Global.player if is_instance_valid(Global.player) else null
+	if not players.has(peer):
+		return null
+	var puppet = players[peer].get("puppet")
+	return puppet if is_instance_valid(puppet) else null
+
+master func _request_player_revive(id, target):
+	if not NetworkBridge.is_world_authority():
+		return
+	var helper = NetworkBridge.request_sender(id)
+	target = int(target)
+	if helper == target or not players.has(helper) or not players.has(target):
+		return
+	if revive_authorizations.has(target):
+		return
+	if died_players.has(helper) or not can_peer_be_revived(target):
+		return
+	if is_instance_valid(CounterOp) and not CounterOp.can_revive(helper, target):
+		return
+	var helper_actor = _revive_actor(helper)
+	var target_actor = _revive_actor(target)
+	if not is_instance_valid(helper_actor) or not is_instance_valid(target_actor):
+		return
+	if helper_actor.global_transform.origin.distance_to(target_actor.global_transform.origin) > 5.0:
+		return
+	var target_puppet = players[target].get("puppet")
+	if not is_instance_valid(target_puppet):
+		return
+	revive_authorizations[target] = true
+	if target == NetworkBridge.get_id():
+		target_puppet._respawn_player(NetworkBridge.get_host_id())
+	else:
+		NetworkBridge.n_rpc_id(target_puppet, target, "_respawn_player")
 
 func player_died():
 	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
@@ -753,6 +876,7 @@ master func _player_died(id, host = false):
 	if died_players.has(id):
 		return
 	died_players.append(id)
+	revive_authorizations.erase(id)
 	sync_player_life(null, id, true)
 	NetworkBridge.n_rpc(self, "sync_player_life", [id, true])
 
@@ -840,12 +964,25 @@ master func _player_respawn(id, host = false):
 	if not NetworkBridge.is_world_authority():
 		return
 	id = NetworkBridge.request_sender(id)
-	if players.has(id):
-		died_players.erase(id)
-		team_wipe_applied = false
-		sync_player_life(null, id, false)
-		NetworkBridge.n_rpc(self, "sync_player_life", [id, false])
-		$RestartTimer.stop()
+	if not players.has(id):
+		return
+	var assisted = revive_authorizations.has(id)
+	if not hostSettings.get("canRespawn", true):
+		revive_authorizations.erase(id)
+		return
+	var self_respawn = hostSettings.get("selfRespawn", false) and not CounterOp.is_active()
+	if not assisted and not self_respawn:
+		return
+	if assisted:
+		revive_authorizations.erase(id)
+		if revive_limit() > 0:
+			revives_used[id] = int(revives_used.get(id, 0)) + 1
+			_sync_revive_state_to_clients()
+	died_players.erase(id)
+	team_wipe_applied = false
+	sync_player_life(null, id, false)
+	NetworkBridge.n_rpc(self, "sync_player_life", [id, false])
+	$RestartTimer.stop()
 
 
 
@@ -934,7 +1071,7 @@ puppet func reward_npc_kill(id):
 var _actors_frame = -1
 var _alive_actors = []
 
-func get_alive_actors():
+func get_alive_actors(source = null):
 	var frame = Engine.get_physics_frames()
 	if frame != _actors_frame:
 		_actors_frame = frame
@@ -943,14 +1080,21 @@ func get_alive_actors():
 		for actor in get_tree().get_nodes_in_group("Player"):
 			if preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd").alive(actor, Global.player, local_id, died_players):
 				_alive_actors.append(actor)
-	return _alive_actors
+	if source == null or not CounterOp.is_active():
+		return _alive_actors
+	var filtered = []
+	for actor in _alive_actors:
+		var peer = NetworkBridge.get_id() if actor == Global.player else int(actor.get_parent().name)
+		if CounterOp.npc_targets_peer(source, peer):
+			filtered.append(actor)
+	return filtered
 
 func refresh_local_profile():
 	var peer = NetworkBridge.get_id()
 	if not NetworkBridge.check_connection() or not players.has(peer):
 		return
 	if NetworkBridge.is_world_authority():
-		for field in ["nickname", "color", "image", "skinPath"]:
+		for field in ["nickname", "color", "skinPath"]:
 			players[peer][field] = playerInfo[field]
 		Players.sync_players()
 		emit_signal("players_update", players)

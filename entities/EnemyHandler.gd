@@ -408,6 +408,9 @@ func set_tranquilized(dart = null):
 
 master func network_set_tranquilized(id, dart):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Multiplayer.CounterOp.can_damage_npc(source_peer, self):
+			return
 		tranqtimer.start()
 	else:
 		NetworkBridge.n_rpc_id(self, 0, "network_set_tranquilized", [dart])
@@ -433,6 +436,9 @@ func add_velocity(amount, normal):
 
 master func network_add_velocity(id, amount, normal):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Multiplayer.CounterOp.can_damage_npc(source_peer, self):
+			return
 		if not armored:
 			body.add_velocity(normal * amount)
 	else:
@@ -446,6 +452,8 @@ master func network_piercing_damage(id, damage, collision_n, collision_p):
 		NetworkBridge.request_host(self, "network_piercing_damage", [damage, collision_n, collision_p])
 		return
 	last_damage_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+	if not Multiplayer.CounterOp.can_damage_npc(last_damage_peer, self):
+		return
 	if not dead and armor > 0:
 		for body in new_alert_sphere.get_overlapping_bodies():
 			if body.has_method("alert"):
@@ -501,6 +509,8 @@ master func network_damage(id, damage, collision_n, collision_p, shooter_pos):
 		NetworkBridge.request_host(self, "network_damage", [damage, collision_n, collision_p, shooter_pos])
 		return
 	last_damage_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+	if not Multiplayer.CounterOp.can_damage_npc(last_damage_peer, self):
+		return
 	if on_fire and not grilled_flag:
 		if head_mesh:
 			head_mesh.material_override = grilled_material

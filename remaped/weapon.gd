@@ -950,7 +950,7 @@ func _process(delta)->void :
 						elif collider.has_method("damage"):
 							NetworkBridge.apply_damage(self, collider, "damage", [kick_damage, col_n, col_p, global_transform.origin])
 						if collider.has_method("add_velocity"):
-							collider.add_velocity(40, col_n)
+							NetworkBridge.apply_damage(self, collider, "add_velocity", [40, col_n])
 			kickflag = false
 		if Input.is_action_just_pressed("Tertiary_Weapon") and not item_consumed:
 			if glob.implants.arm_implant.grapple:

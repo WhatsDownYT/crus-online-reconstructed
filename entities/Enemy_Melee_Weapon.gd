@@ -26,6 +26,8 @@ func AI_shoot()->void :
 		if raycast.is_colliding():
 			if raycast.get_collider().name == "Player" or raycast.get_collider().has_meta("puppet"):
 				var collider = raycast.get_collider()
+				if not NetworkBridge.npc_damage_allowed(self, collider):
+					return
 				if velocity_booster:
 					if collider == Global.player:
 						Global.player.player_velocity -= (global_transform.origin - Vector3.UP * 0.5 - Global.player.global_transform.origin).normalized() * damage
@@ -35,9 +37,9 @@ func AI_shoot()->void :
 						NetworkBridge.n_rpc_id(client, int(client.name), "_add_velocity", [impulse])
 				raycast.force_raycast_update()
 				if toxic and collider.has_method("set_toxic"):
-					collider.set_toxic()
+					NetworkBridge.apply_npc_damage(self, collider, "set_toxic", [])
 				if collider.has_method("damage"):
-					collider.damage(damage, Vector3(0, 0, 0), Vector3(0, 0, 0), global_transform.origin)
+					NetworkBridge.apply_npc_damage(self, collider, "damage", [damage, Vector3(0, 0, 0), Vector3(0, 0, 0), global_transform.origin])
 				raycast.enabled = false
 				if is_instance_valid($Attack_Sound) and not $Attack_Sound.playing:
 					$Attack_Sound.play()

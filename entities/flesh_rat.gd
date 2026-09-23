@@ -33,7 +33,7 @@ func get_near_player() -> Dictionary:
 	var oldDistance = INF
 	var player = null
 	
-	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors():
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(get_parent()):
 		if not is_instance_valid(selectedPlayer):
 			continue
 		var distance = global_transform.origin.distance_to(selectedPlayer.global_transform.origin)

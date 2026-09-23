@@ -23,7 +23,9 @@ func get_near_player(object) -> Dictionary:
 	var oldDistance = null
 	var checkPlayer = null
 	
-	for selectedPlayer in get_tree().get_nodes_in_group("Player"):
+	for selectedPlayer in Global.get_node("Multiplayer").get_alive_actors(self):
+		if not is_instance_valid(selectedPlayer):
+			continue
 		var distance = object.global_transform.origin.distance_to(selectedPlayer.global_transform.origin)
 		if oldDistance == null or oldDistance > distance:
 			oldDistance = distance
@@ -35,6 +37,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	set_meta("counterop_npc", true)
 	Global.objectives += 1
 	
 	NetworkBridge.register_rpcs(self, [
@@ -55,8 +58,11 @@ func _physics_process(delta):
 		t += 1
 		
 		if not activated and fmod(t, 20) == 0:
+			var nearest = get_near_player(self)
+			if nearest.player == null:
+				return
 			var space = get_world().direct_space_state
-			var result = space.intersect_ray(head.global_transform.origin, get_near_player(self).player.global_transform.origin + Vector3.UP * 1.0, [self, head])
+			var result = space.intersect_ray(head.global_transform.origin, nearest.player.global_transform.origin + Vector3.UP * 1.0, [self, head])
 			if result:
 				if result.collider == Global.player or result.collider.has_meta("puppet"):
 					activated = true
@@ -110,7 +116,9 @@ func _physics_process(delta):
 			NetworkBridge.n_rpc(self, "spawn_enemy", [selectedEnemy, get_parent().get_path(), new_enemy.name, new_enemy.global_transform])
 			
 			yield (get_tree(), "idle_frame")
-			new_enemy.add_velocity(40, (global_transform.origin - get_near_player(self).player.global_transform.origin).normalized())
+			var nearest = get_near_player(self)
+			if nearest.player != null:
+				new_enemy.add_velocity(40, (global_transform.origin - nearest.player.global_transform.origin).normalized())
 	else:
 		set_physics_process(false)
 
