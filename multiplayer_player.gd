@@ -150,6 +150,7 @@ func _ready():
 
 remote func _set_death(id, recived_death):
 	death = recived_death
+	_update_player_indicator()
 	_update_collision_stance()
 	
 	if death:
@@ -256,6 +257,11 @@ func _process(delta):
 func _update_player_indicator():
 	var indicator = $Puppet/PlayerModel/Armature/Skeleton/Head/PlayerIndicator
 	var target = int(name)
+	if Multiplayer.Deathmatch.is_active():
+		indicator.visible = not death and not Multiplayer.died_players.has(target) and not Multiplayer.Flow.waiting_peers.has(target)
+		indicator.material_override = preload("res://Materials/See_Through_Red.tres")
+		return
+	indicator.material_override = indicator_material
 	if not Multiplayer.CounterOp.should_show_player_indicator(NetworkBridge.get_id(), target):
 		indicator.hide()
 		return
@@ -488,6 +494,11 @@ func canDamageSet():
 	canDamage = true
 
 remote func sync_implants(id, names):
+	if names is Array:
+		names = names.duplicate()
+		for index in range(names.size()):
+			if Multiplayer.is_implant_banned(names[index]):
+				names[index] = "N/A"
 	var state = preload("res://MOD_CONTENT/CruS Online/ImplantNetwork.gd").resolve(Global.implants.IMPLANTS, names)
 	if state != null:
 		implant_state = state

@@ -244,6 +244,8 @@ func check_implant_slot(index):
 		return \"Legs\"
 
 func set_implant(index):
+	if Global.get_node(\"Multiplayer\").is_implant_banned(Global.implants.IMPLANTS[index].i_name):
+		return
 	if Global.implants.IMPLANTS[index].head:
 		Global.implants.head_implant = Global.implants.IMPLANTS[index]
 		$CenterContainer/HBoxContainer/Player/Head.texture = Global.implants.head_implant.texture

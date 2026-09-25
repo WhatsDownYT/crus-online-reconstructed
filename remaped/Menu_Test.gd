@@ -415,7 +415,10 @@ func _counterop_level_locked(index):
 	if not is_instance_valid(Multiplayer.CounterOp) or not Multiplayer.CounterOp.is_active() or index < 0 or index >= Global.LEVELS.size():
 		return false
 	var level_path = str(Global.LEVELS[index])
-	return level_path == "res://Levels/Level1.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+	return _counterop_restricted_path(level_path)
+
+func _counterop_restricted_path(level_path):
+	return level_path == "res://Levels/Training_Level.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
 
 func _apply_counterop_level_lock():
 	var on_level_select = not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
@@ -424,7 +427,7 @@ func _apply_counterop_level_lock():
 		if index < 0 or index >= Global.LEVELS.size():
 			continue
 		var level_path = str(Global.LEVELS[index])
-		var blocked = level_path == "res://Levels/Level1.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+		var blocked = _counterop_restricted_path(level_path)
 		if not blocked:
 			continue
 		var button = level_buttons[index]

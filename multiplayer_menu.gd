@@ -12,6 +12,10 @@ var credit_logo_nodes = []
 var credit_logo_positions = []
 var credit_spacer_texture = null
 var modes_tab_shown = null
+var implants_tab_shown = null
+var shared_settings_syncing = false
+var cruelty_settings_tab = null
+var cruelty_bottom_tab = null
 var counterop_settings_tab = null
 var counterop_bottom_tab = null
 var counterop_setting_boxes = {}
@@ -48,6 +52,9 @@ onready var NicknameColor = $CenterContainer/TabContainer/Player/VBoxContainer/C
 onready var Multiplayer = Global.get_node("Multiplayer")
 
 func _ready():
+	_ensure_cruelty_settings_tab()
+	$CenterContainer/TabContainer.connect("tab_changed", self, "_close_mode_settings")
+	$CenterContainer/TabContainer.connect("gui_input", self, "_mode_header_input")
 	call_deferred("_add_voice_tabs")
 	if not Multiplayer.profile_loaded:
 		var loadedPlayerData = load_data("player.save")
@@ -80,16 +87,17 @@ func _ready():
 	
 	$CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value = int(clamp(Multiplayer.config.tickRate, 1, 60))
 	
-	$CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed = Multiplayer.config.canRespawn
-	$CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn/TickEdit.pressed = Multiplayer.config.selfRespawn
+	$CrueltySettings/VBoxContainer/CanRespawn/TickEdit.pressed = Multiplayer.config.canRespawn
+	$CrueltySettings/VBoxContainer/SelfRespawn/TickEdit.pressed = Multiplayer.config.selfRespawn
 	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
 		get_node("CenterContainer/TabContainer/Host/VBoxContainer/" + key + "/TickEdit").pressed = Multiplayer.config[key]
-	$CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed = Multiplayer.config.friendlyFire
+	$CrueltySettings/VBoxContainer/FriendlyFire/TickEdit.pressed = Multiplayer.config.friendlyFire
 	$CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed = Multiplayer.config.shareDifficulty
-	$CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed = Multiplayer.config.changeModeOnDeath
-	$CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer/ReviveEdit.value = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
-	$CenterContainer/TabContainer/Host/VBoxContainer/Lives/LivesEdit.value = int(clamp(Multiplayer.config.reviveLives, 0, 5))
+	$CrueltySettings/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed = Multiplayer.config.changeModeOnDeath
+	$CrueltySettings/VBoxContainer/ReviveTimer/ReviveEdit.value = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
+	$CrueltySettings/VBoxContainer/Lives/LivesEdit.value = int(clamp(Multiplayer.config.reviveLives, 0, 5))
 	
+	cruelty_settings_tab.get_node("VBoxContainer/SaveProgress/TickEdit").pressed = Multiplayer.config.saveProgress
 	NicknameEdit.text = Multiplayer.playerInfo.nickname
 	NicknameEdit.connect("focus_exited", self, "save_player")
 	NicknameColor.color = Multiplayer.playerInfo.color
@@ -101,8 +109,8 @@ func _ready():
 	$CenterContainer/TabContainer/Player/VBoxContainer/Color.b_change(str(NicknameColor.color.b8))
 	
 	$CenterContainer.hide()
-	$CenterContainer/TabContainer.set_tab_hidden(4, true)
-	$CenterContainer/TabContainer.set_tab_hidden(5, true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Implants.get_index(), true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Chat.get_index(), true)
 	$CenterContainer/TabContainer.current_tab = 0
 	
 	Multiplayer.connect("connected_to_server", self, "_on_connected")
@@ -228,7 +236,10 @@ func _physics_process(delta):
 	_update_credit_logo_positions()
 	if $CenterContainer.visible:
 		_sync_modes_tab()
+		_sync_implant_tab()
 		_sync_counterop_settings_tab()
+		_sync_cruelty_settings_tab()
+		_layout_mode_panels()
 	if Global.menu.in_game:
 		hide()
 	else:
@@ -246,19 +257,20 @@ func save_player():
 	Multiplayer.refresh_local_profile()
 
 func save_host():
+	Multiplayer.config.saveProgress = cruelty_settings_tab.get_node("VBoxContainer/SaveProgress/TickEdit").pressed
 	Multiplayer.config.hostPort = int($CenterContainer/TabContainer/Host/VBoxContainer/Port/PortEdit.text)
 	Multiplayer.config.hostPassword = $CenterContainer/TabContainer/Host/VBoxContainer/Password/PasswordEdit.text
 	Multiplayer.config.tickRate = int($CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value)
 	
-	Multiplayer.config.canRespawn = $CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn/TickEdit.pressed
-	Multiplayer.config.selfRespawn = $CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn/TickEdit.pressed
+	Multiplayer.config.canRespawn = $CrueltySettings/VBoxContainer/CanRespawn/TickEdit.pressed
+	Multiplayer.config.selfRespawn = $CrueltySettings/VBoxContainer/SelfRespawn/TickEdit.pressed
 	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
 		Multiplayer.config[key] = get_node("CenterContainer/TabContainer/Host/VBoxContainer/" + key + "/TickEdit").pressed
-	Multiplayer.config.friendlyFire = $CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire/TickEdit.pressed
+	Multiplayer.config.friendlyFire = $CrueltySettings/VBoxContainer/FriendlyFire/TickEdit.pressed
 	Multiplayer.config.shareDifficulty = $CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty/TickEdit.pressed
-	Multiplayer.config.changeModeOnDeath = $CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed
-	Multiplayer.config.helpTimer = int($CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer/ReviveEdit.value)
-	Multiplayer.config.reviveLives = int($CenterContainer/TabContainer/Host/VBoxContainer/Lives/LivesEdit.value)
+	Multiplayer.config.changeModeOnDeath = $CrueltySettings/VBoxContainer/ChangeModeOnDeath/TickEdit.pressed
+	Multiplayer.config.helpTimer = int($CrueltySettings/VBoxContainer/ReviveTimer/ReviveEdit.value)
+	Multiplayer.config.reviveLives = int($CrueltySettings/VBoxContainer/Lives/LivesEdit.value)
 	
 	save_data("config.save", Multiplayer.config)
 	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority():
@@ -277,11 +289,6 @@ func get_data():
 
 func host():
 	get_data()
-	Multiplayer.hostSettings.bannedImplants = []
-
-	for implant in $CenterContainer/TabContainer/Implants.bannedImplants:
-		Multiplayer.hostSettings.bannedImplants.append(implant)
-
 	Multiplayer.host_server()
 
 func join():
@@ -302,15 +309,15 @@ func enable_buttons():
 	$CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons/Leave.hide()
 
 func disable_tabs():
-	$CenterContainer/TabContainer.set_tab_hidden(1, true)
-	$CenterContainer/TabContainer.set_tab_hidden(2, true)
-	$CenterContainer/TabContainer.set_tab_hidden(5, false)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Host.get_index(), true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Player.get_index(), true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Chat.get_index(), false)
 	_sync_modes_tab()
 
 func enable_tabs():
-	$CenterContainer/TabContainer.set_tab_hidden(1, false)
-	$CenterContainer/TabContainer.set_tab_hidden(2, false)
-	$CenterContainer/TabContainer.set_tab_hidden(5, true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Host.get_index(), false)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Player.get_index(), false)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Chat.get_index(), true)
 	_sync_modes_tab()
 
 func _sync_modes_tab():
@@ -333,6 +340,8 @@ func _setup_host_tooltips():
 		return
 	for setting in host_tooltips:
 		var row = get_node_or_null("CenterContainer/TabContainer/Host/VBoxContainer/" + setting)
+		if row == null:
+			row = get_node_or_null("CrueltySettings/VBoxContainer/" + setting)
 		if row != null:
 			_connect_host_tooltip(row, host_tooltips[setting])
 	host_tooltips_ready = true
@@ -374,12 +383,17 @@ func enable_menu():
 	_setup_credit_logos()
 	_ensure_counterop_settings_tab()
 	_sync_modes_tab()
+	_sync_implant_tab()
 	if not $CenterContainer/TabContainer/Implants.updated:
 		$CenterContainer/TabContainer/Implants.update()
+	$CenterContainer/TabContainer.current_tab = 0
 	$CenterContainer.visible = true
 	_sync_counterop_settings_tab()
 
 func disable_menu():
+	_close_mode_settings()
+	if is_instance_valid(cruelty_bottom_tab):
+		cruelty_bottom_tab.hide()
 	$CenterContainer.visible = false
 	counterop_bottom_shown = null
 	if is_instance_valid(counterop_bottom_tab):
@@ -403,7 +417,7 @@ func _ensure_counterop_settings_tab():
 	header.text = "Counter-Op settings"
 	header.align = Label.ALIGN_CENTER
 	box.add_child(header)
-	var check_theme = host.get_node("VBoxContainer/CanRespawn/TickEdit").theme
+	var check_theme = cruelty_settings_tab.get_node("VBoxContainer/CanRespawn/TickEdit").theme
 	for key in ["enemyFriendlyFire", "neutralEnemies", "randomizeTeams", "overrideTeams"]:
 		var row = HBoxContainer.new()
 		row.name = key
@@ -421,10 +435,11 @@ func _ensure_counterop_settings_tab():
 		box.add_child(row)
 		counterop_setting_boxes[key] = check
 		_connect_host_tooltip(row, counterop_settings_descriptions[key][1])
-	tabs.add_child(counterop_settings_tab)
-	tabs.set_tab_title(counterop_settings_tab.get_index(), "")
+	_add_shared_counterop_settings(box)
+	counterop_settings_tab.theme = tabs.theme
+	add_child(counterop_settings_tab)
+	counterop_settings_tab.hide()
 	tabs.move_child(tabs.get_node("Credits"), tabs.get_child_count() - 1)
-	tabs.set_tab_hidden(counterop_settings_tab.get_index(), true)
 	counterop_bottom_tab = Button.new()
 	counterop_bottom_tab.name = "CounterOpBottomTab"
 	counterop_bottom_tab.text = " Counter-Op Settings "
@@ -442,10 +457,7 @@ func _ensure_counterop_settings_tab():
 func _layout_counterop_bottom_tab():
 	if not is_instance_valid(counterop_bottom_tab):
 		return
-	var tabs = $CenterContainer/TabContainer
-	var size = Vector2(220, 30)
-	counterop_bottom_tab.rect_size = size
-	counterop_bottom_tab.rect_position = tabs.rect_global_position - rect_global_position + Vector2((tabs.rect_size.x - size.x) * 0.5, tabs.rect_size.y - 1)
+	_layout_mode_button(counterop_bottom_tab)
 
 func _counterop_settings_available():
 	return $CenterContainer.visible and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority() and Multiplayer.CounterOp.is_active()
@@ -459,11 +471,11 @@ func _sync_counterop_settings_tab():
 	if counterop_bottom_shown != show_tab:
 		counterop_bottom_shown = show_tab
 		counterop_bottom_tab.visible = show_tab
-		if not show_tab and tabs.current_tab == counterop_settings_tab.get_index():
-			tabs.current_tab = 0
+		if not show_tab and counterop_settings_tab.visible:
+			counterop_settings_tab.hide()
 	if not show_tab:
 		return
-	counterop_bottom_tab.pressed = tabs.current_tab == counterop_settings_tab.get_index()
+	counterop_bottom_tab.pressed = counterop_settings_tab.visible
 	counterop_settings_syncing = true
 	for key in counterop_setting_boxes:
 		counterop_setting_boxes[key].pressed = Multiplayer.CounterOp.settings[key]
@@ -473,7 +485,7 @@ func _sync_counterop_settings_tab():
 func _counterop_bottom_tab_pressed():
 	if not _counterop_settings_available():
 		return
-	$CenterContainer/TabContainer.current_tab = counterop_settings_tab.get_index()
+	_open_mode_settings(counterop_settings_tab)
 	counterop_bottom_tab.pressed = true
 
 func _counterop_setting_toggled(value, key):
@@ -551,3 +563,146 @@ func _sync_stats_tab():
 func _exit_tree():
 	if is_instance_valid(stats_tab) and stats_tab.get_parent() == null:
 		stats_tab.free()
+
+func _ensure_cruelty_settings_tab():
+	var tabs = $CenterContainer/TabContainer
+	var host = tabs.get_node("Host")
+	cruelty_settings_tab = PanelContainer.new()
+	cruelty_settings_tab.name = "CrueltySettings"
+	cruelty_settings_tab.add_stylebox_override("panel", host.get_stylebox("panel"))
+	var box = VBoxContainer.new()
+	box.name = "VBoxContainer"
+	box.add_constant_override("separation", 10)
+	cruelty_settings_tab.add_child(box)
+	var header = Label.new()
+	header.text = "Cruelty settings"
+	header.align = Label.ALIGN_CENTER
+	box.add_child(header)
+	for key in ["CanRespawn", "SelfRespawn", "FriendlyFire", "ChangeModeOnDeath", "ReviveTimer", "Lives"]:
+		var row = host.get_node("VBoxContainer/" + key)
+		row.get_parent().remove_child(row)
+		box.add_child(row)
+	var saving_row = HBoxContainer.new()
+	saving_row.name = "SaveProgress"
+	var saving_label = Label.new()
+	saving_label.text = "Save Campaign Progress:"
+	saving_label.size_flags_horizontal = SIZE_EXPAND_FILL
+	saving_row.add_child(saving_label)
+	var saving = CheckBox.new()
+	saving.name = "TickEdit"
+	saving.text = "<<"
+	saving.theme = box.get_node("CanRespawn/TickEdit").theme
+	saving.pressed = true
+	saving_row.add_child(saving)
+	box.add_child(saving_row)
+	_connect_host_tooltip(saving_row, "Save campaign progress for everyone in this lobby. When disabled, progress, money, unlocks and stocks are temporary and restored when saving is enabled again or you leave. Singleplayer saving is unchanged.")
+	var save = Button.new()
+	save.name = "Save"
+	save.text = "  Save  "
+	save.rect_min_size = Vector2(120, 26)
+	save.connect("pressed", self, "save_host")
+	cruelty_settings_tab.add_child(save)
+	cruelty_settings_tab.theme = tabs.theme
+	add_child(cruelty_settings_tab)
+	cruelty_settings_tab.hide()
+	cruelty_bottom_tab = Button.new()
+	cruelty_bottom_tab.text = " Cruelty Settings "
+	cruelty_bottom_tab.focus_mode = Control.FOCUS_NONE
+	cruelty_bottom_tab.toggle_mode = true
+	for style in ["normal", "hover", "pressed"]:
+		cruelty_bottom_tab.add_stylebox_override(style, tabs.get_stylebox("tab_bg" if style == "normal" else "tab_fg"))
+	cruelty_bottom_tab.add_stylebox_override("focus", StyleBoxEmpty.new())
+	cruelty_bottom_tab.connect("pressed", self, "_cruelty_settings_pressed")
+	add_child(cruelty_bottom_tab)
+	cruelty_bottom_tab.hide()
+
+func _sync_cruelty_settings_tab():
+	var tabs = $CenterContainer/TabContainer
+	var available = $CenterContainer.visible and Multiplayer.hostSettings.get("gameMode", "cruelty") == "cruelty" and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority()
+	cruelty_bottom_tab.visible = available
+	_layout_mode_button(cruelty_bottom_tab)
+	cruelty_bottom_tab.pressed = cruelty_settings_tab.visible
+	if not available and cruelty_settings_tab.visible:
+		cruelty_settings_tab.hide()
+
+func _cruelty_settings_pressed():
+	_open_mode_settings(cruelty_settings_tab)
+
+func _layout_mode_button(button):
+	var tabs = $CenterContainer/TabContainer
+	button.rect_size = Vector2(max(220, button.get_combined_minimum_size().x), 30)
+	var point = Vector2((tabs.rect_size.x - button.rect_size.x) * 0.5, tabs.rect_size.y - 2)
+	button.rect_position = get_global_transform().affine_inverse().xform(tabs.get_global_transform().xform(point))
+	button.raise()
+
+func _layout_mode_panels():
+	var tabs = $CenterContainer/TabContainer
+	var current = tabs.get_current_tab_control()
+	if current == null:
+		return
+	var mode_visible = false
+	for panel in [cruelty_settings_tab, counterop_settings_tab]:
+		if is_instance_valid(panel) and panel.visible:
+			mode_visible = true
+			panel.rect_position = get_global_transform().affine_inverse().xform(current.rect_global_position)
+			panel.rect_size = current.rect_size
+			if panel == cruelty_settings_tab:
+				var save = panel.get_node("Save")
+				save.rect_size = Vector2(120, 26)
+				save.rect_position = Vector2((panel.rect_size.x - save.rect_size.x) * 0.5, panel.rect_size.y - save.rect_size.y - 3)
+			panel.raise()
+	current.visible = not mode_visible
+
+func _open_mode_settings(selected):
+	for panel in [cruelty_settings_tab, counterop_settings_tab]:
+		if is_instance_valid(panel):
+			panel.visible = panel == selected
+	_layout_mode_panels()
+
+func _close_mode_settings(_tab = 0):
+	var current = $CenterContainer/TabContainer.get_current_tab_control()
+	if current != null:
+		current.show()
+	for panel in [cruelty_settings_tab, counterop_settings_tab]:
+		if is_instance_valid(panel):
+			panel.hide()
+
+func _mode_header_input(event):
+	if event is InputEventMouseButton and event.pressed and event.position.y < 40:
+		_close_mode_settings()
+
+func _add_shared_counterop_settings(box):
+	box.add_constant_override("separation", 5)
+	for key in ["CanRespawn", "FriendlyFire", "ReviveTimer", "Lives"]:
+		var original = cruelty_settings_tab.get_node("VBoxContainer/" + key)
+		var copy = original.duplicate()
+		box.add_child(copy)
+		_connect_host_tooltip(copy, host_tooltips[key])
+		var widget = "ReviveEdit" if key == "ReviveTimer" else ("LivesEdit" if key == "Lives" else "TickEdit")
+		var signal_name = "value_changed" if key in ["ReviveTimer", "Lives"] else "toggled"
+		for control in [original.get_node(widget), copy.get_node(widget)]:
+			control.connect(signal_name, self, "_shared_mode_setting_changed", [key, widget, control])
+
+func _shared_mode_setting_changed(value, key, widget, source):
+	if shared_settings_syncing:
+		return
+	shared_settings_syncing = true
+	for panel in [cruelty_settings_tab, counterop_settings_tab]:
+		var control = panel.get_node("VBoxContainer/" + key + "/" + widget)
+		if control != source:
+			control.set("value" if control is Range else "pressed", value)
+	shared_settings_syncing = false
+	save_host()
+
+func _sync_implant_tab():
+	var tabs = $CenterContainer/TabContainer
+	var panel = tabs.get_node("Implants")
+	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
+	var show_implants = in_lobby and Multiplayer.NetworkBridge.is_world_authority()
+	if implants_tab_shown != show_implants:
+		implants_tab_shown = show_implants
+		if not show_implants and tabs.current_tab == panel.get_index():
+			tabs.current_tab = 0
+		tabs.set_tab_hidden(panel.get_index(), not show_implants)
+	if show_implants:
+		panel.refresh()

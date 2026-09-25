@@ -20,6 +20,8 @@ func _spread_spawn():
 	var mp = Global.get_node("Multiplayer")
 	if not mp.NetworkBridge.check_connection():
 		return
+	if mp.Deathmatch.is_active():
+		return
 	var peers = mp.players.keys()
 	peers.sort()
 	if mp.CounterOp.is_active():

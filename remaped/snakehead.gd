@@ -21,6 +21,9 @@ export  var line = "Triagon 01 is gone. (Golem Exosystem Received)"
 export  var line2 = "I bestow upon you power."
 
 func _ready():
+	if Global.get_node("Multiplayer").Deathmatch.is_active():
+		queue_free()
+		return
 	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [
 		["network_damage", NetworkBridge.PERMISSION.ALL]

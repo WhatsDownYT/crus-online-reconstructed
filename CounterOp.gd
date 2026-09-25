@@ -56,6 +56,8 @@ func host_can_assign_team():
 	return is_active() and NetworkBridge.is_world_authority() and settings.overrideTeams and not settings.randomizeTeams and is_instance_valid(Global.menu) and not Global.menu.in_game
 
 func can_player_damage(source, target, normal_friendly_fire):
+	if Multiplayer.Deathmatch.is_active():
+		return true
 	if not is_active() or source <= 0 or target <= 0 or not Multiplayer.players.has(source) or not Multiplayer.players.has(target):
 		return normal_friendly_fire or source <= 0 or target <= 0 or source == target
 	if source == target:
@@ -65,6 +67,8 @@ func can_player_damage(source, target, normal_friendly_fire):
 	return normal_friendly_fire
 
 func can_revive(source, target):
+	if Multiplayer.Deathmatch.is_active():
+		return false
 	if not is_active():
 		return true
 	return Multiplayer.players.has(source) and Multiplayer.players.has(target) and same_team(source, target)
@@ -168,6 +172,8 @@ func host_player_left(peer):
 		return
 	teams.erase(int(peer))
 	ready.erase(int(peer))
+	if Multiplayer.players.size() < 2 and is_instance_valid(Global.menu) and not Global.menu.in_game and Multiplayer.hostSettings.get("gameMode", MODE_CRUELTY) != MODE_CRUELTY:
+		set_mode(MODE_CRUELTY)
 	broadcast_state()
 
 func _default_team(peer):
@@ -284,7 +290,11 @@ func _apply_setting(key, value):
 			ready[peer] = false
 
 func set_mode(mode):
-	if not NetworkBridge.is_world_authority() or not (mode in [MODE_CRUELTY, MODE_COUNTER_OP]):
+	if not NetworkBridge.is_world_authority() or not (mode in [MODE_CRUELTY, MODE_COUNTER_OP, "deathmatch"]):
+		return
+	if mode != MODE_CRUELTY and Multiplayer.players.size() < 2:
+		return
+	if is_instance_valid(Global.menu) and Global.menu.in_game:
 		return
 	Multiplayer.hostSettings.gameMode = mode
 	if mode == MODE_COUNTER_OP:
@@ -296,7 +306,7 @@ func set_mode(mode):
 	broadcast_state()
 
 func host_apply_mode(mode):
-	if not NetworkBridge.is_world_authority() or not (mode in [MODE_CRUELTY, MODE_COUNTER_OP]):
+	if not NetworkBridge.is_world_authority() or not (mode in [MODE_CRUELTY, MODE_COUNTER_OP, "deathmatch"]):
 		return
 	set_mode(mode)
 

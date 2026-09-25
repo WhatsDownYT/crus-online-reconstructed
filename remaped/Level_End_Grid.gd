@@ -17,6 +17,15 @@ func convert_time(old:int, new:int):
 	return str(minutes, ".", seconds, ".", milseconds)
 
 func set_performance_info():
+	var online = Global.get_node_or_null("Multiplayer")
+	if online != null and online.NetworkBridge.check_connection() and online.Flow.result_active and online.hostSettings.get("gameMode", "cruelty") != "cruelty":
+		$Level_Info_Vbox/Next_Level.hide()
+		$Level_Info_Vbox/Level_Select.show()
+		$Level_Info_Vbox/Retry.visible = online.NetworkBridge.is_world_authority()
+		$Performance_Hbox/VBoxContainer/Objective_Panel/Objectives.text = "VICTORY" if online.Flow.result_won else "FAILURE"
+		$Performance_Hbox/VBoxContainer/Portrait.texture = Global.LEVEL_IMAGES[Global.CURRENT_LEVEL] if online.Flow.result_won else load("res://Textures/abraxas/face6.png")
+		$Performance_Hbox/Performance_Scroll/RichTextLabel.text = "Last survivor wins.\n\nCampaign progress is not saved." if online.Deathmatch.is_active() else "Round complete.\n\nCampaign progress is not saved."
+		return
 	if _mission_won():
 		$Level_Info_Vbox / Next_Level.show()
 		$Level_Info_Vbox / Level_Select.hide()

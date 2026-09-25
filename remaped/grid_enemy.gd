@@ -37,6 +37,9 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	if Global.get_node("Multiplayer").Deathmatch.is_active():
+		queue_free()
+		return
 	set_meta("counterop_npc", true)
 	NetworkBridge.register_rpcs(self, [["network_set_rotation", NetworkBridge.PERMISSION.SERVER]])
 	rset_config("global_transform", MultiplayerAPI.RPC_MODE_PUPPET)

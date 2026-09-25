@@ -22,7 +22,7 @@ with zipfile.ZipFile(args.base_package) as base:
                if not name.endswith('/') and not name.startswith(prefix)}
     entries.pop('Menu/Main_Menu.tscn.remap', None)
     entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remaped/Switch.gd"\n'
-    for source, target in [('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+    for source, target in [('Menu/Character_Menu.gd', 'Character_Menu.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
         entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remaped/' + target + '"\n').encode()
     for path in root.rglob('*'):
         relative = path.relative_to(root)
@@ -49,6 +49,9 @@ with zipfile.ZipFile(args.base_package) as base:
         for imported in re.findall(r'^path(?:\.s3tc)?="res://(\.import/[^"]+)"', entries[archive_name].decode('utf-8'), re.MULTILINE):
             if imported not in entries:
                 raise SystemExit(f'Missing imported asset: {archive_name} -> {imported}')
+for required in ('crus_online_reconstructed_logo.png', 'crus_online_logo.png'):
+    if prefix + required not in entries:
+        raise SystemExit(f'Missing required credits asset: {required}')
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = args.output / 'mod.zip.tmp'
 with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED) as output:

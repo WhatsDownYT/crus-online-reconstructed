@@ -235,7 +235,16 @@ func spawn_check_npc():
 func deathtimer_cleanup():
 	cleanup(null)
 
+func _enter_tree():
+	var mp = Global.get_node_or_null("Multiplayer")
+	if mp != null and is_instance_valid(mp.Deathmatch) and mp.Deathmatch.is_active():
+		mp.Deathmatch.suppress_npc(self)
+
 func _ready():
+	if Multiplayer.Deathmatch.is_active():
+		Multiplayer.Deathmatch.register_npc(self)
+		queue_free()
+		return
 	call_deferred("_configure_replica")
 	glob = Global
 	body = $Body

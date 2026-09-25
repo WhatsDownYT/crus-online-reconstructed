@@ -25,7 +25,7 @@ func _ready():
 	box.add_child(header)
 	enabled = CheckBox.new()
 	enabled.text = "<<"
-	enabled.theme = host.get_node("VBoxContainer/CanRespawn/TickEdit").theme
+	enabled.theme = host.get_node("VBoxContainer/useVoiceChat/TickEdit").theme
 	enabled.pressed = voice.settings.enabled
 	_row(box, "Enable Voice Chat:", enabled)
 	_connect_description_tooltip(enabled.get_parent(), "Enable or disable voice chat for you. This does not enable or disable voice chat for other players.")

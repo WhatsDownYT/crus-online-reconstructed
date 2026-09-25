@@ -31,6 +31,8 @@ func _counterop():
 	return Multiplayer.CounterOp
 
 func damage_allowed(source, target, source_node = null):
+	if Multiplayer.hostSettings.get("gameMode", "cruelty") == "deathmatch":
+		return true
 	var counterop = _counterop()
 	if source == NPC_SOURCE_ID:
 		if is_instance_valid(counterop) and counterop.is_active() and target > 0 and Multiplayer.players.has(target):
@@ -252,7 +254,7 @@ func register_rset(caller : Node, method, recived_permission):
 	SteamNetwork.register_rset(caller, method, recived_permission)
 
 func n_rpc(caller : Node, method = null, args = []):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	
 	Multiplayer.packages_count += 1
@@ -271,7 +273,7 @@ func n_rpc(caller : Node, method = null, args = []):
 				SteamNetwork.rpc_on_server(caller, method, args)
 
 func n_rpc_unreliable(caller : Node, method = null, args = []):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	
 	match multiplayer_mode:
@@ -286,7 +288,7 @@ func n_rpc_unreliable(caller : Node, method = null, args = []):
 			SteamNetwork.snapshot_rpc(caller, method, args)
 
 func n_rpc_id(caller : Node, id = 0, method = null, args = []):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	if int(id) == 0:
 		id = get_host_id()
@@ -304,7 +306,7 @@ func n_rpc_id(caller : Node, id = 0, method = null, args = []):
 			SteamNetwork.rpc_target(int(id), caller, method, args)
 
 func n_rpc_unreliable_id(caller : Node, id = 0, method = null, args = []):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	
 	match multiplayer_mode:
@@ -319,7 +321,7 @@ func n_rpc_unreliable_id(caller : Node, id = 0, method = null, args = []):
 			SteamNetwork.snapshot_rpc(caller, method, args, int(id))
 
 func n_rset(caller : Node, method = null, recived_value = null):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	
 	Multiplayer.packages_count += 1
@@ -333,7 +335,7 @@ func n_rset(caller : Node, method = null, recived_value = null):
 			SteamNetwork.remote_set(caller, method, recived_value)
 
 func n_rset_unreliable(caller : Node, method = null, recived_value = null):
-	if method == null or not check_connection():
+	if method == null or not check_connection() or caller.has_meta("deathmatch_removed"):
 		return
 	
 	Multiplayer.packages_count += 1

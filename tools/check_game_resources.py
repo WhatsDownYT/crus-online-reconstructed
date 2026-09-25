@@ -55,7 +55,7 @@ func _ready():
 		"res://Cancerball.tscn", "res://Entities/Physics_Objects/Chest_Gib.tscn",
 		"res://Scripts/Player.gd", "res://Scripts/Enemy_Torso.gd",
 		"res://Scripts/Divine_Door.gd", "res://Scripts/Profane_Door.gd",
-		"res://Terror_Door.gd", "res://Scripts/Elevator.gd", "res://Entities/soulll.gd", "res://Levels/sky_rotator.gd"]:
+		"res://Terror_Door.gd", "res://Scripts/Elevator.gd", "res://Entities/soulll.gd", "res://Levels/sky_rotator.gd", "res://MOD_CONTENT/CruS Online/menu.tscn"]:
 		var resource = load(path)
 		if resource == null:
 			failures += 1
@@ -87,6 +87,7 @@ func _ready():
     root = Path(__file__).resolve().parents[1]
     extra_scripts = ['res://MOD_CONTENT/CruS Online/' + path.relative_to(root).as_posix()
                      for folder in ('remaped', 'entities') for path in sorted((root / folder).glob('*.gd'))]
+    extra_scripts.extend('res://MOD_CONTENT/CruS Online/' + name for name in ('ImplantSettings.gd', 'ModeSettings.gd', 'DebugCapture.gd'))
     script = script.replace('EXTRA_SCRIPTS', json.dumps(extra_scripts))
     (project / 'resource_check.gd').write_text(script, encoding='utf-8')
     result = subprocess.run([str(engine), '--no-window', '--path', str(project)],

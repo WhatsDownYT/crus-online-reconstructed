@@ -22,12 +22,16 @@ var hostSettings = {
 	"shareDifficulty": false,
 	"friendlyFire": true,
 	"gameMode": "cruelty",
+	"saveProgress": true,
 	"useVoiceChat": true,
 	"proximityVoiceChat": true,
 	"hearDeadPlayers": false
 }
 
 var config = {
+	"bannedImplants": [],
+	"implantPresets": {},
+	"saveProgress": true,
 	"lastIp": "127.0.0.1",
 	"lastPort": 25567,
 	"hostPort": 25567,
@@ -99,8 +103,12 @@ func _notification(what):
 var Flow
 var Voice
 var CounterOp
+var Deathmatch
 
 func _ready():
+	Deathmatch = preload("res://MOD_CONTENT/CruS Online/Deathmatch.gd").new()
+	Deathmatch.name = "Deathmatch"
+	add_child(Deathmatch)
 	CounterOp = preload("res://MOD_CONTENT/CruS Online/CounterOp.gd").new()
 	CounterOp.name = "CounterOp"
 	add_child(CounterOp)
@@ -247,6 +255,10 @@ func clear_connection(recivedError):
 	leave_server()
 
 func apply_host_settings():
+	hostSettings.bannedImplants = config.bannedImplants.duplicate()
+	hostSettings.saveProgress = config.saveProgress
+	if NetworkBridge.check_connection():
+		update_campaign_saving(hostSettings)
 	hostSettings.helpTimer = config.helpTimer
 	hostSettings.reviveLives = int(clamp(config.reviveLives, 0, 5))
 	hostSettings.canRespawn = config.canRespawn
@@ -256,13 +268,22 @@ func apply_host_settings():
 	hostSettings.shareDifficulty = config.shareDifficulty
 	for key in ["useVoiceChat", "proximityVoiceChat", "hearDeadPlayers"]:
 		hostSettings[key] = config[key]
+	if hostSettings.get("gameMode", "cruelty") != "cruelty":
+		hostSettings.selfRespawn = false
+		hostSettings.changeModeOnDeath = false
+	if Deathmatch.is_active():
+		hostSettings.canRespawn = false
+		hostSettings.friendlyFire = true
+	enforce_implant_bans()
 	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
 		NetworkBridge.n_rpc(self, "sync_host_settings", [hostSettings])
 
 puppet func sync_host_settings(id, settings):
 	if NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
 		return
+	update_campaign_saving(settings)
 	hostSettings = settings.duplicate(true)
+	enforce_implant_bans()
 
 func host_server():
 	apply_host_settings()
@@ -282,6 +303,7 @@ func host_server():
 		var server = NetworkedMultiplayerENet.new()
 		server.create_server(config.hostPort, 16)
 		get_tree().set_network_peer(server)
+		apply_host_settings()
 
 		players[1] = playerInfo.duplicate(true)
 		CounterOp.host_player_joined(1)
@@ -312,6 +334,9 @@ func leave_server():
 		Voice.reset_session()
 	if is_instance_valid(Flow):
 		Flow.reset_session()
+	Global.campaign_save.set_mode(Global, "cruelty")
+	hostSettings.gameMode = "cruelty"
+	Deathmatch.reset_round()
 	_announce_difficulty = false
 	player_scene_loaded = true
 	loaded_players.clear()
@@ -443,7 +468,9 @@ master func connect_init(id, recivedPassword, recivedVersion, recivedPlayerInfo)
 
 puppet func client_connect_init(id, recivedHostSettings, recivedPlayerInfo):
 	players = recivedPlayerInfo
+	update_campaign_saving(recivedHostSettings)
 	hostSettings = recivedHostSettings
+	enforce_implant_bans()
 	
 	dataLoaded = true
 	
@@ -620,12 +647,14 @@ var loaded_players = []
 var player_scene_loaded = true
 
 func goto_scene_host(scene):
+	enforce_implant_bans()
 	_menu_destination = ""
 	if not NetworkBridge.check_connection():
 		Global.cutscene = false
 		Global.border.show()
 		game_init(scene)
 		return
+	Deathmatch.reset_round()
 	CounterOp.prepare_round()
 	Flow.prepare_mission()
 	_announce_difficulty = not hostSettings.get("shareDifficulty", false)
@@ -658,6 +687,8 @@ func goto_scene_host(scene):
 	Players.load_players()
 
 puppet func goto_scene_client(id, scene, level, epoch = -1):
+	enforce_implant_bans()
+	Deathmatch.reset_round()
 	_menu_destination = ""
 	Flow.clear_result()
 	Flow.waiting_peers.clear()
@@ -729,6 +760,7 @@ func check_players_load():
 		if Global.CURRENT_LEVEL == 18:
 			Global.objectives = 0
 			Global.objective_complete = true
+		Deathmatch.start_round()
 		publish_mission_state()
 		emit_signal("scene_loaded")
 		NetworkBridge.n_rpc(self, "scene_loaded_signal")
@@ -797,6 +829,8 @@ func revives_remaining(peer):
 	return max(0, limit - int(revives_used.get(int(peer), 0)))
 
 func has_revives_remaining(peer):
+	if Deathmatch.is_active():
+		return false
 	if not hostSettings.get("canRespawn", true):
 		return false
 	var limit = revive_limit()
@@ -961,6 +995,8 @@ func player_respawn():
 		NetworkBridge.n_rpc(self, "_player_respawn")
 
 master func _player_respawn(id, host = false):
+	if Deathmatch.is_active():
+		return
 	if not NetworkBridge.is_world_authority():
 		return
 	id = NetworkBridge.request_sender(id)
@@ -1099,3 +1135,22 @@ func refresh_local_profile():
 		Players.sync_players()
 		emit_signal("players_update", players)
 		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])
+
+func update_campaign_saving(settings):
+	var mode = settings.get("gameMode", "cruelty")
+	if mode == "cruelty" and not settings.get("saveProgress", true):
+		mode = "practice"
+	Global.campaign_save.set_mode(Global, mode)
+
+func is_implant_banned(implant_name):
+	return NetworkBridge.check_connection() and implant_name in hostSettings.get("bannedImplants", [])
+
+func enforce_implant_bans():
+	var changed = false
+	for slot in ["head_implant", "torso_implant", "arm_implant", "leg_implant"]:
+		if is_implant_banned(Global.implants.get(slot).i_name):
+			Global.implants.set(slot, Global.implants.empty_implant)
+			changed = true
+	if changed and Global.menu.in_game and is_instance_valid(Global.player):
+		Global.player.update_implants()
+	return changed

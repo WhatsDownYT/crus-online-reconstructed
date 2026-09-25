@@ -82,6 +82,9 @@ func ending_path():
 func check_team_wipe():
 	if not NetworkBridge.is_world_authority() or not Global.menu.in_game or result_active or finishing:
 		return
+	if Multiplayer.Deathmatch.is_active():
+		Multiplayer.Deathmatch.check_round()
+		return
 	if Multiplayer.CounterOp.is_active():
 		if Multiplayer.CounterOp.all_operatives_dead(waiting_peers):
 			call_deferred("finish_counterop", Multiplayer.CounterOp.TEAM_COUNTER_OPERATIVES)
@@ -114,20 +117,19 @@ func finish_counterop(winner_team):
 		return
 	finish_mission(winner_team == Multiplayer.CounterOp.TEAM_OPERATIVES, winner_team)
 
-func finish_mission(won, winner_team = ""):
+func finish_mission(won, winner_team = "", winner_peer = 0):
+	if Multiplayer.Deathmatch.is_active() and winner_team != "deathmatch":
+		return
 	if not NetworkBridge.is_world_authority() or result_active or finishing:
 		return
 	finishing = true
 	var competitive = winner_team != ""
 	var loss = ""
-	if competitive:
-		if Multiplayer.CounterOp.team_of(NetworkBridge.get_id()) == winner_team:
-			Global.record_multiplayer_win()
-	elif won:
+	if not competitive and won:
 		Global.record_multiplayer_win()
-	else:
+	elif not competitive:
 		loss = lower_difficulty()
-	var state = {"won": won, "winner_team": winner_team, "level": Global.CURRENT_LEVEL, "enemy_count": Global.enemy_count, "enemy_count_total": Global.enemy_count_total, "civ_count": Global.civ_count, "civ_count_total": Global.civ_count_total, "level_time": Global.level_time, "level_time_raw": Global.level_time_raw, "difficulty": difficulty(), "loss": loss, "ending": "" if competitive else (ending_path() if won else ""), "epoch": Multiplayer.SteamNetwork.scene_epoch + 1}
+	var state = {"won": won, "winner_team": winner_team, "winner_peer": winner_peer, "level": Global.CURRENT_LEVEL, "enemy_count": Global.enemy_count, "enemy_count_total": Global.enemy_count_total, "civ_count": Global.civ_count, "civ_count_total": Global.civ_count_total, "level_time": Global.level_time, "level_time_raw": Global.level_time_raw, "difficulty": difficulty(), "loss": loss, "ending": "" if competitive else (ending_path() if won else ""), "epoch": Multiplayer.SteamNetwork.scene_epoch + 1}
 	NetworkBridge.n_rpc(self, "show_result", [state])
 	show_result(null, state)
 
@@ -139,7 +141,9 @@ puppet func show_result(id, state):
 	var winner_team = state.get("winner_team", "")
 	var competitive = winner_team != ""
 	var local_won = state.won if not competitive else Multiplayer.CounterOp.team_of(NetworkBridge.get_id()) == winner_team
-	result_won = state.won
+	if winner_team == "deathmatch":
+		local_won = state.get("winner_peer", 0) == NetworkBridge.get_id()
+	result_won = local_won
 	result_level = state.level
 	Multiplayer.get_node("RestartTimer").stop()
 	Global.CURRENT_LEVEL = state.level
@@ -153,7 +157,7 @@ puppet func show_result(id, state):
 	misery_transition = shared and state.loss == "misery"
 	if misery_transition:
 		Global.money = max(Global.money, 0)
-	if local_won:
+	if local_won and not competitive:
 		if not NetworkBridge.is_world_authority():
 			Global.record_multiplayer_win()
 			if shared:
@@ -167,7 +171,11 @@ puppet func show_result(id, state):
 		if not Global.husk_mode:
 			Global.money -= 500
 	if competitive and is_instance_valid(Global.UI):
-		Global.UI.notify("Operatives win." if winner_team == Multiplayer.CounterOp.TEAM_OPERATIVES else "Counter-Operatives win.", Color(1, 0, 1))
+		var message = "Operatives win." if winner_team == Multiplayer.CounterOp.TEAM_OPERATIVES else "Counter-Operatives win."
+		if winner_team == "deathmatch":
+			var winner = state.get("winner_peer", 0)
+			message = str(Multiplayer.players.get(winner, {}).get("nickname", "Player")) + " wins." if winner != 0 else "No survivors."
+		Global.UI.notify(message, Color(1, 0, 1))
 	if state.ending.ends_with("End2.tscn"):
 		Global.character_mat.set_shader_param("albedoTex", load("res://Textures/NPC/bosssguy_clothes.png"))
 	Global.save_game()
@@ -216,7 +224,7 @@ func restart_mission():
 
 func exit_to_menu(level_select):
 	if NetworkBridge.is_world_authority():
-		if level_select and result_active and result_won and result_level < Global.L_PUNISHMENT and result_level != Global.L_HQ:
+		if level_select and Multiplayer.hostSettings.get("gameMode", "cruelty") == "cruelty" and result_active and result_won and result_level < Global.L_PUNISHMENT and result_level != Global.L_HQ:
 			Global.CURRENT_LEVEL = result_level + 1
 		Multiplayer.goto_menu_host(false, level_select)
 	else:

@@ -1,5 +1,7 @@
 extends Node
 
+var campaign_save = preload("res://MOD_CONTENT/CruS Online/CampaignSave.gd").new()
+
 var loader:ResourceInteractiveLoader
 var wait_frames:int
 var time_max:float = 100
@@ -718,6 +720,8 @@ func save_settings()->void :
 	settings.close()
 
 func save_game(path = "user://savegame.save")->void :
+	if campaign_save.active:
+		return
 	var save_game = File.new()
 	save_game.open(path, File.WRITE)
 	save_game.store_line(to_json(save()))

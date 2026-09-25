@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         shutil.copy2(library, project / library.name)
     mod = project / 'MOD_CONTENT' / 'CruS Online'
     mod.mkdir(parents=True)
-    for name in ('SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'FriendlyFire.gd', 'EnemyTargeting.gd', 'ImplantNetwork.gd', 'PlayerCollisionProxy.gd', 'SessionFlow.gd', 'DiscordPresence.gd', 'VoiceChat.gd', 'VoiceCodec.gd', 'VoiceRoster.gd', 'VoiceSettings.gd', 'DifficultyLabel.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
+    for name in ('CampaignSave.gd', 'Deathmatch.gd', 'CounterOp.gd', 'SteamNetwork.gd', 'NetworkMetrics.gd', 'NetworkSnapshots.gd', 'NetworkBridge.gd', 'FriendlyFire.gd', 'EnemyTargeting.gd', 'ImplantNetwork.gd', 'PlayerCollisionProxy.gd', 'SessionFlow.gd', 'DiscordPresence.gd', 'VoiceChat.gd', 'VoiceCodec.gd', 'VoiceRoster.gd', 'VoiceSettings.gd', 'DifficultyLabel.gd', 'PlayerActionPolicy.gd', 'PropInteractionPolicy.gd', 'MissionExitPolicy.gd', 'ProfileStore.gd', 'FloatingPanel.gd', 'SpiritualDoorPolicy.gd', 'CancerSegment.gd'):
         shutil.copy2(root / name, mod / name)
 
 

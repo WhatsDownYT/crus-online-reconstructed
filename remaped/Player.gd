@@ -306,6 +306,9 @@ func _implant_speed_bonus():
 	return result
 
 func update_implants():
+	for slot in ["head_implant", "torso_implant", "arm_implant", "leg_implant"]:
+		if Global.get_node("Multiplayer").is_implant_banned(Global.implants.get(slot).i_name):
+			Global.implants.set(slot, Global.implants.empty_implant)
 	vision_state = -1
 	
 	if GLOBAL.CURRENT_LEVEL == 18 and Global.DEAD_CIVS.find("Limit Chancellor") == - 1:

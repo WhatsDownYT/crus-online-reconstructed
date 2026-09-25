@@ -89,6 +89,10 @@ func _evaluate_exit():
 	if committed or not NetworkBridge.check_connection() or not NetworkBridge.is_world_authority():
 		return false
 	exitPlayers = _collect_exit_peers()
+	if Multiplayer.Deathmatch.is_active():
+		for peer in exitPlayers:
+			Multiplayer.Deathmatch.relocate_from_exit(peer)
+		return false
 	var absent = Multiplayer.died_players.duplicate()
 	if is_instance_valid(Multiplayer.Flow):
 		absent.append_array(Multiplayer.Flow.waiting_peers)
