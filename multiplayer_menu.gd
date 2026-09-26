@@ -299,6 +299,11 @@ func _setup_credits_overlay():
 	credits_overlay.hide()
 	var rich = credits_overlay.get_node("RichTextLabel")
 	credits_overlay.remove_child(rich)
+	var texture_background = Panel.new()
+	texture_background.name = "TextureBackground"
+	texture_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_background.add_stylebox_override("panel", tabs.get_node("Main/Select").get_stylebox("panel"))
+	credits_overlay.add_child(texture_background)
 	var box = VBoxContainer.new()
 	box.name = "VBoxContainer"
 	credits_overlay.add_child(box)

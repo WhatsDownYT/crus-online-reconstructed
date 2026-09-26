@@ -628,7 +628,7 @@ margin_top = 124.0
 margin_right = 641.0
 margin_bottom = 435.0
 size_flags_vertical = 3
-custom_styles/panel = SubResource( 30 )
+custom_styles/panel = SubResource( 32 )
 
 [node name="PlayersListLabel" type="RichTextLabel" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList"]
 visible = false
@@ -649,6 +649,7 @@ margin_right = 631.0
 margin_bottom = 301.0
 size_flags_horizontal = 3
 size_flags_vertical = 3
+custom_styles/bg = SubResource( 33 )
 
 [node name="Rows" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList/LobbyList"]
 margin_right = 621.0
