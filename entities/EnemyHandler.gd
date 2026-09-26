@@ -237,14 +237,15 @@ func deathtimer_cleanup():
 
 func _enter_tree():
 	var mp = Global.get_node_or_null("Multiplayer")
-	if mp != null and is_instance_valid(mp.Deathmatch) and mp.Deathmatch.is_active():
+	if mp != null and is_instance_valid(mp.Deathmatch) and mp.Deathmatch.is_active() and not mp.Deathmatch.spawn_npcs():
 		mp.Deathmatch.suppress_npc(self)
 
 func _ready():
-	if Multiplayer.Deathmatch.is_active():
+	if Multiplayer.Deathmatch.is_active() or Multiplayer.CounterOp.is_active():
 		Multiplayer.Deathmatch.register_npc(self)
-		queue_free()
-		return
+		if Multiplayer.Deathmatch.is_active() and not Multiplayer.Deathmatch.spawn_npcs():
+			queue_free()
+			return
 	call_deferred("_configure_replica")
 	glob = Global
 	body = $Body
@@ -374,6 +375,8 @@ func _ready():
 			population_registered = true
 
 
+	if Multiplayer.Deathmatch.is_active():
+		$Body/Objective_Indicator.hide()
 	if _register_objective():
 		$Body / Objective_Indicator.show()
 	if objective:
@@ -768,7 +771,7 @@ func _complete_objective():
 	glob.remove_objective()
 
 func _register_objective():
-	if not objective or not enabled or objective_registered or not NetworkBridge.is_world_authority() or glob.CURRENT_LEVEL == 18:
+	if Multiplayer.Deathmatch.is_active() or not objective or not enabled or objective_registered or not NetworkBridge.is_world_authority() or glob.CURRENT_LEVEL == 18:
 		return false
 	objective_registered = true
 	glob.add_objective()

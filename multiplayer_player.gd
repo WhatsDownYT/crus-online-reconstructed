@@ -78,6 +78,7 @@ var grapple_orbs = []
 var voice_icon
 var voice_icon_elapsed = 0.0
 var label_font_ready = false
+var label_shadows = {}
 var centered_name = ""
 var indicator_material = null
 
@@ -250,6 +251,7 @@ func _process(delta):
 		call_deferred("_center_nickname")
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
 		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to revive"
+	_sync_label_shadows()
 	
 	if $Puppet/PlayerModel/SFX/IED_alert.playing:
 		$Puppet/PlayerModel/SFX/IED_alert.pitch_scale += 0.025
@@ -529,8 +531,7 @@ func _apply_label_font():
 	if health_label != null:
 		var font = health_label.get_font("font").duplicate()
 		if font is DynamicFont:
-			font.outline_size = 2
-			font.outline_color = Color.black
+			font.outline_size = 0
 			var ammo = Global.UI.get_node_or_null("Ammovbox/HBoxContainer/Ammo")
 			if ammo != null and ammo.get_font("font") is DynamicFont:
 				font.extra_spacing_char = ammo.get_font("font").extra_spacing_char
@@ -538,11 +539,33 @@ func _apply_label_font():
 				font.extra_spacing_char = -2
 		for label in [$Puppet/PlayerModel/Nickname, $Puppet/PlayerModel/HelpLabel]:
 			label.font = font
-			label.outline_modulate = Color.black
 			label.horizontal_alignment = Label3D.ALIGN_CENTER
 			label.offset = Vector2.ZERO
+			var shadow = Label3D.new()
+			shadow.name = label.name + "Shadow"
+			shadow.font = font
+			shadow.billboard = label.billboard
+			shadow.pixel_size = label.pixel_size
+			shadow.horizontal_alignment = Label3D.ALIGN_CENTER
+			shadow.render_priority = -1
+			shadow.modulate = Color.black
+			label.get_parent().add_child(shadow)
+			shadow.set_as_toplevel(label.is_set_as_toplevel())
+			label_shadows[label.name] = shadow
 		label_font_ready = true
 		centered_name = ""
+
+func _sync_label_shadows():
+	if not label_font_ready:
+		return
+	for label in [$Puppet/PlayerModel/Nickname, $Puppet/PlayerModel/HelpLabel]:
+		var shadow = label_shadows.get(label.name)
+		if not is_instance_valid(shadow):
+			continue
+		shadow.text = label.text
+		shadow.visible = label.visible
+		shadow.global_transform = label.global_transform
+		shadow.offset = label.offset + Vector2(2, 2)
 
 func _center_nickname():
 	var label = $Puppet/PlayerModel/Nickname

@@ -359,7 +359,6 @@ extents = Vector3( 0.385805, 0.352425, 0.129642 )
 font_path = "res://Fonts/Envy Code R.ttf"
 
 [sub_resource type="DynamicFont" id=34]
-outline_size = 2
 use_mipmaps = true
 font_data = SubResource( 33 )
 

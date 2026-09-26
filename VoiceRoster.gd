@@ -64,7 +64,11 @@ func _process(delta):
 		position += 1
 		var info = Multiplayer.players[peer]
 		row.get_node("Name").text = str(position) + ": " + str(info.get("nickname", "Player")) + (" (host)" if peer == Multiplayer.NetworkBridge.get_host_id() else "")
-		row.get_node("Name").modulate = Color(str(info.get("color", "ffffff")))
+		var color_text = str(info.get("color", "ffffff"))
+		if not color_text.begins_with("#"):
+			color_text = "#" + color_text
+		row.get_node("Name").modulate = Color.white
+		row.get_node("Name").add_color_override("font_color", Color(color_text))
 		var icon = row.get_node("Voice")
 		icon.visible = voice.is_enabled(peer)
 		icon.texture_normal = voice.TALK_ICON if voice.is_talking(peer) else voice.QUIET_ICON

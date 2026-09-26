@@ -46,6 +46,27 @@ func is_operative(peer):
 func is_counter_operative(peer):
 	return team_of(peer) == TEAM_COUNTER_OPERATIVES
 
+func has_opposing_teams():
+	var found_operative = false
+	var found_counter = false
+	for peer in Multiplayer.players:
+		if is_counter_operative(peer):
+			found_counter = true
+		else:
+			found_operative = true
+	return found_operative and found_counter
+
+func _balance_initial_teams():
+	if settings.overrideTeams or Multiplayer.players.size() < 2 or has_opposing_teams():
+		return
+	var peers = Multiplayer.players.keys()
+	peers.shuffle()
+	var counter_count = int(peers.size() / 2)
+	for index in range(peers.size()):
+		var peer = peers[index]
+		teams[peer] = TEAM_COUNTER_OPERATIVES if index < counter_count else TEAM_OPERATIVES
+		ready[peer] = false
+
 func same_team(a, b):
 	return team_of(a) == team_of(b)
 
@@ -172,8 +193,6 @@ func host_player_left(peer):
 		return
 	teams.erase(int(peer))
 	ready.erase(int(peer))
-	if Multiplayer.players.size() < 2 and is_instance_valid(Global.menu) and not Global.menu.in_game and Multiplayer.hostSettings.get("gameMode", MODE_CRUELTY) != MODE_CRUELTY:
-		set_mode(MODE_CRUELTY)
 	broadcast_state()
 
 func _default_team(peer):
@@ -285,6 +304,11 @@ func _apply_setting(key, value):
 	settings[key] = value
 	if key == "enemyFriendlyFire" and not value:
 		settings.neutralEnemies = false
+	if key == "overrideTeams" and value:
+		settings.randomizeTeams = false
+	if key == "randomizeTeams" and value:
+		if settings.overrideTeams:
+			settings.randomizeTeams = false
 	if key in ["randomizeTeams", "overrideTeams"]:
 		for peer in ready:
 			ready[peer] = false
@@ -292,13 +316,12 @@ func _apply_setting(key, value):
 func set_mode(mode):
 	if not NetworkBridge.is_world_authority() or not (mode in [MODE_CRUELTY, MODE_COUNTER_OP, "deathmatch"]):
 		return
-	if mode != MODE_CRUELTY and Multiplayer.players.size() < 2:
-		return
 	if is_instance_valid(Global.menu) and Global.menu.in_game:
 		return
 	Multiplayer.hostSettings.gameMode = mode
 	if mode == MODE_COUNTER_OP:
 		ensure_players()
+		_balance_initial_teams()
 	else:
 		for peer in ready:
 			ready[peer] = false
@@ -334,8 +357,12 @@ func reset_session():
 func randomize_teams():
 	if not NetworkBridge.is_world_authority():
 		return
-	for peer in Multiplayer.players:
-		teams[peer] = TEAM_OPERATIVES if randi() % 2 == 0 else TEAM_COUNTER_OPERATIVES
+	var peers = Multiplayer.players.keys()
+	peers.shuffle()
+	var counter_count = int(peers.size() / 2)
+	for index in range(peers.size()):
+		var peer = peers[index]
+		teams[peer] = TEAM_COUNTER_OPERATIVES if index < counter_count else TEAM_OPERATIVES
 
 func sync_to_peer(peer):
 	if NetworkBridge.is_world_authority():
@@ -364,6 +391,8 @@ func _apply_state(state):
 	for key in settings:
 		if incoming.has(key) and typeof(incoming[key]) == TYPE_BOOL:
 			settings[key] = incoming[key]
+	if settings.overrideTeams:
+		settings.randomizeTeams = false
 	emit_signal("state_changed")
 	_update_overlay()
 
@@ -457,6 +486,8 @@ func _update_overlay():
 	var host = NetworkBridge.is_world_authority()
 	var active = is_active()
 	ready_button.visible = not host
+	if ready_button.visible:
+		_position_ready_button()
 	var local_ready = ready.get(NetworkBridge.get_id(), false)
 	ready_button.modulate = Color(0.6, 1.0, 0.6) if local_ready else Color.white
 	ready_button.get_node("Text").text = "Ready" if not local_ready else "Ready!"
@@ -476,6 +507,15 @@ func _position_team_button():
 		return
 	var stock_button = level_menu.get_child(2)
 	team_button.rect_position = stock_button.rect_position + Vector2(64, 0)
+
+func _position_ready_button():
+	if not is_instance_valid(menu_ref) or menu_ref.menu.size() <= menu_ref.LEVEL_SELECT:
+		return
+	var level_menu = menu_ref.menu[menu_ref.LEVEL_SELECT]
+	for button in level_menu.get_children():
+		if button is TextureButton and button.has_meta("menu_button_type") and button.get_meta("menu_button_type") == menu_ref.B_WEAPON_2:
+			ready_button.rect_position = button.rect_position + Vector2(0, button.rect_size.y + 24)
+			return
 
 func _ready_pressed():
 	set_ready(not ready.get(NetworkBridge.get_id(), false))

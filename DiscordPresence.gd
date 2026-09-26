@@ -76,11 +76,12 @@ func _read_join():
 	file.close()
 	Directory.new().remove(path)
 	var parts = secret.split(":")
-	if parts.size() != 3 or parts[0] != "crus1":
+	if parts.size() != 3 or parts[0] != "crus2":
 		return
-	for index in [1, 2]:
-		if not parts[index].is_valid_integer() or int(parts[index]) <= 0 or str(int(parts[index])) != parts[index]:
-			return
+	if not parts[1].is_valid_integer() or int(parts[1]) <= 0:
+		return
+	if parts[2].length() != 6:
+		return
 	if session.SteamLobby.get_lobby_id() == int(parts[1]):
 		return
 	if not session.SteamInit.is_online:
@@ -88,7 +89,7 @@ func _read_join():
 		return
 	if bridge.check_connection():
 		session.leave_server()
-	session.SteamLobby.call_deferred("emit_signal", "lobby_join_requested", int(parts[1]))
+	session.SteamLobby.call_deferred("emit_signal", "lobby_join_requested", int(parts[1]), parts[2])
 
 func _level_name(index):
 	if level_names.empty():
@@ -126,7 +127,7 @@ func activity():
 			var lobby_id = session.SteamLobby.get_lobby_id()
 			result["party"]["id"] = "crus-steam-" + str(lobby_id)
 			if lobby_id > 0 and bridge.is_world_authority() and session.SteamLobby.is_owner() and session.players.size() < capacity and is_instance_valid(Global.menu) and not Global.menu.in_game and Global.loader == null and not Global.cutscene:
-				result["secrets"] = {"join": "crus1:%s:%s" % [lobby_id, bridge.get_id()]}
+				result["secrets"] = {"join": "crus2:%s:%s" % [lobby_id, session.SteamLobby.lobby_code()]}
 				result["instance"] = true
 				result.erase("buttons")
 	return result

@@ -45,7 +45,8 @@ func player_died():
 		
 	Multiplayer.player_died()
 	
-	show()
+	if not (Multiplayer.Deathmatch.is_active() and Multiplayer.Flow.result_active):
+		show()
 	
 	Global.player.cancer_count = 0
 	Global.player.weapon.disabled = true
@@ -179,7 +180,6 @@ func _implants(event):
 
 [sub_resource type="DynamicFont" id=1]
 size = 32
-outline_size = 2
 font_data = ExtResource( 1 )
 
 [sub_resource type="GDScript" id=3]
@@ -343,6 +343,9 @@ anchor_bottom = 0.548611
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "You died"
 align = 1
@@ -369,6 +372,9 @@ size_flags_vertical = 5
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "Press here"
 align = 2
@@ -399,6 +405,9 @@ size_flags_vertical = 3
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "to respawn"
 valign = 1
@@ -414,6 +423,9 @@ size_flags_vertical = 3
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "All players are dead
 
@@ -444,6 +456,9 @@ size_flags_vertical = 5
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "Change"
 align = 2
@@ -475,6 +490,9 @@ size_flags_vertical = 3
 custom_colors/font_color = Color( 1, 0, 0, 1 )
 custom_colors/font_outline_modulate = Color( 0, 0, 0, 1 )
 custom_colors/font_color_shadow = Color( 0, 0, 0, 1 )
+custom_constants/shadow_as_outline = 0
+custom_constants/shadow_offset_x = 2
+custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
 text = "Implants"
 valign = 1

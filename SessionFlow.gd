@@ -5,6 +5,8 @@ onready var NetworkBridge = get_parent().get_node("NetworkBridge")
 var result_active = false
 var result_won = false
 var result_level = 0
+var result_winner_team = ""
+var result_winner_name = ""
 var waiting_peers = []
 var world = {}
 var personal_difficulty = {}
@@ -49,6 +51,8 @@ puppet func configure_world(id, state):
 
 func clear_result():
 	result_active = false
+	result_winner_team = ""
+	result_winner_name = ""
 	finishing = false
 	misery_transition = false
 	get_tree().paused = false
@@ -137,6 +141,7 @@ puppet func show_result(id, state):
 	if result_active or (waiting_peers.has(NetworkBridge.get_id()) and state.ending == ""):
 		return
 	result_active = true
+	Multiplayer.Voice.enter_results()
 	finishing = false
 	var winner_team = state.get("winner_team", "")
 	var competitive = winner_team != ""
@@ -145,6 +150,8 @@ puppet func show_result(id, state):
 		local_won = state.get("winner_peer", 0) == NetworkBridge.get_id()
 	result_won = local_won
 	result_level = state.level
+	result_winner_team = winner_team
+	result_winner_name = str(Multiplayer.players.get(state.get("winner_peer", 0), {}).get("nickname", "Player")) if state.get("winner_peer", 0) != 0 else ""
 	Multiplayer.get_node("RestartTimer").stop()
 	Global.CURRENT_LEVEL = state.level
 	for key in ["enemy_count", "enemy_count_total", "civ_count", "civ_count_total", "level_time", "level_time_raw"]:
@@ -208,6 +215,7 @@ puppet func show_result(id, state):
 	Global.menu.get_node("Level_End_Grid").rect_size.x = 720
 	Global.menu.get_node("Level_End_Grid/Performance_Hbox/Performance_Scroll/Performance_Vbox/Time_Label").text = "Time:" + Global.level_time
 	Global.menu.show()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	var popup = Global.menu.get_node("Soul_Rended")
 	popup.hide()
 	if not state.won and shared and state.loss != "":
@@ -259,6 +267,8 @@ func waiting_world_target(peer, caller):
 	return path.begins_with("/root/Level/") or path.begins_with(str(Multiplayer.Players.get_path()) + "/")
 
 func _process(_delta):
+	if result_active and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	if not NetworkBridge.check_connection() or not NetworkBridge.is_world_authority():
 		return
 	var current = difficulty()

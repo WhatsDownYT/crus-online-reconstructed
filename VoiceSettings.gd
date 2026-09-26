@@ -39,6 +39,7 @@ func _ready():
 	volume.connect("value_changed", self, "_volume_changed")
 	device = OptionButton.new()
 	device.clip_text = true
+	device.theme = host.get_node("VBoxContainer/LobbyType/TypeSelect").theme
 	_row(box, "Voice Input:", device)
 	device.connect("item_selected", self, "_device_changed")
 	device.connect("pressed", self, "_refresh_devices")

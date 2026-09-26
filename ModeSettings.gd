@@ -3,7 +3,7 @@ extends PanelContainer
 var gamemodesList = [
 	["Cruelty", "The default gameplay of Cruelty Squad. Eliminate all mission targets, then reach the exit.\n\nThis is the only mode that can save campaign progress.", "cruelty"],
 	["Deathmatch", "Every player is a target. Be the last survivor. Touching exits will relocate you.", "deathmatch"],
-	["Counter-Op", "Operatives must eliminate all mission targets and reach the exit. Counter-Operatives fight alongside hostile NPCs and win by eliminating every Operative.", "counter_op"]
+	["Counter-Opps", "Operatives must eliminate all mission targets and reach the exit. Counter-Operatives fight alongside hostile NPCs and win by eliminating every Operative.", "counter_op"]
 ]
 
 var gamemodeSelected = 0
@@ -29,7 +29,9 @@ func _process(_delta):
 		_refresh_mode_availability()
 
 func _can_select_other_modes():
-	return Multiplayer.players.size() >= 2 and Multiplayer.NetworkBridge.check_connection() and Multiplayer.NetworkBridge.is_world_authority()
+	if Multiplayer.players.empty():
+		return false
+	return Multiplayer.NetworkBridge.check_connection() and Multiplayer.NetworkBridge.is_world_authority()
 
 func _refresh_mode_availability():
 	var available = _can_select_other_modes()
@@ -38,24 +40,19 @@ func _refresh_mode_availability():
 	modes_available = available
 	for index in [1, 2]:
 		mode_list.set_item_disabled(index, false)
-		mode_list.set_item_tooltip(index, gamemodesList[index][0] if available else "Requires at least two players to play")
-	play_button.disabled = gamemodeSelected != 0 and not available
-	if not available and Multiplayer.hostSettings.get("gameMode", "cruelty") != "cruelty" and is_instance_valid(Global.menu) and not Global.menu.in_game and Multiplayer.NetworkBridge.is_world_authority():
-		Multiplayer.CounterOp.host_apply_mode("cruelty")
+		mode_list.set_item_tooltip(index, gamemodesList[index][0] if available else "Host a lobby to select a mode.")
+	play_button.disabled = not available
 
 func _gamemode_select(index):
 	if index < 0 or index >= gamemodesList.size():
 		return
 	gamemodeSelected = index
 	$HBoxContainer/GamemodeDescription/MapLabel.text = "Gamemode description:\n\n" + gamemodesList[index][1]
-	play_button.disabled = index != 0 and not _can_select_other_modes()
+	play_button.disabled = not _can_select_other_modes()
 
 func play_button_pressed():
 	if not Multiplayer.NetworkBridge.check_connection() or not Multiplayer.NetworkBridge.is_world_authority():
 		return
 	var selected_mode = gamemodesList[gamemodeSelected][2]
-	if selected_mode != "cruelty" and not _can_select_other_modes():
-		play_button.disabled = true
-		return
 	if Multiplayer.hostSettings.get("gameMode", "cruelty") != selected_mode:
 		Multiplayer.CounterOp.host_apply_mode(selected_mode)

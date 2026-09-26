@@ -206,10 +206,13 @@ class Menu extends Control:
 	var elements:Array
 
 func _physics_process(delta):
+	if Multiplayer.NetworkBridge.check_connection() and Multiplayer.Flow.result_active and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_update_waiting_menu()
 	if not menu_changing and not active_menus.empty() and active_menus.back() == menu[START]:
 		_refresh_start_buttons()
 	_apply_counterop_level_lock()
+	_apply_competitive_start_gate()
 	time += 1
 	
 	if in_game:
@@ -433,11 +436,13 @@ func _apply_counterop_level_lock():
 		var button = level_buttons[index]
 		if should_lock and button.visible:
 			button.disabled = true
-			button.texture_disabled = BUTTON_TEXTURES_D[0]
-			button.modulate = Color(0.35, 0.35, 0.35, 1)
+			button.texture_disabled = button.texture_normal
+			button.modulate = Color(1, 0.2, 0.2, 1)
+			button.hint_tooltip = "This mission is unavailable in Counter-Opps."
 			counterop_locked_levels[index] = true
 		elif counterop_locked_levels.has(index):
 			button.modulate = Color(1, 1, 1, 1)
+			button.hint_tooltip = ""
 			if index > Global.L_PUNISHMENT:
 				var bonus_index = index - Global.L_PUNISHMENT - 1
 				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != - 1
@@ -446,6 +451,38 @@ func _apply_counterop_level_lock():
 			else:
 				button.disabled = index == Global.CURRENT_LEVEL
 			counterop_locked_levels.erase(index)
+
+func _competitive_start_reason():
+	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority() == false:
+		return ""
+	var mode = Multiplayer.hostSettings.get("gameMode", "cruelty")
+	if mode == "cruelty":
+		return ""
+	if Multiplayer.players.size() < 2:
+		return "At least two players are needed to start " + ("Deathmatch" if mode == "deathmatch" else "Counter-Opps") + "."
+	if mode == "counter_op" and not Multiplayer.CounterOp.has_opposing_teams():
+		return "Counter-Opps needs at least one Operative and one Counter-Operative."
+	return ""
+
+func _apply_competitive_start_gate():
+	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT] or menu_changing:
+		return
+	var button = menu[LEVEL_SELECT].get_child(5)
+	if not button.visible or not Multiplayer.NetworkBridge.is_world_authority():
+		return
+	var reason = _competitive_start_reason()
+	if reason != "":
+		button.disabled = true
+		button.texture_disabled = button.texture_normal
+		button.modulate = Color(1, 0.2, 0.2, 1)
+		button.hint_tooltip = reason
+		button.set_meta("competitive_start_locked", true)
+	elif button.has_meta("competitive_start_locked"):
+		button.disabled = false
+		button.texture_disabled = BUTTON_TEXTURES_D[0]
+		button.modulate = Color.white
+		button.hint_tooltip = ""
+		button.remove_meta("competitive_start_locked")
 
 func hide_buttons(m:Menu, a:int, b:int):
 	for ab in range(a, b + 1):
@@ -873,7 +910,7 @@ func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 
 func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
-	if _counterop_level_locked(Global.CURRENT_LEVEL):
+	if _counterop_level_locked(Global.CURRENT_LEVEL) or _competitive_start_reason() != "":
 		return
 	if Multiplayer.NetworkBridge.check_connection():
 		if not Multiplayer.NetworkBridge.is_world_authority():

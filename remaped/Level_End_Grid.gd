@@ -24,7 +24,16 @@ func set_performance_info():
 		$Level_Info_Vbox/Retry.visible = online.NetworkBridge.is_world_authority()
 		$Performance_Hbox/VBoxContainer/Objective_Panel/Objectives.text = "VICTORY" if online.Flow.result_won else "FAILURE"
 		$Performance_Hbox/VBoxContainer/Portrait.texture = Global.LEVEL_IMAGES[Global.CURRENT_LEVEL] if online.Flow.result_won else load("res://Textures/abraxas/face6.png")
-		$Performance_Hbox/Performance_Scroll/RichTextLabel.text = "Last survivor wins.\n\nCampaign progress is not saved." if online.Deathmatch.is_active() else "Round complete.\n\nCampaign progress is not saved."
+		var winner = online.Flow.result_winner_team
+		var message = ""
+		if winner == "deathmatch":
+			message = online.Flow.result_winner_name + " wins!" if not online.Flow.result_winner_name.empty() else "No survivors."
+		else:
+			message = "Counter-Operatives win!" if winner == online.CounterOp.TEAM_COUNTER_OPERATIVES else "Operatives win!"
+		if not online.Deathmatch.is_active() or online.Deathmatch.spawn_npcs():
+			message += str("\n\nEnemies killed: ", Global.enemy_count_total - Global.enemy_count, "/", Global.enemy_count_total)
+			message += str("\nCivilians lost: ", Global.civ_count_total - Global.civ_count, "/", Global.civ_count_total)
+		$Performance_Hbox/Performance_Scroll/RichTextLabel.text = message
 		return
 	if _mission_won():
 		$Level_Info_Vbox / Next_Level.show()

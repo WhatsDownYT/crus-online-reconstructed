@@ -1,8 +1,8 @@
 extends Node
 
-var version = "Beta v1.0"
+var version = "v1.0"
 
-enum errorType {UNKNOW, TIME_OUT, WRONG_PASSWORD, WRONG_VERSION, PASSWORD_REQUIRE, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
+enum errorType {UNKNOW, TIME_OUT, WRONG_VERSION, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
 
 var profile_loaded = false
 var playerInfo = {
@@ -22,6 +22,7 @@ var hostSettings = {
 	"shareDifficulty": false,
 	"friendlyFire": true,
 	"gameMode": "cruelty",
+	"deathmatchSpawnNPCs": true,
 	"saveProgress": true,
 	"useVoiceChat": true,
 	"proximityVoiceChat": true,
@@ -35,7 +36,9 @@ var config = {
 	"lastIp": "127.0.0.1",
 	"lastPort": 25567,
 	"hostPort": 25567,
-	"hostPassword": "",
+	"hostLobbyType": "public",
+	"hostLobbyName": "",
+	"deathmatchSpawnNPCs": true,
 	"tickRate": 3,
 	"helpTimer": 15,
 	"reviveLives": 0,
@@ -49,10 +52,6 @@ var config = {
 	"proximityVoiceChat": true,
 	"hearDeadPlayers": false
 }
-
-var password = ""
-
-var passwordEntered = false
 
 var dataLoaded = false
 
@@ -128,8 +127,6 @@ func _ready():
 		["set_packages_count", SteamNetwork.PERMISSION.SERVER],
 		["ping_set", SteamNetwork.PERMISSION.SERVER],
 		["disconnect_client", SteamNetwork.PERMISSION.SERVER],
-		["password_not_require", SteamNetwork.PERMISSION.SERVER],
-		["password_checked", SteamNetwork.PERMISSION.SERVER],
 		["client_connect_init", SteamNetwork.PERMISSION.SERVER],
 		["sync_players", SteamNetwork.PERMISSION.SERVER],
 		["goto_menu_client", SteamNetwork.PERMISSION.SERVER],
@@ -139,7 +136,6 @@ func _ready():
 		["set_death_label", SteamNetwork.PERMISSION.SERVER],
 		["hide_death_screen", SteamNetwork.PERMISSION.SERVER],
 		["ping_host", SteamNetwork.PERMISSION.ALL],
-		["password_require_check", SteamNetwork.PERMISSION.ALL],
 		["connect_init", SteamNetwork.PERMISSION.ALL],
 		["load_check", SteamNetwork.PERMISSION.ALL],
 		["_player_died", SteamNetwork.PERMISSION.ALL],
@@ -256,6 +252,7 @@ func clear_connection(recivedError):
 
 func apply_host_settings():
 	hostSettings.bannedImplants = config.bannedImplants.duplicate()
+	hostSettings.deathmatchSpawnNPCs = config.get("deathmatchSpawnNPCs", true)
 	hostSettings.saveProgress = config.saveProgress
 	if NetworkBridge.check_connection():
 		update_campaign_saving(hostSettings)
@@ -277,6 +274,8 @@ func apply_host_settings():
 	enforce_implant_bans()
 	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
 		NetworkBridge.n_rpc(self, "sync_host_settings", [hostSettings])
+		if NetworkBridge.is_steam():
+			SteamLobby.publish_lobby_settings()
 
 puppet func sync_host_settings(id, settings):
 	if NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
@@ -395,12 +394,11 @@ func steam_peers_connect():
 	NetworkBridge.n_rpc(self, "client_peer_connect")
 
 puppet func client_peer_connect(id):
-	emit_signal("status_update", "Connected to Lobby")
 	$Debug/VBoxContainer/GameType.text = "Player is client"
 	
 	if str(playerInfo.nickname).strip_edges().empty():
 		playerInfo.nickname = SteamInit.steam_username
-	NetworkBridge.n_rpc(self, "connect_init", [password, version, playerInfo])
+	NetworkBridge.n_rpc(self, "connect_init", [SteamLobby.join_code(), version, playerInfo])
 
 puppet func disconnected(id):
 	if NetworkBridge.is_lan():
@@ -429,55 +427,37 @@ puppet func disconnected(id):
 puppet func connected(id):
 	if NetworkBridge.is_lan():
 		if not dataLoaded:
-			NetworkBridge.n_rpc(self, "password_require_check", [passwordEntered])
+			NetworkBridge.n_rpc(self, "connect_init", ["", version, playerInfo])
 			print("[CRUS ONLINE / CLIENT]: Connect Init")
 
 puppet func disconnect_client(id, recivedError):
 	clear_connection(recivedError)
-	
-	passwordEntered = false
-	password = ""
 
-master func password_require_check(id, recivedPasswordEntered):
-	if recivedPasswordEntered:
-		NetworkBridge.n_rpc_id(self, id, "password_checked")
-	else:
-		if config.hostPassword != "":
-			NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.PASSWORD_REQUIRE])
-		else:
-			NetworkBridge.n_rpc_id(self, id, "password_not_require")
-
-puppet func password_not_require(id):
-		password = ""
-		NetworkBridge.n_rpc(self, "connect_init", [password, version, playerInfo])
-
-puppet func password_checked(id):
-	NetworkBridge.n_rpc(self, "connect_init", [password, version, playerInfo])
-
-master func connect_init(id, recivedPassword, recivedVersion, recivedPlayerInfo):
+master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo):
 	if recivedVersion != version:
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.WRONG_VERSION])
 	else:
-		if recivedPassword == config.hostPassword:
-			NetworkBridge.n_rpc_id(self, id, "client_connect_init", [hostSettings, _public_players()])
+		if not NetworkBridge.is_steam() or SteamLobby.can_join(id, received_code):
+			NetworkBridge.n_rpc_id(self, id, "client_connect_init", [hostSettings, _public_players(), SteamLobby.lobby_code() if NetworkBridge.is_steam() else ""])
 			host_add_player(id, recivedPlayerInfo)
 			emit_signal("throw_error", errorType.PLAYER_CONNECTED)
 			print("[CRUS ONLINE / HOST]: Client Connect Init")
 		else:
-			NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.WRONG_PASSWORD])
+			NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.SERVER_CLOSED])
 
-puppet func client_connect_init(id, recivedHostSettings, recivedPlayerInfo):
+puppet func client_connect_init(id, recivedHostSettings, recivedPlayerInfo, received_code):
 	players = recivedPlayerInfo
+	if NetworkBridge.is_steam():
+		SteamLobby.set_joined_code(received_code)
 	update_campaign_saving(recivedHostSettings)
 	hostSettings = recivedHostSettings
 	enforce_implant_bans()
 	
 	dataLoaded = true
+	if NetworkBridge.is_steam():
+		emit_signal("status_update", "Connected to Lobby")
 	
 	if NetworkBridge.is_lan():
-		passwordEntered = false
-		password = ""
-
 		emit_signal("status_update", "Connected to server")
 		emit_signal("connected_to_server")
 		
@@ -761,6 +741,7 @@ func check_players_load():
 			Global.objectives = 0
 			Global.objective_complete = true
 		Deathmatch.start_round()
+		Deathmatch.spread_counter_operative_spawns()
 		publish_mission_state()
 		emit_signal("scene_loaded")
 		NetworkBridge.n_rpc(self, "scene_loaded_signal")

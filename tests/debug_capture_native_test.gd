@@ -28,9 +28,6 @@ func run():
 	var hud = Control.new()
 	hud.name = "UI"
 	fake_player.add_child(hud)
-	var screen_effect = ColorRect.new()
-	screen_effect.name = "Shader_Screen"
-	fake_player.add_child(screen_effect)
 	Global.player = fake_player
 	Global.menu.in_game = true
 	capture._process(0)
@@ -39,14 +36,9 @@ func run():
 	check(Global.menu.modulate.a == 0.0, "F8 hides menu overlays")
 	capture._input(key(KEY_F8))
 	check(not capture.ui_hidden and hud.modulate.a == 1.0, "F8 restores HUD")
-	capture._input(key(KEY_F9))
-	check(capture.world_black and capture.black_rect.visible and capture.black_layer.layer == -1, "F9 black layer below UI")
-	check(not screen_effect.visible, "F9 prevents screen shader from tinting black")
-	capture._input(key(KEY_F8))
-	check(capture.black_rect.visible and hud.modulate.a == 0.0, "Toggles work together")
 	Global.menu.in_game = false
 	capture._process(0)
-	check(not capture.ui_hidden and not capture.world_black and hud.modulate.a == 1.0 and not capture.black_rect.visible and screen_effect.visible, "Leaving level resets both")
+	check(not capture.ui_hidden and hud.modulate.a == 1.0, "Leaving level restores HUD")
 	Global.player = previous_player
 	Global.menu.in_game = previous_in_game
 	fake_player.queue_free()

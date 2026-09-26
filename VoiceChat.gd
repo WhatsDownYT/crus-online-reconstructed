@@ -505,7 +505,7 @@ func lobby_enabled():
 func can_hear(speaker, listener):
 	if not lobby_enabled():
 		return false
-	if failure_screen():
+	if result_screen():
 		return true
 	var state = peers.get(speaker, {})
 	if not Multiplayer.hostSettings.get("hearDeadPlayers", false) and state.get("dead", false) and not peers.get(listener, {}).get("dead", false):
@@ -521,15 +521,23 @@ func voice_actor(peer):
 	return actors.get_node_or_null(str(peer) + "/Puppet") if actors != null else null
 
 func spatial_voice(speaker, listener):
-	if failure_screen() or not Multiplayer.hostSettings.get("proximityVoiceChat", true):
+	if result_screen() or not Multiplayer.hostSettings.get("proximityVoiceChat", true):
 		return false
 	if peers.get(speaker, {}).get("dead", false) and peers.get(listener, {}).get("dead", false):
 		return false
 	return is_instance_valid(voice_actor(speaker)) and is_instance_valid(voice_actor(listener))
 
-func failure_screen():
+func result_screen():
 	var flow = Multiplayer.get_node_or_null("SessionFlow")
-	return flow != null and flow.result_active and not flow.result_won
+	return flow != null and flow.result_active
+
+func enter_results():
+	for peer in voice_buses:
+		var index = AudioServer.get_bus_index(voice_buses[peer])
+		if index >= 0:
+			AudioServer.set_bus_effect_enabled(index, 0, false)
+			AudioServer.set_bus_effect_enabled(index, 1, false)
+	_clear_sinks()
 
 func _voice_bus(peer):
 	if voice_buses.has(peer):
@@ -554,8 +562,8 @@ func _voice_bus(peer):
 
 func _update_voice_effects(peer):
 	var index = AudioServer.get_bus_index(_voice_bus(peer))
-	AudioServer.set_bus_effect_enabled(index, 0, not failure_screen() and peers.get(peer, {}).get("dead", false))
-	AudioServer.set_bus_effect_enabled(index, 1, not failure_screen() and (local_water or peers.get(peer, {}).get("water", false)))
+	AudioServer.set_bus_effect_enabled(index, 0, not result_screen() and peers.get(peer, {}).get("dead", false))
+	AudioServer.set_bus_effect_enabled(index, 1, not result_screen() and (local_water or peers.get(peer, {}).get("water", false)))
 
 func _remove_voice_bus(peer):
 	if voice_buses.has(peer):

@@ -16,6 +16,9 @@ func _ready():
 func is_active():
 	return NetworkBridge.check_connection() and Multiplayer.hostSettings.get("gameMode", "cruelty") == "deathmatch"
 
+func spawn_npcs():
+	return bool(Multiplayer.hostSettings.get("deathmatchSpawnNPCs", true))
+
 func reset_round():
 	civilian_spots.clear()
 	fallback_spots.clear()
@@ -82,6 +85,44 @@ func start_round():
 	Global.objective_complete = false
 	started = true
 
+func spread_counter_operative_spawns():
+	if not Multiplayer.CounterOp.is_active() or not NetworkBridge.is_world_authority():
+		return
+	var peers = []
+	for peer in Multiplayer.players:
+		if Multiplayer.CounterOp.is_counter_operative(peer):
+			peers.append(peer)
+	peers.sort()
+	if peers.empty():
+		return
+	var manager = Global.player.get_parent()
+	var space = Global.player.get_world().direct_space_state
+	var shape = CapsuleShape.new()
+	shape.radius = 0.35
+	shape.height = 1.0
+	var query = PhysicsShapeQueryParameters.new()
+	query.set_shape(shape)
+	query.collision_mask = 1
+	query.exclude = [Global.player.get_rid()]
+	spawn_points.clear()
+	for spot in civilian_spots:
+		var safe = manager._safe_civilian_spawn(spot, space, query)
+		if safe != null and not spawn_points.has(safe):
+			spawn_points.append(safe)
+	if spawn_points.size() < peers.size():
+		for spot in fallback_spots:
+			var safe = manager._safe_civilian_spawn(spot, space, query)
+			if safe != null and not spawn_points.has(safe):
+				spawn_points.append(safe)
+	if spawn_points.empty():
+		return
+	spawn_points.shuffle()
+	var used = []
+	for peer in peers:
+		var point = choose_spawn(used)
+		used.append(point)
+		_send_relocation(peer, point)
+
 func choose_spawn(occupied):
 	var best = spawn_points[randi() % spawn_points.size()]
 	var best_distance = -1.0
@@ -113,7 +154,7 @@ func _send_relocation(peer, point):
 	relocate(null, peer, point, Multiplayer.SteamNetwork.scene_epoch)
 
 puppet func relocate(id, peer, point, epoch):
-	if not is_active() or epoch != Multiplayer.SteamNetwork.scene_epoch or typeof(point) != TYPE_VECTOR3:
+	if not (is_active() or Multiplayer.CounterOp.is_active()) or epoch != Multiplayer.SteamNetwork.scene_epoch or typeof(point) != TYPE_VECTOR3:
 		return
 	var actor = NetworkBridge.get_peer_actor(peer)
 	if not is_instance_valid(actor):
