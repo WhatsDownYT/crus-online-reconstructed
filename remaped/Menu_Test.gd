@@ -435,9 +435,13 @@ func _apply_counterop_level_lock():
 			continue
 		var button = level_buttons[index]
 		if should_lock and button.visible:
+			var mystery_locked = false
+			if index > Global.L_PUNISHMENT:
+				var bonus_index = index - Global.L_PUNISHMENT - 1
+				mystery_locked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) == -1
 			button.disabled = true
-			button.texture_disabled = button.texture_normal
-			button.modulate = Color(1, 0.2, 0.2, 1)
+			button.texture_disabled = MYSTERY if mystery_locked else button.texture_normal
+			button.modulate = Color.white if mystery_locked else Color(1, 0.2, 0.2, 1)
 			button.hint_tooltip = "This mission is unavailable in Counter-Opps."
 			counterop_locked_levels[index] = true
 		elif counterop_locked_levels.has(index):
@@ -662,7 +666,7 @@ func create_button(m:int, n:String, connection:String, b:int):
 	all_buttons.append(new_button)
 	return new_button
 func _on_mouse_entered(m, button):
-	if button.disabled:
+	if button.disabled and button.hint_tooltip == "":
 		return 
 	hover_info.get_node("Image").hide()
 	hover_info.get_parent().raise()

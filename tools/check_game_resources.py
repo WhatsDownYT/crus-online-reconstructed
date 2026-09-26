@@ -41,6 +41,12 @@ func _ready():
 		printerr("Could not open mod package")
 		get_tree().quit(1)
 		return
+	var eyecam = Image.new()
+	if eyecam.load("res://MOD_CONTENT/CruS Online/surveillance_eyecam.png") != OK:
+		failures += 1
+		printerr("RESOURCE_FAIL surveillance_eyecam.png")
+	else:
+		print("RESOURCE_OK surveillance_eyecam.png ", eyecam.get_size())
 	for path in ["res://MOD_CONTENT/CruS Online/multiplayer.tscn",
 		"res://MOD_CONTENT/CruS Online/multiplayer_player.tscn",
 		"res://MOD_CONTENT/CruS Online/menu.tscn",

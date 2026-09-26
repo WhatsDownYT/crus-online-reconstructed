@@ -290,6 +290,12 @@ func _setup_credits_overlay():
 	tabs.remove_child(credits_overlay)
 	add_child(credits_overlay)
 	credits_overlay.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	var panel_style = tabs.get_stylebox("panel").duplicate()
+	if panel_style is StyleBoxFlat:
+		var fill = panel_style.bg_color
+		fill.a = 1.0
+		panel_style.bg_color = fill
+	credits_overlay.add_stylebox_override("panel", panel_style)
 	credits_overlay.hide()
 	var rich = credits_overlay.get_node("RichTextLabel")
 	credits_overlay.remove_child(rich)
@@ -310,9 +316,9 @@ func _setup_credits_overlay():
 func _layout_credits_overlay():
 	if not is_instance_valid(credits_overlay):
 		return
-	var tabs = $CenterContainer/TabContainer
-	credits_overlay.rect_position = get_global_transform().affine_inverse().xform(tabs.rect_global_position + Vector2(7, 39))
-	credits_overlay.rect_size = tabs.rect_size - Vector2(14, 46)
+	var content = $CenterContainer/TabContainer/Main
+	credits_overlay.rect_position = get_global_transform().affine_inverse().xform(content.rect_global_position)
+	credits_overlay.rect_size = content.rect_size
 
 func _open_credits():
 	$CenterContainer/TabContainer.current_tab = 0
@@ -869,6 +875,7 @@ func _layout_mode_panels():
 	current.visible = not mode_visible
 
 func _open_mode_settings(selected):
+	_close_credits()
 	for panel in [cruelty_settings_tab, counterop_settings_tab, deathmatch_settings_tab]:
 		if is_instance_valid(panel):
 			panel.visible = panel == selected

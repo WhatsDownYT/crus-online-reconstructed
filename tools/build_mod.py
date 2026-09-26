@@ -49,9 +49,9 @@ with zipfile.ZipFile(args.base_package) as base:
         for imported in re.findall(r'^path(?:\.s3tc)?="res://(\.import/[^"]+)"', entries[archive_name].decode('utf-8'), re.MULTILINE):
             if imported not in entries:
                 raise SystemExit(f'Missing imported asset: {archive_name} -> {imported}')
-for required in ('crus_online_reconstructed_logo.png', 'crus_online_logo.png'):
+for required in ('crus_online_reconstructed_logo.png', 'crus_online_logo.png', 'surveillance_eyecam.png'):
     if prefix + required not in entries:
-        raise SystemExit(f'Missing required credits asset: {required}')
+        raise SystemExit(f'Missing required asset: {required}')
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = args.output / 'mod.zip.tmp'
 with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED) as output:
