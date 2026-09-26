@@ -38,6 +38,7 @@ var playerOnFloor = true
 
 var playerMovement = [0.0, 0.0]
 var playerAim = 0.0
+var playerHoldPosition = null
 
 var jumpBlend = 0.0
 var movementBlend = [0.0,0.0]
@@ -49,6 +50,7 @@ var sit_blend = 0.0
 var player_sitting = false
 
 var death = false
+var revive_started = false
 
 var skinPath = "res://Textures/Misc/mainguy_clothes.png"
 var nickname = "MT Foxtrot"
@@ -66,6 +68,10 @@ var canDamage = false
 var implant_state = {}
 var _implant_names = []
 var _implant_elapsed = 0.0
+var _body_meshes = []
+var _body_base_materials = []
+var _body_stealth_materials = []
+var _body_visual_mode = ""
 
 var grapple_pos = null
 
@@ -123,13 +129,17 @@ func _ready():
 		["_respawn_player", NetworkBridge.PERMISSION.SERVER],
 		["hideHelpLabel", NetworkBridge.PERMISSION.ALL],
 		["_set_tranquilize", NetworkBridge.PERMISSION.ALL],
-		["_add_velocity", NetworkBridge.PERMISSION.SERVER]
+		["_add_velocity", NetworkBridge.PERMISSION.SERVER],
+		["_apply_multiplayer_heal", NetworkBridge.PERMISSION.SERVER],
+		["_apply_multiplayer_heal_percent", NetworkBridge.PERMISSION.SERVER],
+		["_apply_multiplayer_sedative", NetworkBridge.PERMISSION.SERVER]
 	])
 	
 	weaponsMesh = $Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons.get_children()
 	var skinMaterial = SpatialMaterial.new()
 	skinMaterial.albedo_texture = load(skinPath)
 	$Puppet/PlayerModel/Armature/Skeleton/Torso_Mesh.material_override = skinMaterial
+	_setup_multiplayer_body_materials()
 	$Puppet/PlayerModel/Nickname.text = nickname
 	$Puppet/PlayerModel/Nickname.modulate = Color(color)
 	var player_indicator = $Puppet/PlayerModel/Armature/Skeleton/Head/PlayerIndicator
@@ -151,6 +161,10 @@ func _ready():
 
 remote func _set_death(id, recived_death):
 	death = recived_death
+	if not death:
+		revive_started = false
+	else:
+		_update_help_label_visibility()
 	_update_player_indicator()
 	_update_collision_stance()
 	
@@ -193,20 +207,14 @@ func play_explosion_sound():
 	
 	animTree.set("parameters/DEATH1/active", true)
 	
-	if Multiplayer.can_peer_be_revived(int(name)):
-		$Puppet/PlayerModel/HelpTimer.wait_time = Multiplayer.hostSettings.helpTimer
-		$Puppet/PlayerModel/HelpLabel.show()
-		$Puppet/PlayerModel/HelpTimer.start()
-	else:
-		$Puppet/PlayerModel/HelpTimer.stop()
-		$Puppet/PlayerModel/HelpLabel.hide()
-		$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
+	_update_help_label_visibility()
 
 func can_respawn():
 	if not Multiplayer.can_peer_be_revived(int(name)):
 		$Puppet/PlayerModel/HelpLabel.hide()
 		$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
 		return
+	$Puppet/PlayerModel/HelpLabel.show()
 	$Puppet/PlayerModel/HelpLabel.text = "Press [Use] to revive"
 	$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, true)
 
@@ -218,6 +226,8 @@ remote func set_sit(id, recived_value):
 
 func _process(delta):
 	_update_player_indicator()
+	_update_multiplayer_body_visuals()
+	_update_local_hold_position()
 	if not label_font_ready:
 		_apply_label_font()
 	voice_icon_elapsed += delta
@@ -225,9 +235,9 @@ func _process(delta):
 		voice_icon_elapsed = 0.0
 		_update_voice_icon()
 	weaponBlend = lerp(weaponBlend, float(!weaponHold), delta * 4.0)
-	crouchBlend = lerp(crouchBlend, floor(playerCrouch), delta * 4.0)
-	jumpBlend = lerp(jumpBlend, abs(floor(playerOnFloor) - 1), delta * 4.0)
-	sit_blend = lerp(sit_blend, floor(player_sitting) * 2.0, delta * 4.0)
+	crouchBlend = lerp(crouchBlend, float(playerCrouch), delta * 4.0)
+	jumpBlend = lerp(jumpBlend, abs(float(playerOnFloor) - 1), delta * 4.0)
+	sit_blend = lerp(sit_blend, float(player_sitting) * 2.0, delta * 4.0)
 	
 	movementBlend[0] = lerp(movementBlend[0],playerMovement[0],0.1)
 	movementBlend[1] = lerp(movementBlend[1],playerMovement[1],0.1)
@@ -251,10 +261,28 @@ func _process(delta):
 		call_deferred("_center_nickname")
 	if not $Puppet/PlayerModel/HelpTimer.is_stopped():
 		$Puppet/PlayerModel/HelpLabel.text =  "Wait " + str(floor($Puppet/PlayerModel/HelpTimer.time_left * 10.0)/10.0) + " to revive"
+	_update_help_label_visibility()
 	_sync_label_shadows()
 	
 	if $Puppet/PlayerModel/SFX/IED_alert.playing:
 		$Puppet/PlayerModel/SFX/IED_alert.pitch_scale += 0.025
+
+func _update_help_label_visibility():
+	var eligible = death and Multiplayer.can_peer_be_revived(int(name))
+	var body = $Puppet/PlayerModel/Armature/Skeleton/Chest/Body
+	var timer = $Puppet/PlayerModel/HelpTimer
+	$Puppet/PlayerModel/HelpLabel.visible = eligible
+	if not eligible:
+		body.set_collision_layer_bit(8, false)
+		return
+	if not revive_started:
+		revive_started = true
+		if float(Multiplayer.hostSettings.get("helpTimer", 15)) > 0:
+			timer.start(float(Multiplayer.hostSettings.get("helpTimer", 15)))
+	if timer.is_stopped():
+		can_respawn()
+	else:
+		body.set_collision_layer_bit(8, false)
 
 func _update_player_indicator():
 	var indicator = $Puppet/PlayerModel/Armature/Skeleton/Head/PlayerIndicator
@@ -324,11 +352,15 @@ func _physics_process(delta):
 			delete_grapple_orbs()
 	
 	if NetworkBridge.check_connection():
-		if int(self.name) == NetworkBridge.get_id() and is_instance_valid(Global.player):
-			NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [Global.player.global_transform, [Global.player.cmd.forward_move,Global.player.cmd.right_move], Global.player.rotation_helper.rotation.x, grapple_pos])
+		if int(self.name) == NetworkBridge.get_id() and is_instance_valid(Global.player) and is_instance_valid(Global.player.get("weapon")):
+			var hold_position = Global.player.global_transform.origin
+			if is_instance_valid(Global.player.weapon) and is_instance_valid(Global.player.weapon.hold_pos):
+				hold_position = Global.player.weapon.hold_pos.global_transform.origin
+			playerHoldPosition = hold_position
+			NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [Global.player.global_transform, [Global.player.cmd.forward_move,Global.player.cmd.right_move], Global.player.rotation_helper.rotation.x, grapple_pos, hold_position])
 			hide()
 
-remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedPlayerAim, recived_grapple_pos = null):
+remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedPlayerAim, recived_grapple_pos = null, recived_hold_position = null):
 	if death:
 		recivedTransform.basis = transform_lerp.basis
 		recivedPlayerMovement = [0.0, 0.0]
@@ -341,9 +373,11 @@ remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedP
 		playerAim = recivedPlayerAim
 		
 		grapple_pos = recived_grapple_pos
+		if typeof(recived_hold_position) == TYPE_VECTOR3 and not is_nan(recived_hold_position.x) and not is_nan(recived_hold_position.y) and not is_nan(recived_hold_position.z) and not is_inf(recived_hold_position.x) and not is_inf(recived_hold_position.y) and not is_inf(recived_hold_position.z) and recived_hold_position.distance_to(recivedTransform.origin) <= 3.0:
+			playerHoldPosition = recived_hold_position
 	
 	if NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [recivedTransform, recivedPlayerMovement, recivedPlayerAim, grapple_pos])
+		NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [recivedTransform, recivedPlayerMovement, recivedPlayerAim, grapple_pos, playerHoldPosition])
 
 remote func respawn_puppet(id):
 	death = false
@@ -504,6 +538,139 @@ remote func sync_implants(id, names):
 	var state = preload("res://MOD_CONTENT/CruS Online/ImplantNetwork.gd").resolve(Global.implants.IMPLANTS, names)
 	if state != null:
 		implant_state = state
+		_refresh_multiplayer_body_materials()
+
+func _setup_multiplayer_body_materials():
+	var shader = preload("res://MOD_CONTENT/CruS Online/effects/player_stealth_dither.shader")
+	for path in ["Puppet/PlayerModel/Armature/Skeleton/Head_Mesh", "Puppet/PlayerModel/Armature/Skeleton/Torso_Mesh", "Puppet/PlayerModel/Armature/Skeleton/Head/glasses"]:
+		var mesh = get_node_or_null(path)
+		if not is_instance_valid(mesh):
+			continue
+		_body_meshes.append(mesh)
+		_body_base_materials.append(mesh.material_override)
+		var source = mesh.material_override
+		if source == null:
+			source = mesh.get_active_material(0)
+		var material = ShaderMaterial.new()
+		material.shader = shader
+		var texture = null
+		if source is SpatialMaterial:
+			texture = source.albedo_texture
+			material.set_shader_param("albedo_color", source.albedo_color)
+			material.set_shader_param("surface_roughness", source.roughness)
+			material.set_shader_param("surface_metallic", source.metallic)
+			material.set_shader_param("surface_specular", source.metallic_specular)
+		elif source == null:
+			texture = load(skinPath)
+		material.set_shader_param("use_albedo_texture", texture != null)
+		material.set_shader_param("albedo_texture", texture)
+		material.set_shader_param("visibility", 1.0)
+		_body_stealth_materials.append(material)
+
+func _refresh_multiplayer_body_materials():
+	var mode = "distance_hide" if implant_state.get("multiplayer_camo", false) else ("half_dither" if implant_state.get("multiplayer_stealth", false) else "")
+	if mode == _body_visual_mode:
+		return
+	_body_visual_mode = mode
+	for index in range(_body_meshes.size()):
+		if mode in ["distance_hide", "half_dither"]:
+			var material = _body_stealth_materials[index]
+			if mode == "half_dither":
+				material.shader = preload("res://MOD_CONTENT/CruS Online/effects/player_stealth_optical_dither.shader")
+				var optical = preload("res://Materials/seethrough.tres")
+				material.set_shader_param("optical_color", optical.albedo_color)
+				material.set_shader_param("optical_metallic", optical.metallic)
+				material.set_shader_param("optical_specular", optical.metallic_specular)
+				material.set_shader_param("optical_roughness", optical.roughness)
+				material.set_shader_param("optical_transmission", optical.transmission)
+				material.set_shader_param("optical_refraction", optical.refraction_scale)
+			else:
+				material.shader = preload("res://MOD_CONTENT/CruS Online/effects/player_stealth_dither.shader")
+			_body_meshes[index].material_override = material
+		else:
+			_body_meshes[index].material_override = _body_base_materials[index]
+
+func _update_multiplayer_body_visuals():
+	if int(name) == NetworkBridge.get_id() or not is_instance_valid(Global.player):
+		return
+	var distance = Global.player.global_transform.origin.distance_to(global_transform.origin)
+	$Puppet/PlayerModel/Nickname.visible = distance <= 12.0
+	if _body_visual_mode == "":
+		return
+	var visibility = 0.5 if _body_visual_mode == "half_dither" else clamp((12.0 - distance) / 3.0, 0.0, 1.0)
+	for material in _body_stealth_materials:
+		material.set_shader_param("visibility", visibility)
+
+func _update_local_hold_position():
+	if int(name) != NetworkBridge.get_id() or not is_instance_valid(Global.player):
+		return
+	var holder = Multiplayer.held_by(int(name))
+	if holder == 0:
+		return
+	var holder_actor = NetworkBridge.get_peer_actor(holder)
+	if not is_instance_valid(holder_actor):
+		return
+	var hold_position = null
+	if "playerHoldPosition" in holder_actor and typeof(holder_actor.playerHoldPosition) == TYPE_VECTOR3:
+		if holder_actor.playerHoldPosition.distance_to(holder_actor.global_transform.origin) <= 3.0:
+			hold_position = holder_actor.playerHoldPosition
+	if hold_position == null:
+		hold_position = holder_actor.global_transform.origin - holder_actor.global_transform.basis.z.normalized() * 1.142 + Vector3.UP * 1.481
+	Global.player.global_transform.origin = hold_position - Vector3.UP * 0.918484
+	Global.player.player_velocity = Vector3.ZERO
+
+func apply_multiplayer_heal(amount):
+	if not NetworkBridge.is_world_authority():
+		return
+	if int(name) == NetworkBridge.get_id():
+		_apply_heal(amount)
+	else:
+		NetworkBridge.n_rpc_id(self, int(name), "_apply_multiplayer_heal", [amount])
+
+remote func _apply_multiplayer_heal(id, amount):
+	if NetworkBridge.check_connection() and NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
+	_apply_heal(amount)
+
+func _apply_heal(amount):
+	if typeof(amount) in [TYPE_INT, TYPE_REAL] and amount > 0 and amount <= 100 and int(name) == NetworkBridge.get_id() and is_instance_valid(Global.player):
+		Global.player.add_health(float(amount))
+
+func apply_multiplayer_heal_percent(percent):
+	if not NetworkBridge.is_world_authority():
+		return
+	if int(name) == NetworkBridge.get_id():
+		_apply_multiplayer_heal_percent(null, percent)
+	else:
+		NetworkBridge.n_rpc_id(self, int(name), "_apply_multiplayer_heal_percent", [percent])
+
+puppet func _apply_multiplayer_heal_percent(id, percent):
+	if NetworkBridge.check_connection() and NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
+	if not (typeof(percent) in [TYPE_INT, TYPE_REAL]) or percent <= 0 or percent > 0.5 or int(name) != NetworkBridge.get_id() or not is_instance_valid(Global.player):
+		return
+	var max_health = 200.0 if Global.player.orb else 100.0
+	Global.player.add_health(max_health * float(percent))
+
+func set_multiplayer_sedative(source_id):
+	if not NetworkBridge.is_world_authority() or int(source_id) == int(name) or implant_state.get("sedative_immune", false):
+		return
+	if int(name) == NetworkBridge.get_id():
+		_apply_sedative(source_id)
+	else:
+		NetworkBridge.n_rpc_id(self, int(name), "_apply_multiplayer_sedative", [int(source_id)])
+
+remote func _apply_multiplayer_sedative(id, source_id):
+	if NetworkBridge.check_connection() and NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
+	_apply_sedative(source_id)
+
+func _apply_sedative(source_id):
+	if int(source_id) == NetworkBridge.get_id() or int(name) != NetworkBridge.get_id() or not is_instance_valid(Global.player):
+		return
+	if Global.implants.torso_implant.terror or Global.implants.torso_implant.orbsuit:
+		return
+	Global.player.set_multiplayer_sedative(10.0)
 
 func _update_collision_stance():
 	var proxy = get_node_or_null("Puppet/GameplayCollision")
@@ -541,7 +708,10 @@ func _apply_label_font():
 			label.font = font
 			label.horizontal_alignment = Label3D.ALIGN_CENTER
 			label.offset = Vector2.ZERO
-			var shadow = Label3D.new()
+			var shadow = label.duplicate(0)
+			for child in shadow.get_children():
+				shadow.remove_child(child)
+				child.free()
 			shadow.name = label.name + "Shadow"
 			shadow.font = font
 			shadow.billboard = label.billboard
@@ -565,7 +735,20 @@ func _sync_label_shadows():
 		shadow.text = label.text
 		shadow.visible = label.visible
 		shadow.global_transform = label.global_transform
-		shadow.offset = label.offset + Vector2(2, 2)
+	call_deferred("_align_label_shadows")
+
+func _align_label_shadows():
+	for label in [$Puppet/PlayerModel/Nickname, $Puppet/PlayerModel/HelpLabel]:
+		var shadow = label_shadows.get(label.name)
+		if not is_instance_valid(shadow):
+			continue
+		var label_bounds = label.get_aabb()
+		var shadow_bounds = shadow.get_aabb()
+		var label_center = label_bounds.position + label_bounds.size * 0.5
+		var shadow_center = shadow_bounds.position + shadow_bounds.size * 0.5
+		var correction = Vector2(label_center.x - shadow_center.x, label_center.y - shadow_center.y) / label.pixel_size + Vector2(2, -2)
+		if correction.length_squared() > 0.001:
+			shadow.offset += correction
 
 func _center_nickname():
 	var label = $Puppet/PlayerModel/Nickname

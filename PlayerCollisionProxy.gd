@@ -28,3 +28,10 @@ func tranquilize(unused = null):
 
 func cancer():
 	client.set_cancer()
+
+func multiplayer_peer_id():
+	return int(client.name)
+
+func multiplayer_sedative(source_id):
+	client.set_multiplayer_sedative(source_id)
+

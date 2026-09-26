@@ -184,6 +184,8 @@ const deathMessages = {
 }
 
 var lastDamagerId = null
+var multiplayer_held = false
+var multiplayer_sedative_time = 0.0
 var weaponType = null
 var lastDamagerIdTimer
 
@@ -596,8 +598,8 @@ func set_tranquilize():
 	UI.sleep = true
 
 func remove_tranquilize():
-	tranquilize_flag = false
-	UI.sleep = false
+	tranquilize_flag = multiplayer_sedative_time > 0.0
+	UI.sleep = tranquilize_flag
 
 func set_move_speed():
 	move_speed = base_move_speed + speed_bonus + drug_speed
@@ -625,6 +627,8 @@ func set_move_speed():
 	move_speed = clamp(move_speed, 2, 100)
 
 func _physics_process(delta):
+	if multiplayer_held:
+		player_velocity = Vector3.ZERO
 	if tranquilize_flag:
 		tranquilize_mul = lerp(tranquilize_mul, 10.0, delta * 0.2)
 	else:
@@ -731,6 +735,7 @@ func _physics_process(delta):
 	else :
 		player_velocity.x = 0
 		player_velocity.z = 0
+	_update_multiplayer_sedative(delta)
 	if GLOBAL.implants.arm_implant.cursed_torch:
 		curse_torch.show()
 		curse_torch.light_energy = (sin(time) + 1.2) * 0.5
@@ -740,7 +745,7 @@ func _physics_process(delta):
 			shader_screen.material.set_shader_param("nightmare_vision", special_vision)
 		if GLOBAL.implants.head_implant.holy:
 			shader_screen.material.set_shader_param("holy_mode", special_vision)
-	if _gameplay_just_pressed("crouch") or cancer_count >= 10:
+	if (not multiplayer_held and _gameplay_just_pressed("crouch")) or cancer_count >= 10:
 		if $Top_Checkr / RayCast.is_colliding():
 			top_touching = true
 		else :
@@ -1004,6 +1009,9 @@ func move(delta):
 		snap = Vector3.ZERO
 	if is_on_floor() and not _gameplay_pressed("movement_jump") and not (Global.implants.torso_implant.jetpack and _gameplay_pressed("kick")):
 		player_velocity.y = 0
+	if multiplayer_held:
+		player_velocity = Vector3.ZERO
+		snap = Vector3.ZERO
 	player_velocity = move_and_slide_with_snap(player_velocity, snap, floor_direction, false, 4, deg2rad(46), false)
 
 			
@@ -1014,6 +1022,11 @@ func move(delta):
 		player_top_velocity = udp.length()
 
 func set_movement_dir():
+	if multiplayer_held:
+		cmd.forward_move = 0.0
+		cmd.right_move = 0.0
+		wish_jump = false
+		return
 	if not _gameplay_input_enabled():
 		cmd.forward_move = 0.0
 		cmd.right_move = 0.0
@@ -1026,6 +1039,9 @@ func set_movement_dir():
 			cmd.right_move *= - 1
 
 func queue_jump():
+	if multiplayer_held:
+		wish_jump = false
+		return
 	if not dead:
 		if hold_jump_to_bhop or water:
 			wish_jump = _gameplay_pressed("movement_jump")
@@ -1214,7 +1230,7 @@ func _input(event):
 	if NetworkBridge.check_connection() and Global.get_node("Multiplayer").Flow.result_active:
 		return
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		if not _gameplay_pressed("reload"):
+		if not _gameplay_pressed("reload") and not Multiplayer.Eyecam.is_camera_locked():
 			var sensitivity = (Global.mouse_sensitivity if dead else x_mouse_sensitivity) * player_view.fov / Global.FOV
 			
 			var rot_deg_y = deg2rad(event.relative.y * sensitivity)
@@ -1358,6 +1374,29 @@ func spawn_gib(gib, count, damage, collision_n, collision_p):
 
 		NetworkBridge.n_rpc(self, "_spawn_gib", [get_parent().get_path(), gib, new_gib.name, new_gib.global_transform.origin, damageArgs])
 		return new_gib
+
+func set_multiplayer_sedative(duration = 10.0):
+	multiplayer_sedative_time = max(multiplayer_sedative_time, float(duration))
+	tranquilize_flag = true
+	UI.sleep = true
+	shader_screen.material.set_shader_param("intro", true)
+	shader_screen.material.set_shader_param("amplitude", 0.5)
+
+func _update_multiplayer_sedative(delta):
+	if multiplayer_sedative_time <= 0.0:
+		return
+	multiplayer_sedative_time = max(0.0, multiplayer_sedative_time - delta)
+	shader_screen.material.set_shader_param("intro", true)
+	shader_screen.material.set_shader_param("amplitude", 0.5)
+	if multiplayer_sedative_time <= 0.0:
+		if start_flag:
+			shader_screen.material.set_shader_param("intro", false)
+		shader_screen.material.set_shader_param("amplitude", max(amp, 0.0))
+		tranquilize_flag = not tranquilize_timer.is_stopped()
+		UI.sleep = tranquilize_flag
+		if not tranquilize_flag:
+			tranquilize_mul = 0.0
+			set_move_speed()
 
 func add_health(a_health):
 	if health > 0:

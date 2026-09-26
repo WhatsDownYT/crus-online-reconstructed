@@ -132,6 +132,11 @@ var IM2
 
 var held_object_world = false
 var holding = false
+var holding_multiplayer_player = false
+var first_aid_target = 0
+var first_aid_pending = false
+var first_aid_request_time = 0
+var multiplayer_use_ray
 var hold_pos
 var raycast_init_rot:Vector3
 export  var current_weapon = 0
@@ -407,6 +412,15 @@ func _ready() -> void :
 		radiation_cylinder = $"Player_Weapon/Player_Weapon/Skeleton/BoneAttachment 9/RADGUN/cylinder"
 		player_muzzle_flash = $Player_Weapon / Muzzleflash
 		use_ray = $Use_Raycast
+		multiplayer_use_ray = RayCast.new()
+		multiplayer_use_ray.name = "Online_Use_Raycast"
+		multiplayer_use_ray.transform = use_ray.transform
+		multiplayer_use_ray.cast_to = use_ray.cast_to
+		multiplayer_use_ray.collision_mask = use_ray.collision_mask
+		multiplayer_use_ray.set_collision_mask_bit(1, true)
+		multiplayer_use_ray.collide_with_areas = use_ray.collide_with_areas
+		multiplayer_use_ray.enabled = true
+		add_child(multiplayer_use_ray)
 		AR_mesh.set_layer_mask_bit(2, 1)
 		left_arm_mesh.set_layer_mask_bit(0, 0)
 		left_arm_mesh.set_layer_mask_bit(2, 1)
@@ -466,6 +480,8 @@ func hold(item):
 		item.holdId = NetworkBridge.get_id()
 	
 	use_ray.add_exception(item)
+	if is_instance_valid(multiplayer_use_ray):
+		multiplayer_use_ray.add_exception(item)
 	
 	item.global_transform.origin = hold_pos.global_transform.origin
 	
@@ -475,6 +491,44 @@ func hold(item):
 		
 	holding = true
 
+func _online_player_interaction_target():
+	if not is_instance_valid(multiplayer_use_ray):
+		return null
+	multiplayer_use_ray.force_raycast_update()
+	if not multiplayer_use_ray.is_colliding():
+		return null
+	var collider = multiplayer_use_ray.get_collider()
+	if not is_instance_valid(collider) or not collider.has_method("multiplayer_peer_id"):
+		return null
+	var target_peer = int(collider.multiplayer_peer_id())
+	if target_peer == NetworkBridge.get_id():
+		return null
+	return collider
+
+func can_use_first_aid():
+	return glob.implants.arm_implant.multiplayer_first_aid and not item_consumed and not first_aid_pending and not disabled and NetworkBridge.check_connection() and not glob.player.died
+
+func use_first_aid(target):
+	if not can_use_first_aid():
+		return
+	first_aid_pending = true
+	first_aid_request_time = OS.get_ticks_msec()
+	Global.get_node("Multiplayer").request_multiplayer_heal(target)
+
+func _update_first_aid_target():
+	first_aid_target = 0
+	if first_aid_pending and OS.get_ticks_msec() - first_aid_request_time > 3000:
+		first_aid_pending = false
+	if not can_use_first_aid():
+		return
+	var target = _online_player_interaction_target()
+	if not is_instance_valid(target):
+		return
+	var peer = int(target.multiplayer_peer_id())
+	var multiplayer = Global.get_node("Multiplayer")
+	var actor = NetworkBridge.get_peer_actor(peer)
+	if is_instance_valid(actor) and not multiplayer.Flow.waiting_peers.has(peer) and glob.player.global_transform.origin.distance_to(actor.global_transform.origin) <= 5.0:
+		first_aid_target = peer
 
 func _input(event):
 	if glob.implants.arm_implant.regen_ammo:
@@ -758,6 +812,16 @@ func _process(delta)->void :
 			zoom_flag = false
 			player_weapon.hide()
 			glob.player.set_move_speed()
+		holding_multiplayer_player = false
+		if player and NetworkBridge.check_connection():
+			var multiplayer = Global.get_node("Multiplayer")
+			holding_multiplayer_player = multiplayer.held_target(NetworkBridge.get_id()) != 0
+			if holding_multiplayer_player and Input.is_action_just_pressed("Use"):
+				multiplayer.request_player_release(Vector3.ZERO)
+			elif holding_multiplayer_player and Input.is_action_just_pressed("kick"):
+				var throw_direction = (hold_pos.global_transform.origin - global_transform.origin).normalized()
+				var throw_velocity = throw_direction * (19.0 + glob.implants.arm_implant.throw_bonus) + glob.player.player_velocity
+				multiplayer.request_player_release(throw_velocity)
 		if holding:
 			var pos = hold_pos.global_transform.origin
 			if use_ray.is_colliding():
@@ -795,14 +859,17 @@ func _process(delta)->void :
 		
 		
 		
+		_update_first_aid_target()
+		var show_grab_hand = first_aid_target != 0
 		if use_ray.is_colliding():
 			var collider = use_ray.get_collider()
-			if collider != null:
-				if collider.get_collision_layer_bit(8):
-					glob.player.grab_hand.show()
-				else :
-					glob.player.grab_hand.hide()
-		else :
+			if collider != null and collider.get_collision_layer_bit(8):
+				show_grab_hand = true
+		if not show_grab_hand and glob.implants.arm_implant.multiplayer_augmented_arms and NetworkBridge.check_connection() and not holding and not holding_multiplayer_player:
+			show_grab_hand = _online_player_interaction_target() != null
+		if show_grab_hand:
+			glob.player.grab_hand.show()
+		else:
 			glob.player.grab_hand.hide()
 		
 		if current_weapon == W_AR:
@@ -895,7 +962,7 @@ func _process(delta)->void :
 			zoom_flag = false
 		else :
 			UI.reload_color = Color(0, 0, 0, 0)
-		if Input.is_action_just_pressed("kick") and not $Player_Leg / AnimationPlayer.is_playing() and not leaning and not glob.implants.torso_implant.thrust and not glob.implants.torso_implant.jetpack and not holding and not orb:
+		if Input.is_action_just_pressed("kick") and not $Player_Leg / AnimationPlayer.is_playing() and not leaning and not glob.implants.torso_implant.thrust and not glob.implants.torso_implant.jetpack and not holding and not holding_multiplayer_player and not orb:
 			$Player_Leg / AnimationPlayer.play("Kick")
 			$Kicksound2.play()
 			NetworkBridge.n_rpc(self, "_play_sound", ["Kicksound2"])
@@ -983,9 +1050,13 @@ func _process(delta)->void :
 					glob.player.grapple_orbs = []
 					
 			if glob.implants.arm_implant.healing != 0:
-				item_consumed = true
-				glob.player.add_health(glob.implants.arm_implant.healing)
+				if glob.implants.arm_implant.multiplayer_first_aid and NetworkBridge.check_connection():
+					use_first_aid(NetworkBridge.get_id())
+				else:
+					item_consumed = true
+					glob.player.add_health(glob.implants.arm_implant.healing)
 				
+
 			if glob.implants.arm_implant.he_grenade and grenade_ammo > 0:
 				grenade_ammo -= 1
 				var missile_new = GRENADE.instance()
@@ -1175,17 +1246,27 @@ func _process(delta)->void :
 		if current_weapon == W_FLASHLIGHT and flash_light_switch:
 			flashlight.show()
 			if is_instance_valid(playerPuppet):
-				playerPuppet.flashlight(null, true)
+				playerPuppet.flashlight(true)
 		else :
 			flashlight.hide()
 			if is_instance_valid(playerPuppet):
-				playerPuppet.flashlight(null, false)
-		if Input.is_action_just_pressed("Use") and $Use_Raycast.is_colliding():
-			var collider = $Use_Raycast.get_collider()
-			if collider.has_method("use"):
-				collider.use()
-			if collider.has_method("player_use"):
-				collider.player_use()
+				playerPuppet.flashlight(false)
+		if Input.is_action_just_pressed("Use") and not holding_multiplayer_player:
+			var player_pickup = false
+			if first_aid_target != 0 and can_use_first_aid():
+				use_first_aid(first_aid_target)
+				player_pickup = true
+			if not player_pickup and glob.implants.arm_implant.multiplayer_augmented_arms and NetworkBridge.check_connection() and not holding:
+				var player_target = _online_player_interaction_target()
+				if is_instance_valid(player_target):
+					Global.get_node("Multiplayer").request_player_hold(player_target.multiplayer_peer_id())
+					player_pickup = true
+			if not player_pickup and $Use_Raycast.is_colliding():
+				var collider = $Use_Raycast.get_collider()
+				if collider.has_method("use"):
+					collider.use()
+				if collider.has_method("player_use"):
+					collider.player_use()
 		if current_weapon == null:
 			return 
 		if timer.is_stopped() and not anim.is_playing():

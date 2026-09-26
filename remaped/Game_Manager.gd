@@ -361,7 +361,8 @@ func _deferred_goto_scene(path:String)->void :
 		return 
 	set_process(true)
 
-	current_scene.queue_free()
+	if is_instance_valid(current_scene):
+		current_scene.queue_free()
 
 	$Loading_Screen.visible = true
 	get_tree().get_root().set_disable_input(true)
@@ -759,6 +760,18 @@ func load_game()->void :
 	var new_weapons_unlocked = parsedJSON.get("weapons_unlocked")
 	var new_levels_unlocked = parsedJSON.get("levels_unlocked")
 	var new_implants_unlocked = parsedJSON.get("implants_unlocked")
+	var online_extension_name_migrations = {
+		"Military Camouflage Online Extension": "Military Camouflage+",
+		"Stealth Suit Online Extension": "Stealth Suit+",
+		"ZZzzz Special Sedative Grenade Online Extension": "ZZzzz Special Sedative Grenade+",
+		"First Aid Kit Online Extension": "First Aid Kit+",
+		"Cursed Torch Online Extension": "Cursed Torch+",
+		"Augmented Arms Online Extension": "Augmented Arms+"
+	}
+	if new_implants_unlocked is Array:
+		for index in range(new_implants_unlocked.size()):
+			if online_extension_name_migrations.has(new_implants_unlocked[index]):
+				new_implants_unlocked[index] = online_extension_name_migrations[new_implants_unlocked[index]]
 	var new_levels_punished = parsedJSON.get("levels_punished")
 	var bonus_levels_unlocked = parsedJSON.get("bonus_unlocked")
 	var dead_npcs = parsedJSON.get("dead_npcs")

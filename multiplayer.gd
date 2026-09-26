@@ -56,6 +56,8 @@ var config = {
 var dataLoaded = false
 
 var players = {}
+var player_holds = {}
+var first_aid_used = {}
 
 var playerPuppet = null
 var _announce_difficulty = false
@@ -103,6 +105,7 @@ var Flow
 var Voice
 var CounterOp
 var Deathmatch
+var Eyecam
 
 func _ready():
 	Deathmatch = preload("res://MOD_CONTENT/CruS Online/Deathmatch.gd").new()
@@ -117,6 +120,13 @@ func _ready():
 	Voice = preload("res://MOD_CONTENT/CruS Online/VoiceChat.gd").new()
 	Voice.name = "VoiceChat"
 	add_child(Voice)
+	var eyecam_layer = CanvasLayer.new()
+	eyecam_layer.name = "EyecamLayer"
+	eyecam_layer.layer = 5
+	add_child(eyecam_layer)
+	Eyecam = preload("res://MOD_CONTENT/CruS Online/SurveillanceEyecam.gd").new()
+	Eyecam.name = "SurveillanceEyecam"
+	eyecam_layer.add_child(Eyecam)
 	var discord_presence = preload("res://MOD_CONTENT/CruS Online/DiscordPresence.gd").new()
 	discord_presence.name = "DiscordPresence"
 	add_child(discord_presence)
@@ -150,12 +160,19 @@ func _ready():
 		["sync_mission_state", SteamNetwork.PERMISSION.SERVER],
 		["sync_host_settings", SteamNetwork.PERMISSION.SERVER],
 		["notify_host_difficulty", SteamNetwork.PERMISSION.SERVER],
-		["request_menu_exit", SteamNetwork.PERMISSION.ALL]
+		["request_menu_exit", SteamNetwork.PERMISSION.ALL],
+		["_request_multiplayer_heal", SteamNetwork.PERMISSION.ALL],
+		["complete_multiplayer_heal", SteamNetwork.PERMISSION.SERVER],
+		["_request_player_hold", SteamNetwork.PERMISSION.ALL],
+		["_request_player_release", SteamNetwork.PERMISSION.ALL],
+		["sync_player_hold", SteamNetwork.PERMISSION.SERVER]
 	])
 	
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	
-	get_tree().get_nodes_in_group("MultiplayerMenu")[0].data_init()
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	if online_menu.has_method("data_init"):
+		online_menu.data_init()
 
 	get_tree().connect("network_peer_connected", self, "connected")
 	get_tree().connect("network_peer_disconnected", self, "disconnected")
@@ -179,6 +196,8 @@ func peer_update(steam_id):
 		if is_instance_valid(Global.player) and is_instance_valid(Global.UI):
 			Global.UI.notify(players[steam_id].nickname + " disconnected", Color(1, 0, 0))
 		
+		if NetworkBridge.is_world_authority():
+			_release_holds_for_peer(int(steam_id))
 		players.erase(steam_id)
 		revives_used.erase(int(steam_id))
 		revive_authorizations.erase(int(steam_id))
@@ -189,6 +208,8 @@ func peer_update(steam_id):
 	
 	Players.sync_players()
 	if NetworkBridge.is_world_authority():
+		Flow.waiting_peers.erase(steam_id)
+		Flow.check_team_wipe()
 		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])
 
 func _input(event):
@@ -340,6 +361,7 @@ func leave_server():
 	player_scene_loaded = true
 	loaded_players.clear()
 	died_players.clear()
+	clear_player_holds()
 	revives_used.clear()
 	revive_authorizations.clear()
 	team_wipe_applied = false
@@ -411,6 +433,8 @@ puppet func disconnected(id):
 			if is_instance_valid(Global.player) and is_instance_valid(Global.UI):
 				Global.UI.notify(players[id].nickname + " disconnected", Color(1, 0, 0))
 		
+		if NetworkBridge.is_world_authority():
+			_release_holds_for_peer(int(id))
 		players.erase(id)
 		revives_used.erase(int(id))
 		revive_authorizations.erase(int(id))
@@ -645,6 +669,7 @@ func goto_scene_host(scene):
 	hostSettings.map = scene
 	
 	died_players = []
+	clear_player_holds()
 	reset_revive_state()
 	team_wipe_applied = false
 	loaded_players = []
@@ -673,6 +698,7 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	Flow.clear_result()
 	Flow.waiting_peers.clear()
 	died_players.clear()
+	clear_player_holds()
 	reset_revive_state()
 	team_wipe_applied = false
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1 if epoch < 0 else epoch)
@@ -848,6 +874,159 @@ func _revive_actor(peer):
 	var puppet = players[peer].get("puppet")
 	return puppet if is_instance_valid(puppet) else null
 
+func peer_implant_state(peer):
+	peer = int(peer)
+	if peer == NetworkBridge.get_id() and is_instance_valid(Global.implants):
+		var implants = Global.implants
+		var names = [implants.head_implant.i_name, implants.torso_implant.i_name, implants.arm_implant.i_name, implants.leg_implant.i_name]
+		var state = preload("res://MOD_CONTENT/CruS Online/ImplantNetwork.gd").resolve(implants.IMPLANTS, names)
+		return state if state != null else {}
+	if players.has(peer):
+		var puppet = players[peer].get("puppet")
+		if is_instance_valid(puppet) and typeof(puppet.implant_state) == TYPE_DICTIONARY and not puppet.implant_state.empty():
+			return puppet.implant_state
+	return {}
+
+func peer_has_implant_flag(peer, flag):
+	var state = peer_implant_state(peer)
+	return bool(state.get(flag, false))
+
+func held_target(holder):
+	return int(player_holds.get(int(holder), 0))
+
+func held_by(target):
+	target = int(target)
+	for holder in player_holds:
+		if int(player_holds[holder]) == target:
+			return int(holder)
+	return 0
+
+func clear_player_holds():
+	player_holds.clear()
+	first_aid_used.clear()
+	if is_instance_valid(Global.player) and Global.player.get("multiplayer_held") != null:
+		Global.player.multiplayer_held = false
+
+func request_multiplayer_heal(target):
+	NetworkBridge.request_host(self, "_request_multiplayer_heal", [int(target)])
+
+master func _request_multiplayer_heal(id, target):
+	if not NetworkBridge.is_world_authority():
+		return
+	var source = NetworkBridge.request_sender(id)
+	target = int(target)
+	var accepted = false
+	if players.has(source) and players.has(target) and not first_aid_used.has(source) and not died_players.has(source) and not died_players.has(target) and not Flow.waiting_peers.has(source) and not Flow.waiting_peers.has(target) and peer_has_implant_flag(source, "multiplayer_first_aid"):
+		var source_actor = _revive_actor(source)
+		var target_actor = _revive_actor(target)
+		if is_instance_valid(source_actor) and is_instance_valid(target_actor) and source_actor.global_transform.origin.distance_to(target_actor.global_transform.origin) <= 5.0:
+			var target_puppet = players[target].get("puppet")
+			if is_instance_valid(target_puppet):
+				first_aid_used[source] = true
+				target_puppet.apply_multiplayer_heal(50.0)
+				accepted = true
+	if source == NetworkBridge.get_id():
+		_complete_multiplayer_heal(accepted)
+	else:
+		NetworkBridge.n_rpc_id(self, source, "complete_multiplayer_heal", [accepted])
+
+puppet func complete_multiplayer_heal(id, accepted):
+	if NetworkBridge.check_connection() and NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
+	_complete_multiplayer_heal(accepted)
+
+func _complete_multiplayer_heal(accepted):
+	if is_instance_valid(Global.player) and is_instance_valid(Global.player.weapon):
+		Global.player.weapon.first_aid_pending = false
+		if accepted:
+			Global.player.weapon.item_consumed = true
+
+func request_player_hold(target):
+	NetworkBridge.request_host(self, "_request_player_hold", [int(target)])
+
+master func _request_player_hold(id, target):
+	if not NetworkBridge.is_world_authority():
+		return
+	var holder = NetworkBridge.request_sender(id)
+	target = int(target)
+	if holder == target or not players.has(holder) or not players.has(target):
+		return
+	if died_players.has(holder) or died_players.has(target) or held_target(holder) != 0 or held_by(target) != 0:
+		return
+	if not peer_has_implant_flag(holder, "multiplayer_augmented_arms"):
+		return
+	if not NetworkBridge.damage_allowed(holder, target):
+		return
+	var holder_actor = _revive_actor(holder)
+	var target_actor = _revive_actor(target)
+	if not is_instance_valid(holder_actor) or not is_instance_valid(target_actor):
+		return
+	if holder_actor.global_transform.origin.distance_to(target_actor.global_transform.origin) > 6.0:
+		return
+	_sync_player_hold(holder, target, true, Vector3.ZERO)
+
+func request_player_release(velocity = Vector3.ZERO):
+	NetworkBridge.request_host(self, "_request_player_release", [velocity])
+
+master func _request_player_release(id, velocity = Vector3.ZERO):
+	if not NetworkBridge.is_world_authority():
+		return
+	var holder = NetworkBridge.request_sender(id)
+	var target = held_target(holder)
+	if target == 0:
+		return
+	if typeof(velocity) != TYPE_VECTOR3 or is_nan(velocity.x) or is_nan(velocity.y) or is_nan(velocity.z) or is_inf(velocity.x) or is_inf(velocity.y) or is_inf(velocity.z):
+		velocity = Vector3.ZERO
+	if velocity.length() > 90.0:
+		velocity = velocity.normalized() * 90.0
+	_sync_player_hold(holder, target, false, velocity)
+
+func _sync_player_hold(holder, target, held, velocity):
+	_apply_player_hold(int(holder), int(target), bool(held), velocity)
+	NetworkBridge.n_rpc(self, "sync_player_hold", [int(holder), int(target), bool(held), velocity])
+
+puppet func sync_player_hold(id, holder, target, held, velocity = Vector3.ZERO):
+	if NetworkBridge.check_connection() and NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
+		return
+	_apply_player_hold(holder, target, held, velocity)
+
+func _apply_player_hold(holder, target, held, velocity):
+	holder = int(holder)
+	target = int(target)
+	if held:
+		player_holds[holder] = target
+	elif held_target(holder) == target:
+		player_holds.erase(holder)
+	if target == NetworkBridge.get_id() and is_instance_valid(Global.player):
+		Global.player.multiplayer_held = held
+		if not held and typeof(velocity) == TYPE_VECTOR3 and velocity.length() > 0.01:
+			Global.player.player_velocity = velocity
+
+func _release_holds_for_peer(peer):
+	if not NetworkBridge.is_world_authority():
+		return
+	peer = int(peer)
+	var releases = []
+	for holder in player_holds:
+		var target = int(player_holds[holder])
+		if int(holder) == peer or target == peer:
+			releases.append([int(holder), target])
+	for entry in releases:
+		_sync_player_hold(entry[0], entry[1], false, Vector3.ZERO)
+
+func reward_multiplayer_kill(killer, victim):
+	if not NetworkBridge.is_world_authority():
+		return
+	killer = int(killer)
+	victim = int(victim)
+	if killer <= 0 or killer == victim or not players.has(killer) or died_players.has(killer):
+		return
+	if not peer_has_implant_flag(killer, "multiplayer_cursed_torch"):
+		return
+	var puppet = players[killer].get("puppet")
+	if is_instance_valid(puppet):
+		puppet.apply_multiplayer_heal_percent(0.25)
+
 master func _request_player_revive(id, target):
 	if not NetworkBridge.is_world_authority():
 		return
@@ -870,6 +1049,8 @@ master func _request_player_revive(id, target):
 	var target_puppet = players[target].get("puppet")
 	if not is_instance_valid(target_puppet):
 		return
+	if not target_puppet.revive_started or not target_puppet.get_node("Puppet/PlayerModel/HelpTimer").is_stopped():
+		return
 	revive_authorizations[target] = true
 	if target == NetworkBridge.get_id():
 		target_puppet._respawn_player(NetworkBridge.get_host_id())
@@ -877,12 +1058,15 @@ master func _request_player_revive(id, target):
 		NetworkBridge.n_rpc_id(target_puppet, target, "_respawn_player")
 
 func player_died():
+	var killer_id = 0
+	if is_instance_valid(Global.player) and Global.player.lastDamagerId != null:
+		killer_id = int(Global.player.lastDamagerId)
 	if NetworkBridge.check_connection() and NetworkBridge.n_is_network_master(self):
-		_player_died(null, true)
+		_player_died(null, killer_id, true)
 	else:
-		NetworkBridge.n_rpc(self, "_player_died")
+		NetworkBridge.n_rpc(self, "_player_died", [killer_id])
 
-master func _player_died(id, host = false):
+master func _player_died(id, killer_id = 0, host = false):
 	if not NetworkBridge.is_world_authority():
 		return
 	id = NetworkBridge.request_sender(id)
@@ -890,7 +1074,9 @@ master func _player_died(id, host = false):
 		return
 	if died_players.has(id):
 		return
+	_release_holds_for_peer(id)
 	died_players.append(id)
+	reward_multiplayer_kill(killer_id, id)
 	revive_authorizations.erase(id)
 	sync_player_life(null, id, true)
 	NetworkBridge.n_rpc(self, "sync_player_life", [id, true])

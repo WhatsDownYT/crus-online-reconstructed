@@ -129,8 +129,8 @@ func _process(delta):
 		connected = true
 		session_host = bridge.get_host_id()
 		announce_elapsed = 1.0
-	var dead_now = is_instance_valid(Global.get("player")) and bool(Global.player.get("dead"))
-	var water_now = is_instance_valid(Global.get("player")) and bool(Global.player.get("water"))
+	var dead_now = is_instance_valid(Global.get("player")) and (Global.player.get("dead") == true)
+	var water_now = is_instance_valid(Global.get("player")) and (Global.player.get("water") == true)
 	if dead_now != local_dead or water_now != local_water:
 		local_dead = dead_now
 		local_water = water_now

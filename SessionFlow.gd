@@ -7,6 +7,7 @@ var result_won = false
 var result_level = 0
 var result_winner_team = ""
 var result_winner_name = ""
+var result_reward = 0
 var waiting_peers = []
 var world = {}
 var personal_difficulty = {}
@@ -33,6 +34,7 @@ func prepare_mission():
 	clear_result()
 	used_orbs.clear()
 	waiting_peers.clear()
+	Multiplayer.first_aid_used.clear()
 	world = {"rain": rand_range(0, 100) > 90 or Global.implants.head_implant.fishing_bonus, "hour": OS.get_time().hour, "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty(), "ending_2": Global.ending_2}
 	configure_world(null, world)
 	NetworkBridge.n_rpc(self, "configure_world", [world])
@@ -53,6 +55,7 @@ func clear_result():
 	result_active = false
 	result_winner_team = ""
 	result_winner_name = ""
+	result_reward = 0
 	finishing = false
 	misery_transition = false
 	get_tree().paused = false
@@ -92,6 +95,8 @@ func check_team_wipe():
 	if Multiplayer.CounterOp.is_active():
 		if Multiplayer.CounterOp.all_operatives_dead(waiting_peers):
 			call_deferred("finish_counterop", Multiplayer.CounterOp.TEAM_COUNTER_OPERATIVES)
+		elif Multiplayer.CounterOp.all_counter_operatives_absent(waiting_peers):
+			call_deferred("finish_counterop", Multiplayer.CounterOp.TEAM_OPERATIVES)
 		return
 	if Multiplayer.hostSettings.get("canRespawn", true) and Multiplayer.hostSettings.get("selfRespawn", false):
 		return
@@ -149,6 +154,9 @@ puppet func show_result(id, state):
 	if winner_team == "deathmatch":
 		local_won = state.get("winner_peer", 0) == NetworkBridge.get_id()
 	result_won = local_won
+	result_reward = 1000 if competitive and local_won else 0
+	if result_reward > 0:
+		Global.campaign_save.award_persistent_money(Global, result_reward)
 	result_level = state.level
 	result_winner_team = winner_team
 	result_winner_name = str(Multiplayer.players.get(state.get("winner_peer", 0), {}).get("nickname", "Player")) if state.get("winner_peer", 0) != 0 else ""
@@ -242,11 +250,14 @@ master func request_wait(id, level_select):
 	id = NetworkBridge.request_sender(id)
 	if not NetworkBridge.is_world_authority() or not Multiplayer.players.has(id) or id == NetworkBridge.get_host_id() or typeof(level_select) != TYPE_BOOL:
 		return
+	Multiplayer._release_holds_for_peer(id)
 	NetworkBridge.n_rpc(self, "sync_waiting", [id, level_select])
 	sync_waiting(null, id, level_select)
 	check_team_wipe()
 
 puppet func sync_waiting(id, peer, level_select):
+	if (Multiplayer.Deathmatch.is_active() or Multiplayer.CounterOp.is_active()) and not Multiplayer.died_players.has(peer):
+		Multiplayer.died_players.append(peer)
 	if not waiting_peers.has(peer):
 		waiting_peers.append(peer)
 	var puppet = Multiplayer.players.get(peer, {}).get("puppet")

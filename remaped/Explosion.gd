@@ -44,7 +44,20 @@ func _on_Explosion_body_entered(body):
 	if NetworkBridge.n_is_network_master(self):
 		do_damage(body)
 		if sleep and body.has_method("tranquilize"):
-			NetworkBridge.apply_damage(self, body, "tranquilize", [true])
+			var source_id = NetworkBridge.damage_source_id(self)
+			var target_id = NetworkBridge.damage_target_id(body)
+			var multiplayer = Global.get_node_or_null("Multiplayer")
+			var multiplayer_sedative = multiplayer != null and source_id > 0 and target_id > 0 and multiplayer.peer_has_implant_flag(source_id, "multiplayer_sedative")
+			var other_player = multiplayer != null and NetworkBridge.check_connection() and multiplayer.players.has(source_id) and target_id > 0 and source_id != target_id
+			if other_player or multiplayer_sedative:
+				var sedative_immune = source_id == target_id or multiplayer.peer_has_implant_flag(target_id, "sedative_immune")
+				if multiplayer_sedative and not sedative_immune and NetworkBridge.damage_allowed(source_id, target_id, self):
+					if body == Global.player:
+						Global.player.set_multiplayer_sedative(10.0)
+					elif body.has_method("multiplayer_sedative"):
+						body.multiplayer_sedative(source_id)
+			else:
+				NetworkBridge.apply_damage(self, body, "tranquilize", [true])
 
 func do_damage(body):
 	if not NetworkBridge.damage_allowed(NetworkBridge.damage_source_id(self), NetworkBridge.damage_target_id(body)):

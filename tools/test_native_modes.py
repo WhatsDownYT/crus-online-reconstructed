@@ -42,8 +42,10 @@ try:
         with zipfile.ZipFile(args.mod_package) as source, zipfile.ZipFile(mod / 'mod.zip', 'w', zipfile.ZIP_DEFLATED) as target:
             for name in source.namelist():
                 data = source.read(name)
+                if name.endswith(".gd"):
+                    data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
                 if name.endswith('/multiplayer_init.gd'):
-                    data += b'\n\tGlobal.add_child(load("res://MOD_CONTENT/CruS Online/modes_native_test.gd").new())\n'
+                    data = data.replace(b'func _init():', b'func _init():\n\tGlobal.call_deferred("add_child", load("res://MOD_CONTENT/CruS Online/modes_native_test.gd").new())', 1)
                 target.writestr(name, data)
             target.writestr('MOD_CONTENT/CruS Online/modes_native_test.gd', probe)
         shutil.copy2(args.mod_package.parent / 'mod.json', mod / 'mod.json')
@@ -60,8 +62,8 @@ try:
         output.close()
         result = (project / 'output.log').read_text()
         print(role, 'exit=', process.returncode)
-        print('\n'.join(line for line in result.splitlines() if 'MODE_' in line or 'CAPTURE_' in line or 'ERROR:' in line))
-        failed |= process.returncode != 0 or args.result_marker not in result or 'SCRIPT ERROR:' in result
+        print('\n'.join(line for line in result.splitlines() if 'MODE_' in line or 'CAPTURE_' in line or 'PICKUP_CHECK' in line or args.result_marker in line or 'ERROR:' in line))
+        failed |= process.returncode != 0 or args.result_marker not in result or 'SCRIPT ERROR:' in result or 'SHADER ERROR:' in result
     raise SystemExit(1 if failed else 0)
 finally:
     for _, process, output, _ in processes:

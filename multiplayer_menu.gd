@@ -1,5 +1,8 @@
 extends Control
 
+signal menu_shown
+signal menu_hidden
+
 var profile_store = preload("res://MOD_CONTENT/CruS Online/ProfileStore.gd").new()
 
 var ip = "127.0.0.1"
@@ -28,6 +31,9 @@ var deathmatch_settings_syncing = false
 var counterop_setting_boxes = {}
 var counterop_settings_syncing = false
 var counterop_bottom_shown = null
+var menu_animation_generation = 0
+var menu_animating = false
+const MENU_ANIMATION_STEPS = 12
 var counterop_settings_descriptions = {
 	"enemyFriendlyFire": ["Enemy Friendly Fire", "Allow Counter-Operatives to damage and kill hostile NPCs and mission targets."],
 	"neutralEnemies": ["Neutral Enemies", "When a Counter-Operative attacks a friendly NPC, that NPC becomes hostile to Counter-Operatives. Requires Enemy Friendly Fire."],
@@ -39,8 +45,8 @@ var host_tooltips = {
 	"LobbyType": "Public lobbies appear in the browser. Friends Only allows Steam friends to join. Private requires a code or Discord invite.",
 	"Port": "The network port used when hosting a LAN lobby.",
 	"TickRate": "How often the host processes multiplayer synchronization ticks. Lower values update more frequently.",
-	"CanRespawn": "Allow players to come back after dying. When disabled, both self-respawning and teammate revives are disabled.",
-	"SelfRespawn": "Allow players to respawn themselves after dying. Counter-Opps still requires teammate revives.",
+	"CanRespawn": "Allow players to come back after dying. When disabled, both self-reviving and teammate revives are disabled.",
+	"SelfRespawn": "Allow players to revive themselves after dying. Counter-Opps still requires teammate revives.",
 	"ShareDifficulty": "Keep all players on the host's current difficulty state instead of letting difficulty state remain local.",
 	"FriendlyFire": "Allow players on the same side to damage each other. Counter-Opps always allows damage between opposing teams.",
 	"useVoiceChat": "Enable multiplayer voice chat for the lobby.",
@@ -76,6 +82,29 @@ func _ready():
 	var legacy_respawn = typeof(loadedConfigData) == TYPE_DICTIONARY and loadedConfigData.has("canRespawn") and not loadedConfigData.has("selfRespawn")
 	var legacy_lives = typeof(loadedConfigData) == TYPE_DICTIONARY and not loadedConfigData.has("reviveLivesZeroInfinite")
 	Multiplayer.config = profile_store.merge_defaults(Multiplayer.config, loadedConfigData)
+	var online_extension_name_migrations = {
+		"Military Camouflage Online Extension": "Military Camouflage+",
+		"Stealth Suit Online Extension": "Stealth Suit+",
+		"ZZzzz Special Sedative Grenade Online Extension": "ZZzzz Special Sedative Grenade+",
+		"First Aid Kit Online Extension": "First Aid Kit+",
+		"Cursed Torch Online Extension": "Cursed Torch+",
+		"Augmented Arms Online Extension": "Augmented Arms+"
+	}
+	var migrated_online_extension_names = false
+	for index in range(Multiplayer.config.bannedImplants.size()):
+		if online_extension_name_migrations.has(Multiplayer.config.bannedImplants[index]):
+			Multiplayer.config.bannedImplants[index] = online_extension_name_migrations[Multiplayer.config.bannedImplants[index]]
+			migrated_online_extension_names = true
+	for preset_name in Multiplayer.config.implantPresets:
+		var preset = Multiplayer.config.implantPresets[preset_name]
+		if not preset is Array:
+			continue
+		for index in range(preset.size()):
+			if online_extension_name_migrations.has(preset[index]):
+				preset[index] = online_extension_name_migrations[preset[index]]
+				migrated_online_extension_names = true
+	if migrated_online_extension_names:
+		profile_store.save_data("config.save", Multiplayer.config)
 	var lobby_name_row = HBoxContainer.new()
 	lobby_name_row.name = "LobbyName"
 	var lobby_name_label = Label.new()
@@ -496,6 +525,41 @@ func _on_connected():
 	$CenterContainer/TabContainer/Main.current_tab = 1
 	_select_main_tab()
 
+func _animate_menu_visibility(showing):
+	menu_animation_generation += 1
+	var generation = menu_animation_generation
+	menu_animating = true
+	var container = $CenterContainer
+	container.rect_pivot_offset = Vector2(container.rect_size.x * 0.5, 0)
+	var start_scale = container.rect_scale.y
+	var target_scale = 1.0 if showing else 0.05
+	if not showing and not container.visible:
+		container.rect_scale = Vector2(1, 1)
+		menu_animating = false
+		emit_signal("menu_hidden")
+		return
+	if showing and not container.visible:
+		container.rect_scale = Vector2(1, 0.05)
+		start_scale = 0.05
+		container.show()
+	for step in range(1, MENU_ANIMATION_STEPS + 1):
+		if generation != menu_animation_generation:
+			return
+		var amount = float(step) / float(MENU_ANIMATION_STEPS)
+		container.rect_scale.y = lerp(start_scale, target_scale, amount)
+		yield (get_tree(), "idle_frame")
+	if generation != menu_animation_generation:
+		return
+	if showing:
+		container.rect_scale = Vector2(1, 1)
+		menu_animating = false
+		emit_signal("menu_shown")
+	else:
+		container.hide()
+		container.rect_scale = Vector2(1, 1)
+		menu_animating = false
+		emit_signal("menu_hidden")
+
 func enable_menu():
 	_close_credits()
 	$CenterContainer/TabContainer/Host/VBoxContainer/LobbyName/NameEdit.text = Multiplayer.SteamLobby.valid_lobby_name(Multiplayer.config.get("hostLobbyName", ""))
@@ -508,9 +572,10 @@ func enable_menu():
 	if not $CenterContainer/TabContainer/Implants.updated:
 		$CenterContainer/TabContainer/Implants.update()
 	$CenterContainer/TabContainer.current_tab = 0
-	$CenterContainer.visible = true
+	var animation = _animate_menu_visibility(true)
 	_sync_counterop_settings_tab()
 	_sync_deathmatch_settings_tab()
+	return animation
 
 func _sync_lobby_type_options():
 	var picker = $CenterContainer/TabContainer/Host/VBoxContainer/LobbyType/TypeSelect
@@ -542,17 +607,26 @@ func _sync_host_tab_visibility():
 	if lobby_type_mode_shown != Multiplayer.NetworkBridge.is_steam():
 		_sync_lobby_type_options()
 
-func disable_menu():
+func disable_menu(instant = false):
 	_close_credits()
 	_close_mode_settings()
 	if is_instance_valid(cruelty_bottom_tab):
 		cruelty_bottom_tab.hide()
-	$CenterContainer.visible = false
+	var animation = null
+	if instant:
+		menu_animation_generation += 1
+		menu_animating = false
+		$CenterContainer.hide()
+		$CenterContainer.rect_scale = Vector2(1, 1)
+		emit_signal("menu_hidden")
+	else:
+		animation = _animate_menu_visibility(false)
 	counterop_bottom_shown = null
 	if is_instance_valid(counterop_bottom_tab):
 		counterop_bottom_tab.hide()
 	if is_instance_valid(deathmatch_bottom_tab):
 		deathmatch_bottom_tab.hide()
+	return animation
 
 func _ensure_deathmatch_settings_tab():
 	var tabs = $CenterContainer/TabContainer
@@ -604,7 +678,7 @@ func _ensure_deathmatch_settings_tab():
 func _sync_deathmatch_settings_tab():
 	if not is_instance_valid(deathmatch_settings_tab):
 		return
-	var available = $CenterContainer.visible and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority() and Multiplayer.Deathmatch.is_active()
+	var available = $CenterContainer.visible and not menu_animating and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority() and Multiplayer.Deathmatch.is_active()
 	deathmatch_bottom_tab.visible = available
 	_layout_mode_button(deathmatch_bottom_tab)
 	if not available:
@@ -684,7 +758,7 @@ func _layout_counterop_bottom_tab():
 	_layout_mode_button(counterop_bottom_tab)
 
 func _counterop_settings_available():
-	return $CenterContainer.visible and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority() and Multiplayer.CounterOp.is_active()
+	return $CenterContainer.visible and not menu_animating and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority() and Multiplayer.CounterOp.is_active()
 
 func _sync_counterop_settings_tab():
 	if not is_instance_valid(counterop_settings_tab) or not is_instance_valid(counterop_bottom_tab):
@@ -728,6 +802,8 @@ func load_data(fileName):
 	return profile_store.load_data(fileName)
 
 func close_menu():
+	if is_instance_valid(Global.menu) and Global.menu.has_method("request_close_online_navigation") and Global.menu.request_close_online_navigation():
+		return
 	disable_menu()
 	Global.menu.open_online_destination(false)
 
@@ -844,7 +920,7 @@ func _ensure_cruelty_settings_tab():
 
 func _sync_cruelty_settings_tab():
 	var tabs = $CenterContainer/TabContainer
-	var available = $CenterContainer.visible and Multiplayer.hostSettings.get("gameMode", "cruelty") == "cruelty" and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority()
+	var available = $CenterContainer.visible and not menu_animating and Multiplayer.hostSettings.get("gameMode", "cruelty") == "cruelty" and Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id()) and Multiplayer.NetworkBridge.is_world_authority()
 	cruelty_bottom_tab.visible = available
 	_layout_mode_button(cruelty_bottom_tab)
 	cruelty_bottom_tab.pressed = cruelty_settings_tab.visible

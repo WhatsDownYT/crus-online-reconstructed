@@ -40,7 +40,7 @@ func player_died():
 		$HelpLabel.hide()
 	else:
 		$RespawnButton.hide()
-		$HelpLabel.text = \"Wait until someone revives you\" if can_respawn else \"Respawning disabled\"
+		$HelpLabel.text = \"Wait until someone revives you\" if can_respawn else \"Reviving disabled\"
 		$HelpLabel.show()
 		
 	Multiplayer.player_died()
@@ -268,7 +268,7 @@ func button_input(event,index):
 			$HoverInfo/VBoxContainer/Icon.texture = mysteryTexture
 			$HoverInfo/VBoxContainer/Name.text = \"???\"
 			$HoverInfo/VBoxContainer/Slot.text = \"Slot: None\"
-			$HoverInfo/VBoxContainer/Description.text = \"You need to buy/find this implant to use it when you respawn\"
+			$HoverInfo/VBoxContainer/Description.text = \"You need to buy/find this implant to use it when you revive\"
 		elif Global.implants.IMPLANTS[index].i_name in singleton.hostSettings[\"bannedImplants\"]:
 			$HoverInfo/VBoxContainer/Icon.texture = bannedTexture
 			$HoverInfo/VBoxContainer/Name.text = Global.implants.IMPLANTS[index].i_name + \" (Banned)\"
@@ -409,7 +409,7 @@ custom_constants/shadow_as_outline = 0
 custom_constants/shadow_offset_x = 2
 custom_constants/shadow_offset_y = 2
 custom_fonts/font = SubResource( 1 )
-text = "to respawn"
+text = "to revive"
 valign = 1
 __meta__ = {
 "_edit_use_anchors_": true

@@ -280,7 +280,7 @@ func _physics_process(delta)->void :
 		height_difference = player.global_transform.origin.y > global_transform.origin.y and abs(player.global_transform.origin.y - global_transform.origin.y) > 21
 		anim_counter += 1
 		time += 1
-		if muzzleflash.visible:
+		if is_instance_valid(muzzleflash) and muzzleflash.visible:
 			muzzleflash.hide()
 		if player_distance > ai_distance:
 			return

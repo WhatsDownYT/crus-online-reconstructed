@@ -174,6 +174,8 @@ func is_steam():
 	return multiplayer_mode == MULTIPLAYER_TYPE.STEAM
 
 func check_connection():
+	if not is_inside_tree():
+		return false
 	match multiplayer_mode:
 		MULTIPLAYER_TYPE.LAN:
 			return get_tree().network_peer != null

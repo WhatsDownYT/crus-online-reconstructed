@@ -12,7 +12,7 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'tools/build_discord.ps1')], check=True)
 prefix = 'MOD_CONTENT/CruS Online/'
-excluded = {'.git', 'dist', 'docs', 'tests', 'tools', '__pycache__'}
+excluded = {'.git', 'dist', 'dist codex', 'docs', 'tests', 'tools', '__pycache__'}
 runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.png', '.jpg', '.jpeg', '.webp', '.svg',
                     '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader'}
 if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
@@ -22,7 +22,7 @@ with zipfile.ZipFile(args.base_package) as base:
                if not name.endswith('/') and not name.startswith(prefix)}
     entries.pop('Menu/Main_Menu.tscn.remap', None)
     entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remaped/Switch.gd"\n'
-    for source, target in [('Menu/Character_Menu.gd', 'Character_Menu.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+    for source, target in [('Menu/Character_Menu.gd', 'Character_Menu.gd'), ('Scripts/Implants.gd', 'Implants.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
         entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remaped/' + target + '"\n').encode()
     for path in root.rglob('*'):
         relative = path.relative_to(root)

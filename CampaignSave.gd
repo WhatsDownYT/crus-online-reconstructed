@@ -25,6 +25,30 @@ func restore(object, state):
 	for key in state:
 		object.set(key, copy_value(state[key]))
 
+func award_persistent_money(global, amount):
+	amount = int(amount)
+	if amount <= 0:
+		return
+	global.money += amount
+	if not active:
+		global.save_game()
+		return
+	campaign["money"] = int(campaign.get("money", global.money - amount)) + amount
+	var save_file = File.new()
+	if not save_file.file_exists("user://savegame.save"):
+		return
+	if save_file.open("user://savegame.save", File.READ) != OK:
+		return
+	var parsed = parse_json(save_file.get_as_text())
+	save_file.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	parsed["money"] = campaign["money"]
+	if save_file.open("user://savegame.save", File.WRITE) != OK:
+		return
+	save_file.store_line(to_json(parsed))
+	save_file.close()
+
 func set_mode(global, mode):
 	if mode != "cruelty":
 		if active:

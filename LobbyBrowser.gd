@@ -29,7 +29,7 @@ func _ready():
 	SteamLobby.connect("lobby_join_requested", self, "lobby_join_requested")
 	Multiplayer.connect("status_update", self, "update_status")
 	$"%LobbyCodeInput".connect("code_entered", self, "_direct_join")
-	SteamNetwork.register_rpcs(self, [["_rpc_client", SteamNetwork.PERMISSION.SERVER], ["_rpc_server", SteamNetwork.PERMISSION.CLIENT_ALL]])
+	SteamNetwork.register_rpcs(self, [["_rpc_client", SteamNetwork.PERMISSION.SERVER], ["_rpc_server", SteamNetwork.PERMISSION.ALL]])
 	$VBoxContainer/Buttons/Join.disabled = true
 	$VBoxContainer/Status.hide()
 	LobbyInfo.hide()

@@ -200,6 +200,12 @@ var hover_info
 var menu_creation_level_index:int = 0
 var menu_changing = false
 var counterop_locked_levels = {}
+var online_navigation_active = false
+var online_navigation_transitioning = false
+var online_sidebar_was_visible = false
+var online_sidebar_position = Vector2.ZERO
+var online_navigation_generation = 0
+const ONLINE_NAVIGATION_STEPS = 12
 onready var clear_button = $Settings / GridContainer / PanelContainer6 / VBoxContainer3 / ClearSave
 class Menu extends Control:
 	var buttons:Array
@@ -213,6 +219,8 @@ func _physics_process(delta):
 		_refresh_start_buttons()
 	_apply_counterop_level_lock()
 	_apply_competitive_start_gate()
+	_apply_online_level_lock()
+	_position_level_online_button()
 	time += 1
 	
 	if in_game:
@@ -401,6 +409,7 @@ func _ready():
 		child.show()
 		child.set_position(b_position)
 		b_position.x += button_size.x
+	_refresh_start_buttons()
 	update_level_info()
 	
 	
@@ -423,6 +432,18 @@ func _counterop_level_locked(index):
 func _counterop_restricted_path(level_path):
 	return level_path == "res://Levels/Training_Level.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
 
+func _restore_level_disabled_visual(index, button):
+	button.modulate = Color(1, 1, 1, 1)
+	button.hint_tooltip = ""
+	if index > Global.L_PUNISHMENT:
+		var bonus_index = index - Global.L_PUNISHMENT - 1
+		var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
+		button.texture_disabled = BUTTON_TEXTURES_D[0] if unlocked else MYSTERY
+	elif button.has_meta("default_disabled_texture"):
+		button.texture_disabled = button.get_meta("default_disabled_texture")
+	else:
+		button.texture_disabled = BUTTON_TEXTURES_D[0]
+
 func _apply_counterop_level_lock():
 	var on_level_select = not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
 	var should_lock = on_level_select and Multiplayer.NetworkBridge.check_connection() and is_instance_valid(Multiplayer.CounterOp) and Multiplayer.CounterOp.is_active()
@@ -442,16 +463,14 @@ func _apply_counterop_level_lock():
 			button.disabled = true
 			button.texture_disabled = MYSTERY if mystery_locked else button.texture_normal
 			button.modulate = Color.white if mystery_locked else Color(1, 0.2, 0.2, 1)
-			button.hint_tooltip = "This mission is unavailable in Counter-Opps."
+			button.hint_tooltip = "" if mystery_locked else "This mission is unavailable in Counter-Opps."
 			counterop_locked_levels[index] = true
 		elif counterop_locked_levels.has(index):
-			button.modulate = Color(1, 1, 1, 1)
-			button.hint_tooltip = ""
+			_restore_level_disabled_visual(index, button)
 			if index > Global.L_PUNISHMENT:
 				var bonus_index = index - Global.L_PUNISHMENT - 1
-				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != - 1
+				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
 				button.disabled = index == Global.CURRENT_LEVEL or not unlocked
-				button.texture_disabled = BUTTON_TEXTURES_D[0] if unlocked else MYSTERY
 			else:
 				button.disabled = index == Global.CURRENT_LEVEL
 			counterop_locked_levels.erase(index)
@@ -459,11 +478,9 @@ func _apply_counterop_level_lock():
 func _competitive_start_reason():
 	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority() == false:
 		return ""
-	var mode = Multiplayer.hostSettings.get("gameMode", "cruelty")
-	if mode == "cruelty":
-		return ""
 	if Multiplayer.players.size() < 2:
-		return "At least two players are needed to start " + ("Deathmatch" if mode == "deathmatch" else "Counter-Opps") + "."
+		return "At least two players are needed to start an Online mission."
+	var mode = Multiplayer.hostSettings.get("gameMode", "cruelty")
 	if mode == "counter_op" and not Multiplayer.CounterOp.has_opposing_teams():
 		return "Counter-Opps needs at least one Operative and one Counter-Operative."
 	return ""
@@ -507,8 +524,29 @@ func show_buttons(m:Menu, a:int, b:int):
 		m.get_child(ab).show()
 
 func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
-	goto_menu(m, SETTINGS, button_id)
-	get_tree().get_nodes_in_group("MultiplayerMenu")[0].enable_menu()
+	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active:
+		return
+	online_navigation_generation += 1
+	var generation = online_navigation_generation
+	online_navigation_active = true
+	online_navigation_transitioning = true
+	button_id.disabled = true
+	_apply_online_level_lock()
+	online_sidebar_was_visible = $Level_Info_Grid.visible
+	if online_sidebar_was_visible:
+		online_sidebar_position = $Level_Info_Grid.rect_position
+		var hiding = _animate_level_sidebar(false, generation)
+		if hiding is GDScriptFunctionState:
+			yield (hiding, "completed")
+	if generation != online_navigation_generation or not online_navigation_active:
+		return
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	var opening = online_menu.enable_menu()
+	if opening is GDScriptFunctionState:
+		yield (opening, "completed")
+	if generation != online_navigation_generation or not online_navigation_active:
+		return
+	online_navigation_transitioning = false
 
 func create_buttons(m:int):
 	var level = 0
@@ -651,6 +689,7 @@ func create_button(m:int, n:String, connection:String, b:int):
 			new_button.texture_disabled = MYSTERY
 		if Global.LEVEL_IMAGES.size() - 1 >= level_index:
 			new_button.texture_normal = Global.LEVEL_IMAGES[level_index]
+		new_button.set_meta("default_disabled_texture", new_button.texture_disabled)
 	if b == B_WEAPON_1:
 		new_button.texture_normal = BUTTON_TEXTURES[B_W_PISTOL + weapon_1]
 	if b == B_WEAPON_2:
@@ -905,15 +944,23 @@ func set_weapon(w_index:int):
 
 func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 	if menu_changing:
-		return 
+		return
+	if active_menus.size() > 1 and active_menus.back() != menu[LEVEL_SELECT]:
+		go_back(m, button_id)
+		return
+	if online_navigation_active:
+		request_close_online_navigation()
+		return
 	go_back(m, button_id)
-	
+
 	get_tree().get_nodes_in_group("MultiplayerMenu")[0].disable_menu()
-	
+
 	if menu[m] == menu[LEVEL_SELECT]:
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 
 func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
+	if online_navigation_active:
+		return
 	if _counterop_level_locked(Global.CURRENT_LEVEL) or _competitive_start_reason() != "":
 		return
 	if Multiplayer.NetworkBridge.check_connection():
@@ -939,7 +986,8 @@ func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 
 func _on_Level_Pressed(m:int, button_id:TextureButton):
-	
+	if online_navigation_active:
+		return
 	var level_index = button_id.get_index() - 6
 	if _counterop_level_locked(level_index):
 		return
@@ -1056,6 +1104,8 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 		child.disabled = true
 	for child in menu[to_menu].get_children():
 		if to_menu == LEVEL_SELECT and _client_mission_button(child):
+			if child.get_meta("menu_button_type") == B_MISSION_START:
+				child.rect_position = b_position + Vector2(0, button_size.y)
 			child.hide()
 			child.disabled = true
 			continue
@@ -1107,6 +1157,9 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 				
 		child.show()
 		var to_pos = b_position
+		if to_menu == SETTINGS and b.get_meta("menu_button_type") == B_MULTIPLAYER_MENU:
+			to_pos = b.rect_position + Vector2(button_size.x, 0)
+			b_position = to_pos
 		button_state()
 		while ( not child.rect_position.is_equal_approx(to_pos)):
 			child.disabled = true
@@ -1124,8 +1177,19 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 func _input(event):
 	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.result_active:
 		return
+	var cancel_pressed = event.is_action_pressed("ui_cancel")
+	if cancel_pressed and not menu_changing and active_menus.size() > 1:
+		var top_menu = active_menus.back()
+		if top_menu == menu[CHARACTER] or top_menu == menu[STOCKS] or top_menu == menu[WEAPON_SELECT]:
+			go_back(active_menus.size() - 1, top_menu.get_child(0))
+			get_tree().set_input_as_handled()
+			return
 	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
-	if event.is_action_pressed("ui_cancel") and online_menu.get_node("CenterContainer").visible:
+	if cancel_pressed and online_navigation_active:
+		request_close_online_navigation()
+		get_tree().set_input_as_handled()
+		return
+	if cancel_pressed and online_menu.get_node("CenterContainer").visible:
 		online_menu.close_menu()
 		get_tree().set_input_as_handled()
 		return
@@ -1151,8 +1215,6 @@ func _input(event):
 						return 
 			if (active_menus.size() != 1):
 				if active_menus.size() > 0:
-					
-						
 					if active_element != $Character_Menu:
 						$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 					go_back(active_menus.size() - 1, active_menus[active_menus.size() - 1].get_children()[0])
@@ -1708,7 +1770,7 @@ func _retry_solo(m:int, b:TextureButton):
 
 func _refresh_start_buttons():
 	var buttons = menu[START].get_children()
-	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 6, 1, 5]
+	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 1, 5]
 	var origin = buttons[0].rect_position
 	buttons[0].name = "Unpause" if in_game else "Start"
 	for index in range(buttons.size()):
@@ -1716,6 +1778,100 @@ func _refresh_start_buttons():
 	for index in range(order.size()):
 		var button = buttons[order[index]]
 		button.rect_position = origin + Vector2(button_size.x * index, 0)
+
+func _position_level_online_button():
+	if in_game or menu_changing or not active_menus.has(menu[LEVEL_SELECT]):
+		return
+	var stock_button = menu[LEVEL_SELECT].get_child(2)
+	var online_button = menu[START].get_child(6)
+	online_button.rect_position = stock_button.rect_position + Vector2(stock_button.rect_size.x, 0)
+	online_button.visible = stock_button.visible
+	online_button.disabled = active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active or online_navigation_transitioning
+
+func _apply_online_level_lock():
+	if not online_navigation_active or active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT]:
+		return
+	for index in range(level_buttons.size()):
+		var button = level_buttons[index]
+		if button.visible:
+			_restore_level_disabled_visual(index, button)
+			button.disabled = true
+	var start_button = menu[LEVEL_SELECT].get_child(5)
+	if start_button.visible:
+		start_button.disabled = true
+
+func _animate_level_sidebar(showing, generation):
+	var panel = $Level_Info_Grid
+	panel.rect_pivot_offset = Vector2(panel.rect_size.x * 0.5, 0)
+	var start_scale = panel.rect_scale.y
+	var target_scale = 1.0 if showing else 0.05
+	if showing:
+		panel.rect_position = online_sidebar_position
+		panel.rect_scale = Vector2(1, 0.05)
+		start_scale = 0.05
+		panel.show()
+	for step in range(1, ONLINE_NAVIGATION_STEPS + 1):
+		if generation != online_navigation_generation:
+			return
+		var amount = float(step) / float(ONLINE_NAVIGATION_STEPS)
+		panel.rect_scale.y = lerp(start_scale, target_scale, amount)
+		yield (get_tree(), "idle_frame")
+	if generation != online_navigation_generation:
+		return
+	if showing:
+		panel.rect_scale = Vector2(1, 1)
+	else:
+		panel.hide()
+		panel.rect_scale = Vector2(1, 1)
+
+func request_close_online_navigation():
+	if not online_navigation_active:
+		return false
+	close_online_navigation()
+	return true
+
+func close_online_navigation():
+	if not online_navigation_active:
+		return
+	online_navigation_generation += 1
+	var generation = online_navigation_generation
+	online_navigation_transitioning = true
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	var center = online_menu.get_node("CenterContainer")
+	if center.visible or online_menu.menu_animating:
+		var closing = online_menu.disable_menu()
+		if closing is GDScriptFunctionState:
+			yield (closing, "completed")
+	else:
+		online_menu.disable_menu(true)
+	if generation != online_navigation_generation:
+		return
+	if online_sidebar_was_visible:
+		active_element = $Level_Info_Grid
+		var showing = _animate_level_sidebar(true, generation)
+		if showing is GDScriptFunctionState:
+			yield (showing, "completed")
+	if generation != online_navigation_generation:
+		return
+	online_navigation_active = false
+	online_navigation_transitioning = false
+	online_sidebar_was_visible = false
+	var online_button = menu[START].get_child(6)
+	if is_instance_valid(online_button):
+		online_button.disabled = false
+	button_state()
+	var start_button = menu[LEVEL_SELECT].get_child(5)
+	if not _client_mission_button(start_button):
+		start_button.disabled = false
+	_apply_counterop_level_lock()
+	_apply_competitive_start_gate()
+
+func _reset_online_navigation_state():
+	online_navigation_generation += 1
+	online_navigation_active = false
+	online_navigation_transitioning = false
+	online_sidebar_was_visible = false
+	$Level_Info_Grid.rect_scale = Vector2(1, 1)
 
 func open_online_destination(level_select):
 	_hide_online_navigation()
@@ -1764,7 +1920,12 @@ func _update_waiting_menu():
 		font.size = 20
 		_waiting_label.add_font_override("font", font)
 		add_child(_waiting_label)
-	_waiting_label.visible = waiting
+	var online_open = online_navigation_active
+	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
+		if panel.is_visible_in_tree():
+			online_open = true
+			break
+	_waiting_label.visible = waiting and not online_open
 	if waiting:
 		_waiting_label.rect_position = (get_viewport_rect().size / rect_scale - _waiting_label.rect_size) * 0.5
 		$Level_Info_Grid.hide()
@@ -1779,6 +1940,7 @@ func _client_mission_button(button):
 
 func _hide_online_navigation():
 	_navigation_generation += 1
+	_reset_online_navigation_state()
 	menu_changing = false
 	for entry in menu:
 		entry.hide()

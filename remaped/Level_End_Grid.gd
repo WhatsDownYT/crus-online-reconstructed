@@ -33,6 +33,8 @@ func set_performance_info():
 		if not online.Deathmatch.is_active() or online.Deathmatch.spawn_npcs():
 			message += str("\n\nEnemies killed: ", Global.enemy_count_total - Global.enemy_count, "/", Global.enemy_count_total)
 			message += str("\nCivilians lost: ", Global.civ_count_total - Global.civ_count, "/", Global.civ_count_total)
+		if online.Flow.result_reward > 0:
+			message += str("\nMission reward: $", online.Flow.result_reward)
 		$Performance_Hbox/Performance_Scroll/RichTextLabel.text = message
 		return
 	if _mission_won():

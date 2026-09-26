@@ -557,6 +557,8 @@ puppet func sync_hold_state(id, holder, state_transform, state_velocity, state_d
 		if weapon.held_object == self:
 			weapon.holding = false
 			weapon.use_ray.remove_exception(self)
+			if is_instance_valid(weapon.multiplayer_use_ray):
+				weapon.multiplayer_use_ray.remove_exception(self)
 
 func damage(damage, collision_n, collision_p, shooter_pos):
 	set_meta("crus_damage_source", NetworkBridge.damage_source_context)
