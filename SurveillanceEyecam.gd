@@ -8,6 +8,7 @@ const CHARGE_TIME = 3.0
 const COOLDOWN_TIME = 30.0
 const ENTRY_COOLDOWN_TIME = 10.0
 const RECT_PADDING = 3.0
+const DATABASE_TIME = 5.0
 
 var mp
 var bridge
@@ -25,13 +26,17 @@ var host_scans = {}
 var host_cooldowns = {}
 var mission = null
 var mesh_geometry = {}
+var scan_data = {}
+var analyzed = {}
+var readouts = {}
+var data_elapsed = 0.0
 
 func _ready():
 	mp = Global.get_node("Multiplayer")
 	bridge = mp.NetworkBridge
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_margins_preset(Control.PRESET_WIDE)
-	bridge.register_rpcs(self, [["request_scan", bridge.PERMISSION.ALL], ["sync_sound", bridge.PERMISSION.SERVER]])
+	bridge.register_rpcs(self, [["sync_scan_data", bridge.PERMISSION.ALL], ["request_scan", bridge.PERMISSION.ALL], ["sync_sound", bridge.PERMISSION.SERVER]])
 	process_priority = 100
 
 func is_camera_locked():
@@ -44,6 +49,9 @@ func _process(delta):
 	if mission != Global.current_scene:
 		reset()
 		mission = Global.current_scene
+	_sync_local_data(delta)
+	for peer in readouts:
+		readouts[peer].conceal()
 	_update_sounds(delta)
 	if bridge.is_world_authority():
 		_update_host_scans(delta)
@@ -169,11 +177,17 @@ func _update_normal(camera, delta):
 		if not _on_screen(bounds) or not _visible(camera, peer):
 			continue
 		present.append(peer)
-		acquired[peer] = min(EXPAND_TIME, float(acquired.get(peer, 0.0)) + delta)
+		acquired[peer] = min(DATABASE_TIME, float(acquired.get(peer, 0.0)) + delta)
+		if acquired[peer] >= DATABASE_TIME:
+			analyzed[peer] = true
+		_show_readout(peer, bounds, analyzed.has(peer), false, delta)
 		rectangles.append([_animated_rect(bounds, acquired[peer] / EXPAND_TIME), Color(0, 1, 0)])
 	for peer in acquired.keys():
 		if not present.has(peer):
 			acquired.erase(peer)
+			if readouts.has(peer):
+				readouts[peer].typing = 0.0
+				readouts[peer].details_typing = 0.0
 
 func _closest():
 	var closest = 0
@@ -194,6 +208,8 @@ func _update_pro(camera, delta):
 			elapsed = 0.0
 			contracting = false
 			locked_camera = camera
+			if readouts.has(target):
+				readouts[target].typing = 0.0
 			bridge.request_host(self, "request_scan", [target])
 	if target == 0:
 		return
@@ -209,7 +225,9 @@ func _update_pro(camera, delta):
 		_restore_camera()
 	var bounds = _bounds(camera, target)
 	var progress = 1.0 - elapsed / EXPAND_TIME if contracting else elapsed / EXPAND_TIME
-	if _on_screen(bounds):
+	if _on_screen(bounds) and not contracting:
+		_show_readout(target, bounds, false, true, delta)
+	if _on_screen(bounds) and Engine.get_idle_frames() % 2 == 0:
 		rectangles.append([_animated_rect(bounds, progress), Color(1, 0, 0)])
 	if contracting and elapsed >= EXPAND_TIME:
 		target = 0
@@ -339,3 +357,41 @@ func reset():
 	host_scans.clear()
 	host_cooldowns.clear()
 	finished_sounds.clear()
+	scan_data.clear()
+	analyzed.clear()
+	for peer in readouts:
+		readouts[peer].queue_free()
+	readouts.clear()
+	data_elapsed = 0.0
+
+func _show_readout(peer, bounds, ready, hijack, delta):
+	if not readouts.has(peer):
+		var panel = preload("res://MOD_CONTENT/CruS Online/EyecamReadout.gd").new()
+		add_child(panel)
+		readouts[peer] = panel
+	readouts[peer].display(bounds, scan_data.get(peer, {}), ready, hijack, delta)
+
+func _sync_local_data(delta):
+	if not bridge.check_connection() or not mp.player_scene_loaded or not is_instance_valid(Global.player) or not is_instance_valid(Global.player.get("weapon")):
+		return
+	data_elapsed += delta
+	if data_elapsed < 0.25: return
+	data_elapsed = 0.0
+	var implants = Global.implants
+	var data = {"money": Global.money, "health": Global.player.health, "death_mode": Global.death, "implants": [implants.head_implant.i_name, implants.torso_implant.i_name, implants.arm_implant.i_name, implants.leg_implant.i_name], "weapons": [Global.player.weapon.weapon1, Global.player.weapon.weapon2]}
+	scan_data[bridge.get_id()] = data
+	bridge.n_rpc_unreliable(self, "sync_scan_data", [data])
+
+remote func sync_scan_data(id, data):
+	var peer = bridge.request_sender(id)
+	if not mp.players.has(peer) or not data is Dictionary or data.size() != 5:
+		return
+	if not data.get("implants") is Array or data.implants.size() != 4 or not data.get("weapons") is Array or data.weapons.size() != 2:
+		return
+	if not typeof(data.get("money")) in [TYPE_INT, TYPE_REAL] or not typeof(data.get("health")) in [TYPE_INT, TYPE_REAL] or typeof(data.get("death_mode")) != TYPE_BOOL:
+		return
+	for weapon_id in data.weapons:
+		if weapon_id != null and (typeof(weapon_id) != TYPE_INT or weapon_id < 0 or weapon_id > 28): return
+	for label in data.implants:
+		if not label is String or label.length() > 128: return
+	scan_data[peer] = data.duplicate(true)

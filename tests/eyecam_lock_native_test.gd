@@ -48,6 +48,43 @@ func run():
 	yield(get_tree().create_timer(1.0),"timeout")
 	other_id=client_id if HOST else 1
 	var eye=mp.Eyecam
+	eye.set_process(false)
+	set_head("Surveillance Eyecam")
+	eye.reset()
+	eye.mission=Global.current_scene
+	yield(barrier("scan_sync"),"completed")
+	eye._sync_local_data(1.0)
+	yield(get_tree().create_timer(1.0),"timeout")
+	check(eye.scan_data.has(other_id) and eye.scan_data[other_id].health==10000,"receives actual other player health")
+	eye._lock_camera(player.player_view,eye._center(other_id))
+	eye._update_normal(player.player_view,0.1)
+	check(eye.acquired.has(other_id) and not eye.analyzed.has(other_id),"normal first scan still charging")
+	eye._update_normal(player.player_view,4.9)
+	check(eye.analyzed.has(other_id),"normal scan caches player after five seconds")
+	eye.acquired.clear()
+	eye._update_normal(player.player_view,0.01)
+	check(eye.readouts.has(other_id) and eye.readouts[other_id].complete,"repeat scan skips five-second charge")
+	var data={"money":3040.933748,"health":100,"death_mode":true,"implants":["N/A","N/A","N/A","N/A"],"weapons":[0,1]}
+	eye.scan_data[other_id]=data
+	var bounds=Rect2(80,80,93,224)
+	eye._show_readout(other_id,bounds,false,false,0.5)
+	var panel=eye.readouts[other_id]
+	check(not panel.complete and (panel.previews.empty() or not panel.previews[0][1].visible),"scan initially hides equipment and stats")
+	eye._show_readout(other_id,bounds,true,false,1.0)
+	check(panel.complete and panel.icons[0][0].rect_size==Vector2(51,51),"readout shows exact equipment icon size")
+	check(panel.previews.size()==2 and panel.previews[0][1].visible,"two rotating weapon previews")
+	yield(get_tree(),"idle_frame")
+	yield(get_tree(),"idle_frame")
+	var capture=get_viewport().get_texture().get_data()
+	capture.flip_y()
+	capture.save_png("E:/Cruelty/Online/dist/eyecam-readout-"+str(HOST)+".png")
+	check(panel.matrix_value.text=="DEATH" and panel.matrix_value.get_color("font_color")==Color(1,0,1),"death matrix is magenta")
+	data.weapons=[null,null]
+	eye.scan_data[other_id]=data
+	eye._show_readout(other_id,bounds,true,false,0.1)
+	check(not panel.previews[0][1].visible and not panel.previews[1][1].visible,"empty weapon slots show no weapons")
+	eye._show_readout(other_id,bounds,false,true,0.1)
+	check(panel.labels[0].text.begins_with("HIJACKING") and not panel.complete,"pro only shows hijacking UI")
 	set_head("Surveillance Eyecam PRO MAX")
 	eye.reset()
 	eye.set_process(true)
