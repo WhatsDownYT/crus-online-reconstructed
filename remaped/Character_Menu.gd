@@ -6,7 +6,7 @@ const GRID_SIZE = 64
 const NAVIGATION_SLOT = GRID_SIZE - 1
 const PAGE_SLOT_COUNT = GRID_SIZE - 1
 const TRANSITION_BATCH = 4
-const ONLINE_IMPLANTS = ["Surveillance Eyecam", "Surveillance Eyecam PRO MAX", "Military Camouflage+", "Stealth Suit+", "ZZzzz Special Sedative Grenade+", "First Aid Kit+", "Cursed Torch+", "Augmented Arms+"]
+const ONLINE_IMPLANTS = ["Pneumatic Merit Pump", "Surveillance Eyecam", "Surveillance Eyecam PRO MAX", "Military Camouflage+", "Stealth Suit+", "ZZzzz Special Sedative Grenade+", "First Aid Kit+", "Cursed Torch+", "Augmented Arms+"]
 const ONLINE_EXTENSION_BASES = {
 	"Military Camouflage+": "Military Camouflage",
 	"Stealth Suit+": "Stealth Suit",

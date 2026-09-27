@@ -8,7 +8,7 @@ func is_target_action(method):
 func is_owner_state(method):
 	return method in ["_update_puppet", "respawn_puppet", "set_current_weapon",
 		"set_is_on_floor", "set_kick", "set_sit", "set_crouch", "set_gravity",
-		"shoot_commit", "sync_implants", "set_flashlight", "_set_death", "hideHelpLabel"]
+		"shoot_commit", "sync_goop", "sync_implants", "set_flashlight", "_set_death", "hideHelpLabel"]
 
 func validate_network_action(sender, target, method, args):
 	if not Multiplayer.players.has(sender) or not Multiplayer.players.has(target):
@@ -111,6 +111,7 @@ func _ready():
 	NetworkBridge.register_rpcs(self, [
 		["_update_puppet", NetworkBridge.PERMISSION.ALL],
 		["sync_implants", NetworkBridge.PERMISSION.ALL],
+		["sync_goop", NetworkBridge.PERMISSION.ALL],
 		["respawn_puppet", NetworkBridge.PERMISSION.ALL],
 		["set_current_weapon", NetworkBridge.PERMISSION.ALL],
 		["_set_toxic", NetworkBridge.PERMISSION.ALL],
@@ -340,7 +341,9 @@ func _physics_process(delta):
 		if _implant_elapsed >= 0.5:
 			_implant_elapsed = 0.0
 			var implants = Global.implants
-			var names = [implants.head_implant.i_name, implants.torso_implant.i_name, implants.arm_implant.i_name, implants.leg_implant.i_name]
+			var names = []
+			for slot in [implants.head_implant, implants.torso_implant, implants.arm_implant, implants.leg_implant]:
+				names.append("N/A" if slot.jammed else slot.i_name)
 			if names != _implant_names:
 				_implant_names = names
 				sync_implants(null, names)
@@ -754,3 +757,26 @@ func _center_nickname():
 	var label = $Puppet/PlayerModel/Nickname
 	var bounds = label.get_aabb()
 	label.offset.x -= (bounds.position.x + bounds.size.x * 0.5) / label.pixel_size
+
+remote func sync_goop(id, position, yaw, burst):
+	if not NetworkBridge.request_sender(id) in [int(name), NetworkBridge.get_host_id()] or typeof(burst) != TYPE_BOOL or not typeof(yaw) in [TYPE_INT, TYPE_REAL]: return
+	if not is_instance_valid(Global.current_scene) or not is_instance_valid(Global.player): return
+	if position != null:
+		if typeof(position) != TYPE_VECTOR3 or position.distance_to(global_transform.origin) > 15.0: return
+		var decal = preload("res://Entities/Decals/FleshDecal2.tscn").instance()
+		decal.name = "OnlineGoop"
+		Global.current_scene.add_child(decal)
+		decal.global_transform.origin = position
+		decal.rotation.y = yaw
+	if burst:
+		var source = Global.player.get_node_or_null("Particles")
+		if not is_instance_valid(source): return
+		var particles = source.duplicate(0)
+		particles.name = "OnlineGunkBurst"
+		particles.emitting = false
+		Global.current_scene.add_child(particles)
+		particles.global_transform = global_transform * source.transform
+		particles.one_shot = true
+		particles.restart()
+		particles.emitting = true
+		get_tree().create_timer(particles.lifetime + 0.5).connect("timeout", particles, "queue_free")

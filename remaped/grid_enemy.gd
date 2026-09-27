@@ -37,6 +37,7 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	add_to_group("admin_npcs")
 	if Global.get_node("Multiplayer").Deathmatch.is_active():
 		queue_free()
 		return

@@ -8,7 +8,7 @@ func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
 
 func _input(event):
-	if not event is InputEventKey or not event.pressed or event.echo or not _in_level():
+	if not preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG or not event is InputEventKey or not event.pressed or event.echo or not _in_level():
 		return
 	if event.scancode == KEY_F8:
 		ui_hidden = not ui_hidden

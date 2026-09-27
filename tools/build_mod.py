@@ -8,6 +8,7 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--base-package', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--debug', action='store_true')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'tools/build_discord.ps1')], check=True)
@@ -49,6 +50,7 @@ with zipfile.ZipFile(args.base_package) as base:
         for imported in re.findall(r'^path(?:\.s3tc)?="res://(\.import/[^"]+)"', entries[archive_name].decode('utf-8'), re.MULTILINE):
             if imported not in entries:
                 raise SystemExit(f'Missing imported asset: {archive_name} -> {imported}')
+entries[prefix + 'BuildFlags.gd'] = ('extends Reference\n\nconst DEBUG = ' + ('true' if args.debug else 'false') + '\n').encode()
 for required in ('crus_online_reconstructed_logo.png', 'crus_online_logo.png', 'surveillance_eyecam.png', 'surveillance_eyecam_plus.png'):
     if prefix + required not in entries:
         raise SystemExit(f'Missing required asset: {required}')
@@ -66,6 +68,6 @@ with zipfile.ZipFile(temporary) as output:
 temporary.replace(args.output / 'mod.zip')
 version = re.search(r'var version = "([^"]+)"', (root / 'multiplayer.gd').read_text()).group(1)
 metadata = {'author': 'TriggeredP', 'description': 'multiplayer',
-            'init': 'res://' + prefix + 'multiplayer_init.gd', 'name': 'CruS Online', 'version': version}
+            'init': 'res://' + prefix + 'multiplayer_init.gd', 'name': 'CruS Online', 'version': version + ('-debug' if args.debug else ''), 'build': 'debug' if args.debug else 'release'}
 (args.output / 'mod.json').write_text(json.dumps(metadata), encoding='utf-8')
 print(f'BUILD_RESULT files={len(entries)} output={args.output.resolve()}')

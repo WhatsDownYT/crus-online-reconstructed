@@ -11,6 +11,8 @@ var complete = false
 var pro = false
 var font
 var details_typing = 0.0
+var presentation_step = 0
+var equipment_step = 0
 var matrix_value
 
 func _ready():
@@ -76,6 +78,8 @@ func _make_previews():
 
 func display(bounds, data, ready, hijack, delta):
 	pro = hijack
+	labels[0].add_color_override("font_color", Color(1, 0, 0) if pro else GREEN)
+	labels[1].add_color_override("font_color", Color(1, 0, 0) if pro else GREEN)
 	typing += delta * 130.0
 	rect_position = bounds.position + Vector2(bounds.size.x + 11, 0)
 	var heading = "HIJACKING BIOLOGICAL SYSTEMS" if pro else "ANALYZING BIOLOGICAL DATABASE"
@@ -84,7 +88,11 @@ func display(bounds, data, ready, hijack, delta):
 	complete = ready and not pro and not data.empty()
 	background.rect_size.y = 128 if complete else 42
 	var strings = ["MERIT : $" + str(data.get("money", 0)), "HEALTH : " + str(data.get("health", 0)), "MATRIX : " + ("DEATH" if data.get("death_mode", false) else "LIFE")]
-	if complete: details_typing += delta * 160.0
+	if complete:
+		details_typing += delta * 160.0
+		equipment_step = min(12, equipment_step + 1)
+	else:
+		equipment_step = 0
 	var remaining = int(details_typing)
 	for index in range(3):
 		labels[index + 2].visible = complete
@@ -99,6 +107,8 @@ func display(bounds, data, ready, hijack, delta):
 	for slot in range(4):
 		var icon = icons[slot][0]
 		var shadow = icons[slot][1]
+		icon.rect_scale = Vector2(1, float(equipment_step) / 12.0)
+		shadow.rect_scale = icon.rect_scale
 		icon.visible = complete
 		shadow.visible = complete
 		icon.rect_position = Vector2(-bounds.size.x - 77, slot * 57)
@@ -118,6 +128,7 @@ func display(bounds, data, ready, hijack, delta):
 		var gun = viewport.get_node("Weapon")
 		var weapon_id = weapons[slot] if slot < weapons.size() else null
 		var shown = complete and weapon_id != null and weapon_id >= 0 and weapon_id < gun.MESH.size()
+		previews[slot][1].rect_scale = Vector2(1, float(equipment_step) / 12.0)
 		previews[slot][1].visible = shown
 		viewport.render_target_update_mode = Viewport.UPDATE_ALWAYS if shown else Viewport.UPDATE_DISABLED
 		for index in range(gun.MESH.size()):
@@ -130,3 +141,10 @@ func conceal():
 	hide()
 	for preview in previews:
 		preview[0].render_target_update_mode = Viewport.UPDATE_DISABLED
+
+func animate_visibility(present):
+	presentation_step = min(12, presentation_step + 1) if present else max(0, presentation_step - 1)
+	rect_pivot_offset = Vector2(135.5, 0)
+	rect_scale = Vector2(1, float(presentation_step) / 12.0)
+	if presentation_step == 0:
+		conceal()

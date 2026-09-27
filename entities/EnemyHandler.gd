@@ -147,7 +147,7 @@ puppet func _die_client(id):
 		for particle in all_particles:
 			particle.queue_free()
 		body.set_dead()
-		if "disabled" in weapon:
+		if is_instance_valid(weapon) and "disabled" in weapon:
 			weapon.disabled = true
 		
 		colliders.get_node("Head/CollisionShape").disabled = true
@@ -241,6 +241,8 @@ func _enter_tree():
 		mp.Deathmatch.suppress_npc(self)
 
 func _ready():
+	add_to_group("admin_npcs")
+	add_to_group("merit_bribable_npcs")
 	if Multiplayer.Deathmatch.is_active() or Multiplayer.CounterOp.is_active():
 		Multiplayer.Deathmatch.register_npc(self)
 		if Multiplayer.Deathmatch.is_active() and not Multiplayer.Deathmatch.spawn_npcs():
@@ -688,8 +690,8 @@ func die(damage, collision_n, collision_p):
 			if boneattachment:
 				boneattachment.hide()
 			
-			if not civilian and "current_weapon" in weapon:
-				if "disabled" in weapon:
+			if not civilian and is_instance_valid(weapon) and "current_weapon" in weapon:
+				if is_instance_valid(weapon) and "disabled" in weapon:
 					if not weapon.disabled:
 						var new_weapon_drop = weapon_drop.instance()
 						new_weapon_drop.set_name(new_weapon_drop.name + "#" + str(new_weapon_drop.get_instance_id()))
@@ -705,7 +707,7 @@ func die(damage, collision_n, collision_p):
 			for particle in all_particles:
 				particle.queue_free()
 			body.set_dead()
-			if "disabled" in weapon:
+			if is_instance_valid(weapon) and "disabled" in weapon:
 				weapon.disabled = true
 			
 			colliders.get_node("Head/CollisionShape").disabled = true

@@ -15,7 +15,8 @@ static func resolve(catalog, names):
 		"multiplayer_cursed_torch": false,
 		"multiplayer_augmented_arms": false,
 		"sedative_immune": false,
-		"eyecam_pro": false
+		"eyecam_pro": false,
+		"merit_pump": false
 	}
 	for index in range(4):
 		if typeof(names[index]) != TYPE_STRING:
@@ -35,6 +36,7 @@ static func resolve(catalog, names):
 					result.multiplayer_stealth = implant.multiplayer_stealth
 					result.sedative_immune = implant.terror or implant.orbsuit
 				if index == 2:
+					result.merit_pump = implant.i_name == "Pneumatic Merit Pump"
 					result.cursed_torch = implant.cursed_torch
 					result.multiplayer_sedative = implant.multiplayer_sedative
 					result.multiplayer_first_aid = implant.multiplayer_first_aid

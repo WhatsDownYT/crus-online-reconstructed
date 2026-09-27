@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         shutil.copy2(root / name, mod / name)
 
 
-    integration = ('VoiceChat.gd', 'multiplayer.gd', 'multiplayer_player.gd', 'SteamLobby.gd', 'multiplayer_menu.gd', 'Players.gd', 'Menu.gd', 'Stats.gd', 'ChatBox.gd',
+    integration = ('VoiceChat.gd', 'SurveillanceEyecam.gd', 'EyecamHijack.gd', 'EyecamReadout.gd', 'PneumaticMeritPump.gd', 'MeritPumpPickup.gd', 'MeritPumpMoney.gd', 'multiplayer.gd', 'multiplayer_player.gd', 'SteamLobby.gd', 'multiplayer_menu.gd', 'Players.gd', 'Menu.gd', 'Stats.gd', 'ChatBox.gd',
                    'CancerSegment.gd', 'CancerReplication.gd', 'entities/Enemy_Torso.gd', 'remaped/Kinematic_Physics_Object.gd',
                    'remaped/Switch.gd', 'remaped/Door.gd', 'remaped/down_door.gd', 'remaped/down_switch_door.gd', 'remaped/Divine_Door.gd', 'remaped/Profane_Door.gd', 'remaped/Terror_Door.gd', 'remaped/Elevator.gd', 'remaped/weapon.gd',
                    'remaped/Player.gd', 'remaped/Exit.gd', 'remaped/Game_Manager.gd', 'entities/EnemyHandler.gd',
@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
             asset = project / resource.removeprefix('res://')
             asset.parent.mkdir(parents=True, exist_ok=True)
             asset.write_text('[gd_resource type="SpatialMaterial" format=2]\n[resource]\n', encoding='utf-8')
-        for resource in re.findall(r'preload\("(res://[^\"]+\.(?:png|ogg|wav))"\)', destination.read_text(encoding='utf-8')):
+        for resource in re.findall(r'preload\("(res://[^\"]+\.(?:png|ogg|wav|mp3))"\)', destination.read_text(encoding='utf-8')):
             asset = project / resource.removeprefix('res://')
             asset.parent.mkdir(parents=True, exist_ok=True)
             kind = 'ImageTexture' if asset.suffix == '.png' else 'AudioStreamSample'

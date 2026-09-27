@@ -62,7 +62,10 @@ try:
         output.close()
         result = (project / 'output.log').read_text()
         print(role, 'exit=', process.returncode)
-        print('\n'.join(line for line in result.splitlines() if 'MODE_' in line or 'CAPTURE_' in line or 'PICKUP_CHECK' in line or args.result_marker in line or 'ERROR:' in line))
+        report = [line for line in result.splitlines() if 'MODE_' in line or 'CAPTURE_' in line or 'PICKUP_CHECK' in line or args.result_marker in line or 'ERROR:' in line]
+        print('\n'.join(report[:100]))
+        if len(report) > 100:
+            print(f'{len(report) - 100} additional log lines omitted; full log: {project / "output.log"}')
         failed |= process.returncode != 0 or args.result_marker not in result or 'SCRIPT ERROR:' in result or 'SHADER ERROR:' in result
     raise SystemExit(1 if failed else 0)
 finally:

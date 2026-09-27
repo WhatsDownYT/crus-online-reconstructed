@@ -1,6 +1,7 @@
 extends Node
 
 var version = "v1.0"
+var Commands
 
 enum errorType {UNKNOW, TIME_OUT, WRONG_VERSION, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
 
@@ -106,8 +107,13 @@ var Voice
 var CounterOp
 var Deathmatch
 var Eyecam
+var MeritPump
 
 func _ready():
+	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: version += "-debug"
+	Commands = preload("res://MOD_CONTENT/CruS Online/HostCommands.gd").new()
+	Commands.name = "HostCommands"
+	add_child(Commands)
 	Deathmatch = preload("res://MOD_CONTENT/CruS Online/Deathmatch.gd").new()
 	Deathmatch.name = "Deathmatch"
 	add_child(Deathmatch)
@@ -127,6 +133,9 @@ func _ready():
 	Eyecam = preload("res://MOD_CONTENT/CruS Online/SurveillanceEyecam.gd").new()
 	Eyecam.name = "SurveillanceEyecam"
 	eyecam_layer.add_child(Eyecam)
+	MeritPump = preload("res://MOD_CONTENT/CruS Online/PneumaticMeritPump.gd").new()
+	MeritPump.name = "PneumaticMeritPump"
+	add_child(MeritPump)
 	var discord_presence = preload("res://MOD_CONTENT/CruS Online/DiscordPresence.gd").new()
 	discord_presence.name = "DiscordPresence"
 	add_child(discord_presence)
@@ -306,6 +315,7 @@ puppet func sync_host_settings(id, settings):
 	enforce_implant_bans()
 
 func host_server():
+	Commands.reset_session()
 	apply_host_settings()
 	if NetworkBridge.is_lan():
 		hostSettings.helpTimer = config.helpTimer
@@ -348,6 +358,7 @@ func join_to_server(ip, port):
 		print("[CRUS ONLINE / MAIN]: Client try to connect")
 
 func leave_server():
+	Commands.reset_session()
 	if is_instance_valid(CounterOp):
 		CounterOp.reset_session()
 	if is_instance_valid(Voice):
@@ -449,15 +460,25 @@ puppet func disconnected(id):
 		print("[CRUS ONLINE / MAIN]: Disconnected")
 
 puppet func connected(id):
-	if NetworkBridge.is_lan():
-		if not dataLoaded:
-			NetworkBridge.n_rpc(self, "connect_init", ["", version, playerInfo])
-			print("[CRUS ONLINE / CLIENT]: Connect Init")
+	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: print("[CruS admin peer connected] peer=",id," status=",get_tree().network_peer.get_connection_status())
+	if NetworkBridge.is_lan() and not dataLoaded:
+		call_deferred("_connect_lan_host")
+
+func _connect_lan_host():
+	if NetworkBridge.is_lan() and NetworkBridge.check_connection() and not dataLoaded and not NetworkBridge.is_world_authority():
+		if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: print("[CruS admin LAN handshake] peers=",get_tree().get_network_connected_peers()," status=",get_tree().network_peer.get_connection_status()," id=",get_tree().get_network_unique_id())
+		NetworkBridge.n_rpc_id(self, NetworkBridge.get_host_id(), "connect_init", ["", version, playerInfo])
+		print("[CRUS ONLINE / CLIENT]: Connect Init")
 
 puppet func disconnect_client(id, recivedError):
-	clear_connection(recivedError)
+	call_deferred("clear_connection", recivedError)
 
 master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo):
+	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: print("[CruS admin connection] sender=", NetworkBridge.request_sender(id), " version=", recivedVersion)
+	id = NetworkBridge.request_sender(id)
+	if not NetworkBridge.is_world_authority() or Commands.is_banned(id) or Commands.removed.has(id):
+		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.SERVER_CLOSED])
+		return
 	if recivedVersion != version:
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.WRONG_VERSION])
 	else:
@@ -811,6 +832,7 @@ master func load_check(id):
 	id = NetworkBridge.request_sender(id)
 	if NetworkBridge.is_world_authority() and players.has(id) and not loaded_players.has(id):
 		loaded_players.append(id)
+		Commands.send_spawn_state(id)
 
 puppet func scene_loaded_signal(id):
 	get_tree().paused = false
@@ -1053,7 +1075,7 @@ master func _request_player_revive(id, target):
 		return
 	revive_authorizations[target] = true
 	if target == NetworkBridge.get_id():
-		target_puppet._respawn_player(NetworkBridge.get_host_id())
+		target_puppet.call_deferred("_respawn_player", NetworkBridge.get_host_id())
 	else:
 		NetworkBridge.n_rpc_id(target_puppet, target, "_respawn_player")
 
@@ -1162,15 +1184,15 @@ func player_respawn():
 		NetworkBridge.n_rpc(self, "_player_respawn")
 
 master func _player_respawn(id, host = false):
-	if Deathmatch.is_active():
-		return
 	if not NetworkBridge.is_world_authority():
 		return
 	id = NetworkBridge.request_sender(id)
 	if not players.has(id):
 		return
+	var administrative = preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG and revive_authorizations.get(id) == "admin"
+	if Deathmatch.is_active() and not administrative: return
 	var assisted = revive_authorizations.has(id)
-	if not hostSettings.get("canRespawn", true):
+	if not hostSettings.get("canRespawn", true) and not administrative:
 		revive_authorizations.erase(id)
 		return
 	var self_respawn = hostSettings.get("selfRespawn", false) and not CounterOp.is_active()
@@ -1178,7 +1200,7 @@ master func _player_respawn(id, host = false):
 		return
 	if assisted:
 		revive_authorizations.erase(id)
-		if revive_limit() > 0:
+		if revive_limit() > 0 and not administrative:
 			revives_used[id] = int(revives_used.get(id, 0)) + 1
 			_sync_revive_state_to_clients()
 	died_players.erase(id)
@@ -1275,6 +1297,8 @@ var _actors_frame = -1
 var _alive_actors = []
 
 func get_alive_actors(source = null):
+	if is_instance_valid(source) and source.has_meta("merit_bribed"):
+		return []
 	var frame = Engine.get_physics_frames()
 	if frame != _actors_frame:
 		_actors_frame = frame

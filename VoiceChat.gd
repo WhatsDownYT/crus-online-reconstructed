@@ -383,6 +383,7 @@ func _accept(sender, packet):
 		state.enabled = enabled
 		peers[peer] = state
 	elif kind == AUDIO:
+		if Multiplayer.Commands.global_mutes.get(peer, false): return
 		if not lobby_enabled() or packet.size() != HEADER + Codec.BYTES or not state.enabled or epoch != state.generation or seq <= state.sequence or packet[HEADER + 2] > 88:
 			return
 		state.sequence = seq
@@ -467,12 +468,13 @@ func is_enabled(peer):
 
 func is_talking(peer):
 	var last = last_talk if peer == bridge.get_id() else int(peers.get(peer, {}).get("talk", -1000))
-	return is_enabled(peer) and OS.get_ticks_msec() - last < 650
+	return not Multiplayer.Commands.global_mutes.get(peer, false) and is_enabled(peer) and OS.get_ticks_msec() - last < 650
 
 func is_muted(peer):
-	return muted.get(peer, false) or (bridge.is_steam() and muted_steam.has(str(peer)))
+	return Multiplayer.Commands.global_mutes.get(peer, false) or muted.get(peer, false) or (bridge.is_steam() and muted_steam.has(str(peer)))
 
 func toggle_mute(peer):
+	if Multiplayer.Commands.global_mutes.get(peer, false): return
 	if peer == bridge.get_id():
 		return
 	var value = not is_muted(peer)
@@ -503,6 +505,7 @@ func lobby_enabled():
 	return Multiplayer.hostSettings.get("useVoiceChat", true)
 
 func can_hear(speaker, listener):
+	if Multiplayer.Commands.global_mutes.get(speaker, false): return false
 	if not lobby_enabled():
 		return false
 	if result_screen():

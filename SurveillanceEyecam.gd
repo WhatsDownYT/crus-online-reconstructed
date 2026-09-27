@@ -5,11 +5,13 @@ const PRO = "Surveillance Eyecam PRO MAX"
 const SCAN_SOUND = preload("res://Sfx/superchimp.wav")
 const EXPAND_TIME = 0.5
 const CHARGE_TIME = 3.0
-const COOLDOWN_TIME = 30.0
+const COOLDOWN_TIME = 45.0
 const ENTRY_COOLDOWN_TIME = 10.0
 const RECT_PADDING = 3.0
-const DATABASE_TIME = 5.0
+const DATABASE_TIME = 3.0
+const ACQUIRE_SOUND = preload("res://Sfx/UI/UI_navigation.wav")
 
+var Jam
 var mp
 var bridge
 var acquired = {}
@@ -30,13 +32,19 @@ var scan_data = {}
 var analyzed = {}
 var readouts = {}
 var data_elapsed = 0.0
+var readout_present = {}
+var last_bounds = {}
+var departing = {}
+var scan_sound_times = {}
 
 func _ready():
 	mp = Global.get_node("Multiplayer")
 	bridge = mp.NetworkBridge
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_margins_preset(Control.PRESET_WIDE)
-	bridge.register_rpcs(self, [["sync_scan_data", bridge.PERMISSION.ALL], ["request_scan", bridge.PERMISSION.ALL], ["sync_sound", bridge.PERMISSION.SERVER]])
+	bridge.register_rpcs(self, [["sync_hijack", bridge.PERMISSION.SERVER], ["relay_scan_data", bridge.PERMISSION.SERVER], ["request_acquire_sound", bridge.PERMISSION.ALL], ["sync_acquire_sound", bridge.PERMISSION.SERVER], ["sync_scan_data", bridge.PERMISSION.ALL], ["request_scan", bridge.PERMISSION.ALL], ["sync_sound", bridge.PERMISSION.SERVER]])
+	Jam = preload("res://MOD_CONTENT/CruS Online/EyecamHijack.gd").new()
+	add_child(Jam)
 	process_priority = 100
 
 func is_camera_locked():
@@ -50,14 +58,15 @@ func _process(delta):
 		reset()
 		mission = Global.current_scene
 	_sync_local_data(delta)
-	for peer in readouts:
-		readouts[peer].conceal()
+	readout_present.clear()
 	_update_sounds(delta)
 	if bridge.is_world_authority():
 		_update_host_scans(delta)
 	rectangles.clear()
 	if not _available():
 		_cancel_local()
+		for peer in readouts:
+			readouts[peer].conceal()
 		update()
 		return
 	if entry_pending:
@@ -65,7 +74,7 @@ func _process(delta):
 		entry_pending = false
 	else:
 		cooldown = max(0.0, cooldown - delta)
-	var mode = Global.implants.head_implant.i_name
+	var mode = "N/A" if Global.implants.head_implant.jammed else Global.implants.head_implant.i_name
 	var camera = Global.player.player_view
 	if mode == NORMAL:
 		_cancel_lock()
@@ -75,6 +84,9 @@ func _process(delta):
 		_update_pro(camera, delta)
 	else:
 		_cancel_local()
+	_animate_departures(delta)
+	for peer in readouts:
+		readouts[peer].animate_visibility(readout_present.has(peer))
 	update()
 
 func _eligible(peer, distance):
@@ -171,12 +183,16 @@ func _animated_rect(bounds, amount):
 func _update_normal(camera, delta):
 	var present = []
 	for peer in mp.players:
-		if not _eligible(peer, 25.0):
+		if not _eligible(peer, 15.0):
 			continue
 		var bounds = _bounds(camera, peer)
 		if not _on_screen(bounds) or not _visible(camera, peer):
 			continue
 		present.append(peer)
+		if not acquired.has(peer):
+			bridge.request_host(self, "request_acquire_sound", [peer])
+		departing.erase(peer)
+		last_bounds[peer] = bounds
 		acquired[peer] = min(DATABASE_TIME, float(acquired.get(peer, 0.0)) + delta)
 		if acquired[peer] >= DATABASE_TIME:
 			analyzed[peer] = true
@@ -184,6 +200,10 @@ func _update_normal(camera, delta):
 		rectangles.append([_animated_rect(bounds, acquired[peer] / EXPAND_TIME), Color(0, 1, 0)])
 	for peer in acquired.keys():
 		if not present.has(peer):
+			if last_bounds.has(peer):
+				departing[peer] = {"bounds": last_bounds[peer], "time": 0.0, "amount": min(1.0, acquired[peer] / EXPAND_TIME)}
+			last_bounds.erase(peer)
+			analyzed.erase(peer)
 			acquired.erase(peer)
 			if readouts.has(peer):
 				readouts[peer].typing = 0.0
@@ -285,6 +305,7 @@ remote func request_scan(id, peer):
 		return
 	host_scans[source] = {"target": peer, "time": CHARGE_TIME}
 	host_cooldowns[source] = CHARGE_TIME + EXPAND_TIME + COOLDOWN_TIME
+	_jam_target(peer)
 	var position = _center(peer)
 	_apply_sound(source, peer, 0, position)
 	bridge.n_rpc(self, "sync_sound", [source, peer, 0, position])
@@ -348,6 +369,7 @@ func _update_sounds(_delta):
 			sound.node.global_transform.origin = actor.global_transform.origin + Vector3.UP
 
 func reset():
+	if is_instance_valid(Jam): Jam.clear()
 	_cancel_local()
 	cooldown = 0.0
 	entry_pending = true
@@ -363,8 +385,13 @@ func reset():
 		readouts[peer].queue_free()
 	readouts.clear()
 	data_elapsed = 0.0
+	last_bounds.clear()
+	departing.clear()
+	readout_present.clear()
+	scan_sound_times.clear()
 
 func _show_readout(peer, bounds, ready, hijack, delta):
+	readout_present[peer] = true
 	if not readouts.has(peer):
 		var panel = preload("res://MOD_CONTENT/CruS Online/EyecamReadout.gd").new()
 		add_child(panel)
@@ -380,18 +407,88 @@ func _sync_local_data(delta):
 	var implants = Global.implants
 	var data = {"money": Global.money, "health": Global.player.health, "death_mode": Global.death, "implants": [implants.head_implant.i_name, implants.torso_implant.i_name, implants.arm_implant.i_name, implants.leg_implant.i_name], "weapons": [Global.player.weapon.weapon1, Global.player.weapon.weapon2]}
 	scan_data[bridge.get_id()] = data
-	bridge.n_rpc_unreliable(self, "sync_scan_data", [data])
+	bridge.request_host(self, "sync_scan_data", [data])
 
 remote func sync_scan_data(id, data):
+	if not bridge.is_world_authority(): return
 	var peer = bridge.request_sender(id)
+	if _store_scan_data(peer, data):
+		bridge.n_rpc(self, "relay_scan_data", [peer, data])
+
+puppet func relay_scan_data(id, peer, data):
+	if bridge.request_sender(id) == bridge.get_host_id() and typeof(peer) == TYPE_INT:
+		_store_scan_data(peer, data)
+
+func _store_scan_data(peer, data):
 	if not mp.players.has(peer) or not data is Dictionary or data.size() != 5:
-		return
+		return false
 	if not data.get("implants") is Array or data.implants.size() != 4 or not data.get("weapons") is Array or data.weapons.size() != 2:
-		return
+		return false
 	if not typeof(data.get("money")) in [TYPE_INT, TYPE_REAL] or not typeof(data.get("health")) in [TYPE_INT, TYPE_REAL] or typeof(data.get("death_mode")) != TYPE_BOOL:
-		return
+		return false
 	for weapon_id in data.weapons:
-		if weapon_id != null and (typeof(weapon_id) != TYPE_INT or weapon_id < 0 or weapon_id > 28): return
+		if weapon_id != null and (typeof(weapon_id) != TYPE_INT or weapon_id < 0 or weapon_id > 28): return false
 	for label in data.implants:
-		if not label is String or label.length() > 128: return
+		if not label is String or label.length() > 128: return false
 	scan_data[peer] = data.duplicate(true)
+	return true
+
+func _animate_departures(delta):
+	for peer in departing.keys():
+		var item = departing[peer]
+		item.time += delta
+		if item.time >= EXPAND_TIME:
+			departing.erase(peer)
+		else:
+			rectangles.append([_animated_rect(item.bounds, item.amount * (1.0 - item.time / EXPAND_TIME)), Color(0, 1, 0)])
+
+remote func request_acquire_sound(id, peer):
+	if not bridge.is_world_authority() or typeof(peer) != TYPE_INT: return
+	var source = bridge.request_sender(id)
+	if not mp.players.has(source) or not mp.players.has(peer) or source == peer: return
+	var actor = bridge.get_peer_actor(source)
+	var other = bridge.get_peer_actor(peer)
+	if not is_instance_valid(actor) or not is_instance_valid(other) or actor.global_transform.origin.distance_to(other.global_transform.origin) > 16.0: return
+	var key = str(source) + ":" + str(peer)
+	var now = OS.get_ticks_msec()
+	if now - int(scan_sound_times.get(key, -1000)) < 300: return
+	scan_sound_times[key] = now
+	_play_acquire_sound(source)
+	bridge.n_rpc(self, "sync_acquire_sound", [source])
+
+puppet func sync_acquire_sound(id, source):
+	if bridge.request_sender(id) == bridge.get_host_id() and typeof(source) == TYPE_INT:
+		_play_acquire_sound(source)
+
+func _play_acquire_sound(source):
+	var actor = bridge.get_peer_actor(source)
+	if not is_instance_valid(actor): return
+	var sound = AudioStreamPlayer3D.new()
+	actor.add_child(sound)
+	sound.translation = Vector3.UP
+	sound.stream = ACQUIRE_SOUND
+	sound.unit_size = 19.0
+	sound.max_distance = 100.0
+	sound.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
+	sound.connect("finished", sound, "queue_free")
+	sound.play()
+
+func _jam_target(peer):
+	var data = scan_data.get(peer, {})
+	var choices = []
+	for weapon_id in data.get("weapons", []):
+		if weapon_id != null and not choices.has(["weapon", weapon_id]): choices.append(["weapon", weapon_id])
+	var implants = data.get("implants", [])
+	for slot in range(implants.size()):
+		if implants[slot] != "N/A": choices.append(["implant", slot])
+	if choices.empty(): return
+	var chosen = choices[randi() % choices.size()]
+	if peer == bridge.get_id():
+		Jam.apply(chosen[0], chosen[1])
+	else:
+		bridge.n_rpc_id(self, peer, "sync_hijack", [peer, chosen[0], chosen[1]])
+
+puppet func sync_hijack(id, peer, kind, value):
+	if bridge.request_sender(id) != bridge.get_host_id() or peer != bridge.get_id(): return
+	if typeof(value) != TYPE_INT or not kind in ["weapon", "implant"]: return
+	Jam.apply(kind, value)

@@ -6,7 +6,7 @@ const RPC_ARITY = {"_update_puppet": [4], "_set_transform": [1, 2],
 	"client_set_lerp_transform": [1, 2], "set_lerp_transform": [1, 2],
 	"network_set_rotation": [1], "set_mech_rotation": [1],
 	"set_puppet_transform": [2], "particle_visible": [1],
-	"set_animation": [2], "test_rpc": [1]}
+	"set_animation": [2], "test_rpc": [1], "sync_positions": [2]}
 const PROPERTY_TYPES = {"global_transform": TYPE_TRANSFORM, "lerp_transform": TYPE_TRANSFORM, "visible": TYPE_BOOL}
 
 func _init(owner):
@@ -143,6 +143,11 @@ func valid_value(member, value, is_property):
 	if not RPC_ARITY.has(member) or typeof(value) != TYPE_ARRAY or not value.size() in RPC_ARITY[member]:
 		return false
 	match member:
+		"sync_positions":
+			if typeof(value[0]) != TYPE_INT or typeof(value[1]) != TYPE_ARRAY or value[1].size() > 10: return false
+			for pose in value[1]:
+				if typeof(pose) != TYPE_ARRAY or pose.size() != 2 or typeof(pose[0]) != TYPE_INT or typeof(pose[1]) != TYPE_TRANSFORM or not finite_value(pose[1]): return false
+			return true
 		"_update_puppet":
 			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and typeof(value[1]) == TYPE_ARRAY and value[1].size() == 2 and number(value[1][0]) and number(value[1][1]) and number(value[2]) and (value[3] == null or typeof(value[3]) == TYPE_VECTOR3 and finite_value(value[3]))
 		"_set_transform":

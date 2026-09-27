@@ -21,6 +21,7 @@ export  var line = "Triagon 01 is gone. (Golem Exosystem Received)"
 export  var line2 = "I bestow upon you power."
 
 func _ready():
+	add_to_group("admin_npcs")
 	if Global.get_node("Multiplayer").Deathmatch.is_active():
 		queue_free()
 		return

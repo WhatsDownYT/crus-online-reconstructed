@@ -2,6 +2,11 @@ extends Spatial
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
+var npc_name = "Abraxas"
+var creature = false
+var civilian = false
+var dead = false
+onready var body = self
 var t = 0
 
 onready var torus = $"Armature/Skeleton/BoneAttachment 2/Torus"
@@ -37,6 +42,8 @@ func get_near_player(object) -> Dictionary:
 	}
 
 func _ready():
+	add_to_group("admin_npcs")
+	add_to_group("merit_bribable_npcs")
 	set_meta("counterop_npc", true)
 	Global.objectives += 1
 	
@@ -50,10 +57,15 @@ func _process(delta):
 	torus.rotate_object_local(Vector3.BACK, deg2rad(1))
 
 puppet func die(id):
+	if dead: return
+	dead = true
+	kill_flag = true
+	apply_merit_bribe()
 	anim.play("Die")
 	Global.remove_objective()
 
 func _physics_process(delta):
+	if has_meta("merit_bribed"): return
 	if NetworkBridge.n_is_network_master(self):
 		t += 1
 		
@@ -74,6 +86,7 @@ func _physics_process(delta):
 		
 		if head.destroyed and laser.destroyed and rocket.destroyed and not kill_flag:
 			kill_flag = true
+			dead = true
 			anim.play("Die")
 			Global.remove_objective()
 			NetworkBridge.n_rpc(self, "die")
@@ -128,3 +141,18 @@ puppet func spawn_enemy(id, selectedEnemy, parentPath, enemyName, enemyTransform
 	new_enemy.set_name(enemyName)
 	new_enemy.global_transform = enemyTransform
 	
+
+func apply_merit_bribe():
+	_disable_merit_part(self)
+
+func _disable_merit_part(node):
+	node.set_process(false)
+	node.set_physics_process(false)
+	if "active" in node: node.set("active", false)
+	if "disabled" in node and not node is CollisionShape: node.set("disabled", true)
+	if node is Timer: node.stop()
+	for child in node.get_children(): _disable_merit_part(child)
+
+func admin_kill():
+	die(null)
+	NetworkBridge.n_rpc(self, "die")

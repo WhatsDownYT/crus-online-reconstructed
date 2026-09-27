@@ -606,6 +606,9 @@ func _init_p2p_host(lobby_id):
 	emit_signal("all_peers_connected")
 	
 func _init_p2p_session(steam_id):
+	if Global.get_node("Multiplayer").Commands.is_banned(steam_id):
+		SteamInit.Steam.closeP2PSessionWithUser(steam_id)
+		return
 	if steam_id == _my_steam_id or not is_server():
 
 		return
@@ -999,6 +1002,9 @@ func _on_p2p_session_connect_fail(steam_id: int, session_error):
 		_server_send_peer_state()
 
 func _on_p2p_session_request(remote_steam_id):
+	if is_server() and Global.get_node("Multiplayer").Commands.is_banned(remote_steam_id):
+		SteamInit.Steam.closeP2PSessionWithUser(remote_steam_id)
+		return
 	if not SteamLobby.in_lobby() or not SteamLobby.get_lobby_members().has(remote_steam_id):
 		SteamInit.Steam.closeP2PSessionWithUser(remote_steam_id)
 		return

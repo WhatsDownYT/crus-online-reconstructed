@@ -256,6 +256,9 @@ func _process(_delta):
 func _physics_process(delta)->void :
 	if NetworkBridge.n_is_network_master(self):
 		host_tick(delta)
+		if soul.has_meta("merit_bribed"):
+			_counterop_passive_tick(delta)
+			return
 
 		var nearest_player = get_near_player(self)
 

@@ -13,6 +13,7 @@ var arm_implant:Implant
 var empty_implant:Implant
 
 class Implant:
+	var jammed = false
 	var head:bool = false
 	var torso:bool = false
 	var legs:bool = false
@@ -562,7 +563,7 @@ func _ready():
 	new_implant.head = true
 	new_implant.hidden = true
 	new_implant.shrink = true
-	new_implant.texture = load("res://Textures/Menu/Implants/scaledown.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Cortical Scaledown+.png")
 	
 	IMPLANTS.append(new_implant)
 
@@ -635,45 +636,45 @@ func _ready():
 
 	new_implant = Implant.new()
 	new_implant.i_name = "Military Camouflage+"
-	new_implant.explanation = "Online extension for Military Camouflage. Your body starts dithering away at 9 units and is completely invisible at 12 units."
+	new_implant.explanation = "Online extension for Military Camouflage. Your body becomes entirely invisible at a distance to other players."
 	new_implant.price = 25000
 	new_implant.camo = 0.2
 	new_implant.torso = true
 	new_implant.multiplayer_camo = true
-	new_implant.texture = load("res://Textures/Menu/Implants/militarycamo.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Military Camouflage+.png")
 
 	IMPLANTS.append(new_implant)
 
 	new_implant = Implant.new()
 	new_implant.i_name = "Stealth Suit+"
-	new_implant.explanation = "Online extension for the Stealth Suit. Your body uses the shitmen optical material with a half-transparent dithered silhouette. Your name is only visible within 12 units."
+	new_implant.explanation = "Online extension for the Stealth Suit. Your body is coated in the optical material used by shitmen, making it difficult for other players to spot you."
 	new_implant.price = 12000
 	new_implant.stealth = true
 	new_implant.torso = true
 	new_implant.multiplayer_stealth = true
-	new_implant.texture = load("res://Textures/Menu/Implants/stealth.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Stealth Suit+.png")
 
 	IMPLANTS.append(new_implant)
 
 	new_implant = Implant.new()
 	new_implant.i_name = "ZZzzz Special Sedative Grenade+"
-	new_implant.explanation = "Online extension for the Special Sedative Grenade. Other players caught in the gas are slowed and suffer a dark, heavily distorted view with Sleep Crisis for 10 seconds. Level V and VI suits, alongside the thrower, are immune."
+	new_implant.explanation = "Online extension for the Special Sedative Grenade. Other players caught in the gas are slowed and suffer a dark, heavily distorted view for 10 seconds. Level V and VI suits, alongside the thrower, are immune."
 	new_implant.price = 12000
 	new_implant.arms = true
 	new_implant.sleep_grenade = true
 	new_implant.multiplayer_sedative = true
-	new_implant.texture = load("res://Textures/Menu/Implants/zzz.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/ZZzzz Special Sedative Grenade+.png")
 
 	IMPLANTS.append(new_implant)
 
 	new_implant = Implant.new()
 	new_implant.i_name = "First Aid Kit+"
-	new_implant.explanation = "Online extension for the First Aid Kit. Press Use while looking at a nearby player to give them 50 health, or use the implant control to heal yourself. Single use per mission."
+	new_implant.explanation = "Online extension for the First Aid Kit. Interact with a nearby player to give them 50 health instead of yourself."
 	new_implant.price = 6000
 	new_implant.arms = true
 	new_implant.healing = 50
 	new_implant.multiplayer_first_aid = true
-	new_implant.texture = load("res://Textures/Menu/Implants/medikit.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/First Aid Kit+.png")
 
 	IMPLANTS.append(new_implant)
 
@@ -684,7 +685,7 @@ func _ready():
 	new_implant.arms = true
 	new_implant.cursed_torch = true
 	new_implant.multiplayer_cursed_torch = true
-	new_implant.texture = load("res://Textures/Menu/Implants/cursed_torch.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Cursed Torch+.png")
 
 	IMPLANTS.append(new_implant)
 
@@ -695,8 +696,16 @@ func _ready():
 	new_implant.arms = true
 	new_implant.throw_bonus = 20
 	new_implant.multiplayer_augmented_arms = true
-	new_implant.texture = load("res://Textures/Menu/Implants/augarm.png")
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Augmented Arms+.png")
 
+	IMPLANTS.append(new_implant)
+
+	new_implant = Implant.new()
+	new_implant.i_name = "Pneumatic Merit Pump"
+	new_implant.explanation = "The P.i.M.P. is a revolutionary miracle of finance developed by a consortium of gambling addicts and finance entrepreneurs. Liquidates personal capital to instantly resolve any tense negotiations. Leveraging beyond available capital is strongly discouraged."
+	new_implant.price = 20000
+	new_implant.arms = true
+	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/pneumatic_merit_pump.png")
 	IMPLANTS.append(new_implant)
 
 	new_implant = Implant.new()
@@ -719,3 +728,10 @@ func _ready():
 
 
 
+
+func disabled_copy(original):
+	var copy = Implant.new()
+	for property in ["i_name", "texture", "explanation", "price", "head", "torso", "arms", "legs"]:
+		copy.set(property, original.get(property))
+	copy.jammed = true
+	return copy

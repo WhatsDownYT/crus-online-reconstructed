@@ -418,7 +418,7 @@ func attach_menu(menu):
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.rect_size = Vector2(1280, 720)
 	menu.add_child(overlay)
-	ready_button = _make_square("Ready", "res://Textures/Menu/mission_start.png", Vector2(24, 624), "Tell the host that you are ready. The host can still start without everyone being ready.")
+	ready_button = _make_square("Ready", "res://Textures/Menu/mission_start.png", Vector2(24, 624), "Tell the host that you are ready.")
 	ready_button.connect("pressed", self, "_ready_pressed")
 	team_button = _make_square("", "res://MOD_CONTENT/CruS Online/target_white.png", Vector2(104, 624), "Switch between the Operatives and Counter-Operatives teams.")
 	team_button.texture_hover = team_button.texture_normal

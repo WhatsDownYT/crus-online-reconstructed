@@ -775,7 +775,7 @@ func _process(delta)->void :
 		elif current_weapon == W_ROD:
 			BATON_mesh.hide()
 			ROD_mesh.show()
-		if current_weapon == W_FLAMETHROWER and not Input.is_action_pressed("mouse_1"):
+		if current_weapon == W_FLAMETHROWER and (not Input.is_action_pressed("mouse_1") or _eyecam_weapon_jammed()):
 				audio[current_weapon].stop()
 		leaning = Input.is_action_pressed("Lean_Left") or Input.is_action_pressed("Lean_Right")
 		if player:
@@ -1133,7 +1133,7 @@ func _process(delta)->void :
 					NetworkBridge.request_host(radio, "request_radio_throw", [radio_position, radio_velocity])
 
 		if current_weapon != null:
-			if Input.is_action_just_pressed("mouse_1") and magazine_ammo[current_weapon] <= 0:
+			if Input.is_action_just_pressed("mouse_1") and (magazine_ammo[current_weapon] <= 0 or _eyecam_weapon_jammed() and not current_weapon in [W_BLACKJACK, W_BORE, W_RADIATOR, W_FLASHLIGHT, W_ROD]):
 				if not $No_Ammo.playing:
 					$No_Ammo.play()
 		if Input.is_action_just_pressed("mouse_1") and reload_timer.is_stopped() and current_weapon == null and glob.implants.head_implant.skullgun and not leaning and not orb:
@@ -1270,14 +1270,14 @@ func _process(delta)->void :
 		if current_weapon == null:
 			return 
 		if timer.is_stopped() and not anim.is_playing():
-			if melee and Input.is_action_pressed("mouse_1"):
+			if melee and not _eyecam_weapon_jammed() and Input.is_action_pressed("mouse_1"):
 
 				fish_strength += 1
 				fish_strength = clamp(fish_strength, 15, 40)
 				pass
 			else :
 				anim.play(IDLE_ANIM[current_weapon], - 1, 1.0)
-		if melee and Input.is_action_just_released("mouse_1"):
+		if melee and not _eyecam_weapon_jammed() and Input.is_action_just_released("mouse_1"):
 			
 			if timer.is_stopped():
 				anim.play("Baton_Fire2", - 1, 1.5)
@@ -2713,6 +2713,7 @@ func zoom():
 		zoom_flag = not zoom_flag
 
 func shoot()->void :
+	if player and _eyecam_weapon_jammed(): return
 	rotation.x = initrot.x
 	if magazine_ammo[current_weapon] > 0 and player and current_weapon != W_TRANQ and current_weapon != W_BLACKJACK and current_weapon != W_PISTOL and timer.is_stopped() and current_weapon != W_SILENCED_SMG and current_weapon != W_MAUSER and current_weapon != W_NAMBU and current_weapon != W_RADIATOR and current_weapon != W_FLASHLIGHT and current_weapon != W_CANCER and current_weapon != W_ROD and current_weapon != W_NAILER:
 		
@@ -2938,3 +2939,8 @@ func particle(particle, collider, position):
 	new_particle.rotation.x = rand_range( - PI, PI)
 	new_particle.rotation.z = rand_range( - PI, PI)
 	new_particle.emitting = true
+
+func _eyecam_weapon_jammed():
+	if not player: return false
+	var eye = Global.get_node("Multiplayer").get("Eyecam")
+	return is_instance_valid(eye) and is_instance_valid(eye.Jam) and eye.Jam.weapon_jammed(current_weapon)

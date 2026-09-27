@@ -553,6 +553,7 @@ func thrust():
 		result.collider.add_child(new_vomit)
 		new_vomit.global_transform.origin = result.position
 		new_vomit.rotation.y = rand_range( - PI, PI)
+		_publish_goop(new_vomit.global_transform.origin, new_vomit.rotation.y, false)
 	
 func grapple(pos3d:Position3D):
 	var point = pos3d.global_transform.origin
@@ -627,6 +628,13 @@ func set_move_speed():
 	move_speed = clamp(move_speed, 2, 100)
 
 func _physics_process(delta):
+	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG and has_meta("admin_noclip") and get_meta("admin_noclip") and not dead:
+		player_velocity = Vector3.ZERO
+		if _gameplay_input_enabled():
+			var direction = -player_view.global_transform.basis.z * (Input.get_action_strength("movement_forward") - Input.get_action_strength("movement_backward")) + player_view.global_transform.basis.x * (Input.get_action_strength("movement_right") - Input.get_action_strength("movement_left"))
+			direction += Vector3.UP * (Input.get_action_strength("movement_jump") - Input.get_action_strength("crouch"))
+			global_transform.origin += direction.normalized() * delta * 12.0
+		return
 	if multiplayer_held:
 		player_velocity = Vector3.ZERO
 	if tranquilize_flag:
@@ -955,6 +963,7 @@ func move(delta):
 						result.collider.add_child(new_vomit)
 						new_vomit.global_transform.origin = result.position
 						new_vomit.rotation.y = rand_range( - PI, PI)
+						_publish_goop(new_vomit.global_transform.origin, new_vomit.rotation.y, false)
 						gravity_modifier = 0.01
 	else :
 		gravity_modifier = 1
@@ -1089,9 +1098,11 @@ func air_move(delta):
 			var new_vomit = VOMIT.instance()
 			result.collider.add_child(new_vomit)
 			new_vomit.global_transform.origin = result.position
+			_publish_goop(new_vomit.global_transform.origin, new_vomit.rotation.y, false)
 		$Gunksound.play()
 		NetworkBridge.n_rpc(self, "_play_sound", ["Gunksound"])
 		$Particles.emitting = true
+		_publish_goop(null, 0.0, true)
 		player_velocity.y *= 0.5
 		var j = jump_speed
 		if max_gravity < 0:
@@ -1246,6 +1257,7 @@ func _input(event):
 			rotation_helper.rotation_degrees = camera_rot
 
 func damage(damage, collision_n, collision_p, shooter_pos):
+	if _admin_god(): return
 	if dead:
 		return 
 	if not GLOBAL.punishment_mode:
@@ -1279,6 +1291,7 @@ func damage(damage, collision_n, collision_p, shooter_pos):
 		instadie(damage, collision_n, collision_p, shooter_pos)
 
 func die(damage, collision_n, collision_p, shooter_pos):
+	if _admin_god(): return
 	if died:
 		return 
 	died = true
@@ -1297,6 +1310,7 @@ func die(damage, collision_n, collision_p, shooter_pos):
 	death_timer.start()
 
 func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZERO, shooter_pos = Vector3.ZERO):
+	if _admin_god(): return
 	if car != null:
 		car.eject()
 	
@@ -1456,3 +1470,10 @@ func _gameplay_just_pressed(action):
 
 func _gameplay_just_released(action):
 	return _gameplay_input_enabled() and Input.is_action_just_released(action)
+
+func _publish_goop(position, yaw, burst):
+	if is_instance_valid(playerPuppet) and NetworkBridge.check_connection():
+		NetworkBridge.n_rpc(playerPuppet, "sync_goop", [position, yaw, burst])
+
+func _admin_god():
+	return preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG and has_meta("admin_god") and get_meta("admin_god")

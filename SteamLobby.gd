@@ -1,6 +1,6 @@
 extends Node
 
-const BUILD_ID = "reconstructed-20260925-lobby-code-1"
+const BUILD_ID = "reconstructed-20260926-host-commands-1"
 
 signal player_joined_lobby(steam_id)
 signal player_left_lobby(steam_id)
@@ -236,6 +236,7 @@ func _on_lobby_created(connect, lobby_id):
 	print("Lobby Created called")
 	_creating_lobby = false
 	if connect == 1:
+		Multiplayer.Commands.reset_session()
 		_steam_lobby_id = lobby_id
 		_lobby_code = _make_lobby_code()
 		print("Created Steam Lobby with id: %s" % lobby_id)
