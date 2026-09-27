@@ -112,13 +112,12 @@ func activity():
 	var index = Global.CURRENT_LEVEL
 	var title = _level_name(index) if in_level else "Main Menu"
 	var portrait = "level_%02d" % index if in_level and index >= 0 and index < Global.LEVELS.size() else "game_icon"
-	var status = "Targets: %d/%d" % [Global.objectives, max(Global.objectives, Global.objectives_total)] if in_level else "Main Menu"
+	var status = mission_counter() if in_level else "Main Menu"
 	var difficulty = preload("res://MOD_CONTENT/CruS Online/DifficultyLabel.gd").describe(Global.soul_intact, Global.husk_mode, Global.hope_discarded, Global.punishment_mode, Global.chaos_mode).replace("Host difficulty: ", "")
 	var result = {"details": status, "state": "Playing Online" if online else "Playing Singleplayer", "assets": {"large_image": portrait, "large_text": title if in_level else "Cruelty Squad", "small_image": "loading_screen", "small_text": difficulty}, "buttons": [{"label": "Get on Steam", "url": "https://store.steampowered.com/app/1388770/Cruelty_Squad/"}, {"label": "Play Online", "url": "http://purgateam.com/projects/crus-online-reconstructed/index.html"}]}
 	if online:
-		var capacity = 17
+		var capacity = int(session.hostSettings.get("maxPlayers", 16))
 		if bridge.is_steam():
-			capacity = 16
 			var steam = session.SteamInit.Steam
 			if steam.has_method("getLobbyMemberLimit"):
 				capacity = max(1, steam.getLobbyMemberLimit(session.SteamLobby.get_lobby_id()))
@@ -131,6 +130,16 @@ func activity():
 				result["instance"] = true
 				result.erase("buttons")
 	return result
+
+func mission_counter():
+	if session.Deathmatch.is_active():
+		var roster = session.Flow.world.get("participants", session.players.keys())
+		if roster.empty(): roster = session.players.keys()
+		var alive = 0
+		for peer in roster:
+			if session.players.has(peer) and not session.died_players.has(peer) and not session.Flow.waiting_peers.has(peer): alive += 1
+		return "Players: %d/%d" % [alive, roster.size()]
+	return "Targets: %d/%d" % [max(0, Global.objectives), max(Global.objectives, Global.objectives_total)]
 
 func _write_state():
 	var serialized = to_json(activity())

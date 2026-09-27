@@ -1,6 +1,6 @@
 extends Node
 
-const BUILD_ID = "reconstructed-20260926-host-commands-1"
+const BUILD_ID = "reconstructed-20260927-host-drops-capacity-1"
 
 signal player_joined_lobby(steam_id)
 signal player_left_lobby(steam_id)
@@ -202,6 +202,7 @@ func publish_lobby_settings():
 	if not in_lobby() or not is_owner():
 		return
 	var lobby_id = get_lobby_id()
+	SteamInit.Steam.setLobbyMemberLimit(lobby_id, int(Multiplayer.hostSettings.get("maxPlayers", 16)))
 	SteamInit.Steam.setLobbyData(lobby_id, "name", valid_lobby_name(Multiplayer.config.get("hostLobbyName", "")))
 	SteamInit.Steam.setLobbyData(lobby_id, "mode", str(Multiplayer.hostSettings.get("gameMode", "cruelty")))
 	var lobby_type = str(Multiplayer.config.get("hostLobbyType", "public"))

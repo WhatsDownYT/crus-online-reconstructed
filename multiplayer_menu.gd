@@ -42,6 +42,8 @@ var counterop_settings_descriptions = {
 }
 var host_tooltips = {
 	"LobbyName": "The name shown for your Steam lobby. An empty or invalid name uses your Steam name.",
+	"MaxPlayers": "Maximum players in the lobby, including the host. Steam supports up to 250; LAN supports up to 4096. Large lobbies require more processing and bandwidth.",
+	"DropWeaponsOnDeath": "Drop both carried weapons when a player dies so anyone in the lobby can pick them up.",
 	"LobbyType": "Public lobbies appear in the browser. Friends Only allows Steam friends to join. Private requires a code or Discord invite.",
 	"Port": "The network port used when hosting a LAN lobby.",
 	"TickRate": "How often the host processes multiplayer synchronization ticks. Lower values update more frequently.",
@@ -126,6 +128,8 @@ func _ready():
 	var host_rows = $CenterContainer/TabContainer/Host/VBoxContainer
 	host_rows.add_child(lobby_name_row)
 	host_rows.move_child(lobby_name_row, 1)
+	$CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers/CountEdit.value = Multiplayer.selected_player_limit()
+	$CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath/TickEdit.pressed = Multiplayer.config.get("dropWeaponsOnDeath", false)
 	if legacy_respawn:
 		Multiplayer.config.selfRespawn = bool(loadedConfigData.canRespawn)
 		Multiplayer.config.canRespawn = true
@@ -399,9 +403,14 @@ func save_host():
 	lobby_name_edit.text = Multiplayer.config.hostLobbyName
 	Multiplayer.config.saveProgress = cruelty_settings_tab.get_node("VBoxContainer/SaveProgress/TickEdit").pressed
 	Multiplayer.config.deathmatchSpawnNPCs = deathmatch_spawn_npcs.pressed
+	var capacity_edit = $CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers/CountEdit
+	capacity_edit.apply()
+	Multiplayer.config.maxPlayers = int(capacity_edit.value)
+	Multiplayer.config.dropWeaponsOnDeath = $CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath/TickEdit.pressed
 	Multiplayer.config.hostPort = int($CenterContainer/TabContainer/Host/VBoxContainer/Port/PortEdit.text)
 	var type_select = $CenterContainer/TabContainer/Host/VBoxContainer/LobbyType/TypeSelect
-	Multiplayer.config.hostLobbyType = str(type_select.get_item_metadata(type_select.selected))
+	if type_select.selected >= 0:
+		Multiplayer.config.hostLobbyType = str(type_select.get_item_metadata(type_select.selected))
 	Multiplayer.config.tickRate = int($CenterContainer/TabContainer/Host/VBoxContainer/TickRate/TickEdit.value)
 	
 	Multiplayer.config.canRespawn = $CrueltySettings/VBoxContainer/CanRespawn/TickEdit.pressed
@@ -604,6 +613,9 @@ func _sync_host_tab_visibility():
 			tabs.current_tab = 0
 		elif is_instance_valid(selected):
 			tabs.current_tab = selected.get_index()
+	var capacity_edit = $CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers/CountEdit
+	capacity_edit.max_value = Multiplayer.player_limit_ceiling()
+	capacity_edit.min_value = max(2, Multiplayer.players.size()) if Multiplayer.NetworkBridge.check_connection() and Multiplayer.NetworkBridge.is_world_authority() else 2
 	if lobby_type_mode_shown != Multiplayer.NetworkBridge.is_steam():
 		_sync_lobby_type_options()
 

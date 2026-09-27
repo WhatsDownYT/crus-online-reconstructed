@@ -1,9 +1,11 @@
 extends Node
 
 const Codec = preload("res://MOD_CONTENT/CruS Online/VoiceCodec.gd")
+const Effects = preload("res://MOD_CONTENT/CruS Online/VoiceEffects.gd")
+enum BusEffect {PITCH, FILTER, DISTORTION, DELAY, REVERB, WATER}
 const CHANNEL = 2
 const HEADER = 26
-const VERSION = 3
+const VERSION = 4
 const STATE = 0
 const AUDIO = 1
 const TALK_ICON = preload("res://Textures/Menu/Civ_Mouth/2.png")
@@ -46,6 +48,8 @@ var input_gate = false
 var local_dead = false
 var local_water = false
 var voice_buses = {}
+var voice_effects = {}
+var local_effect_mask = 0
 
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
@@ -114,6 +118,7 @@ func reset_session():
 	session_host = 0
 	generation += 1
 	sequence = 0
+	local_effect_mask = 0
 	last_talk = -1000
 	voice_until = 0
 
@@ -131,7 +136,9 @@ func _process(delta):
 		announce_elapsed = 1.0
 	var dead_now = is_instance_valid(Global.get("player")) and (Global.player.get("dead") == true)
 	var water_now = is_instance_valid(Global.get("player")) and (Global.player.get("water") == true)
-	if dead_now != local_dead or water_now != local_water:
+	var effects_now = local_voice_mask(dead_now)
+	if dead_now != local_dead or water_now != local_water or effects_now != local_effect_mask:
+		local_effect_mask = effects_now
 		local_dead = dead_now
 		local_water = water_now
 		announce()
@@ -279,13 +286,13 @@ func announce():
 	var local = bridge.get_id()
 	var previous = peers.get(local, {})
 	var dead_since = int(previous.get("dead_since", OS.get_ticks_msec())) if previous.get("dead", false) == local_dead else OS.get_ticks_msec()
-	peers[local] = {"enabled": settings.enabled, "generation": generation, "sequence": sequence, "talk": last_talk, "dead": local_dead, "dead_since": dead_since, "water": local_water}
-	_send(_packet(STATE, local, generation, 0, PoolByteArray([1 if settings.enabled else 0, 1 if local_dead else 0, 1 if local_water else 0])), true)
+	peers[local] = {"enabled": settings.enabled, "generation": generation, "sequence": sequence, "talk": last_talk, "dead": local_dead, "dead_since": dead_since, "water": local_water, "effects": local_effect_mask}
+	_send(_packet(STATE, local, generation, 0, state_bytes(settings.enabled, local_dead, local_water, local_effect_mask)), true)
 	if bridge.is_world_authority():
 		for peer in peers:
 			if peer != local and Multiplayer.players.has(peer):
 				var state = peers[peer]
-				_send(_packet(STATE, peer, state.generation, 0, PoolByteArray([1 if state.enabled else 0, 1 if state.get("dead", false) else 0, 1 if state.get("water", false) else 0])), true)
+				_send(_packet(STATE, peer, state.generation, 0, state_bytes(state.enabled, state.get("dead", false), state.get("water", false), state.get("effects", 0))), true)
 
 func send_audio(data):
 	if not connected or not lobby_enabled() or not settings.enabled or data.size() != Codec.BYTES:
@@ -363,16 +370,18 @@ func _accept(sender, packet):
 		return
 	var state = peers.get(peer, {"enabled": false, "generation": -1, "sequence": -1, "talk": -1000})
 	if kind == STATE:
-		if not packet.size() in [HEADER + 1, HEADER + 2, HEADER + 3] or packet[HEADER] > 1 or epoch < state.generation:
+		if not packet.size() in [HEADER + 1, HEADER + 2, HEADER + 3, HEADER + 5] or packet[HEADER] > 1 or epoch < state.generation:
 			return
 		if packet.size() >= HEADER + 2 and packet[HEADER + 1] > 1:
 			return
 		var dead = packet.size() >= HEADER + 2 and packet[HEADER + 1] == 1
 		if dead != state.get("dead", false):
 			state.dead_since = now
-		if packet.size() == HEADER + 3 and packet[HEADER + 2] > 1:
+		if packet.size() >= HEADER + 3 and packet[HEADER + 2] > 1:
 			return
-		state.water = packet.size() == HEADER + 3 and packet[HEADER + 2] == 1
+		state.water = packet.size() >= HEADER + 3 and packet[HEADER + 2] == 1
+		state.effects = int(packet[HEADER + 3]) | (int(packet[HEADER + 4]) << 8) if packet.size() == HEADER + 5 else 0
+		if state.effects & ~Effects.ALL: return
 		state.dead = dead
 		var enabled = packet[HEADER] == 1
 		if epoch != state.generation or not enabled:
@@ -399,7 +408,7 @@ func _accept(sender, packet):
 
 func _queue_audio(peer, data):
 	var spatial = spatial_voice(peer, bridge.get_id())
-	if sinks.has(peer) and sinks[peer].spatial != spatial:
+	if sinks.has(peer) and (sinks[peer].spatial != spatial or sinks[peer].mask != effect_mask(peer)):
 		_drop_sink(peer)
 	if not sinks.has(peer):
 		var stream = AudioStreamGenerator.new()
@@ -415,8 +424,9 @@ func _queue_audio(peer, data):
 		add_child(player)
 		_update_voice_effects(peer)
 		player.play()
-		sinks[peer] = {"spatial": spatial, "player": player, "playback": player.get_stream_playback(), "queue": [], "start": OS.get_ticks_msec(), "started": false}
+		sinks[peer] = {"spatial": spatial, "player": player, "playback": player.get_stream_playback(), "queue": [], "start": OS.get_ticks_msec(), "started": false, "effects": Effects.new(), "mask": effect_mask(peer), "layers": []}
 	var sink = sinks[peer]
+	if sink.layers.empty(): _create_voice_layers(peer, sink)
 	if sink.queue.size() >= 6:
 		sink.queue.pop_front()
 		dropped_frames += 1
@@ -428,31 +438,46 @@ func _update_playback():
 		AudioServer.set_bus_mute(AudioServer.get_bus_index(voice_buses[peer]), not can_hear(peer, bridge.get_id()) or is_muted(peer) or settings.volume <= 0)
 	var now = OS.get_ticks_msec()
 	for peer in sinks.keys():
-		if not peers.has(peer) or now - peers[peer].talk > 400 or is_muted(peer) or settings.volume <= 0 or not can_hear(peer, bridge.get_id()) or sinks[peer].spatial != spatial_voice(peer, bridge.get_id()):
+		if not peers.has(peer) or now - peers[peer].talk > (1150 if effect_mask(peer) & Effects.ABOMINATOR else 650) or is_muted(peer) or settings.volume <= 0 or not can_hear(peer, bridge.get_id()) or sinks[peer].spatial != spatial_voice(peer, bridge.get_id()) or sinks[peer].mask != effect_mask(peer):
 			_drop_sink(peer)
 			continue
 		var sink = sinks[peer]
 		_update_voice_effects(peer)
 		if sink.spatial:
-			sink.player.unit_size = 10.0 if peers.get(peer, {}).get("dead", false) else 8.0
-			sink.player.max_distance = 55.0 if peers.get(peer, {}).get("dead", false) else 45.0
+			sink.player.unit_size = (10.0 if peers.get(peer, {}).get("dead", false) else 8.0) * (0.5 if sink.mask & Effects.STEALTH else 1.0)
+			sink.player.max_distance = (55.0 if peers.get(peer, {}).get("dead", false) else 45.0) * (0.5 if sink.mask & Effects.STEALTH else 1.0)
 			sink.player.global_transform.origin = voice_actor(peer).global_transform.origin
 			sink.player.unit_db = linear2db(settings.volume / 100.0)
 		else:
 			sink.player.volume_db = linear2db(settings.volume / 100.0)
 		if not sink.started and sink.queue.size() < 3 and now - sink.start < 60:
 			continue
+		_update_voice_layers(sink)
 		sink.started = true
 		for _i in range(4):
-			if sink.queue.empty() or not sink.playback.can_push_buffer(Codec.FRAMES):
+			if not sink.playback.can_push_buffer(Codec.FRAMES): break
+			var frames
+			if not sink.queue.empty():
+				frames = Codec.decode(sink.queue.pop_front())
+			elif sink.mask & Effects.ABOMINATOR and now - peers[peer].talk > 80:
+				frames = PoolVector2Array()
+				frames.resize(Codec.FRAMES)
+			else:
 				break
-			var frames = Codec.decode(sink.queue.pop_front())
 			if frames.size() == Codec.FRAMES:
+				frames = sink.effects.process(frames, sink.mask)
 				sink.playback.push_buffer(frames)
+				for layer in sink.layers:
+					if layer.playback.can_push_buffer(Codec.FRAMES): layer.playback.push_buffer(frames)
 				played_frames += 1
 
 func _drop_sink(peer):
 	if sinks.has(peer):
+		for layer in sinks[peer].layers:
+			layer.player.stop()
+			layer.player.queue_free()
+			var index = AudioServer.get_bus_index(layer.bus)
+			if index >= 0: AudioServer.remove_bus(index)
 		sinks[peer].player.stop()
 		sinks[peer].player.queue_free()
 		sinks.erase(peer)
@@ -535,12 +560,12 @@ func result_screen():
 	return flow != null and flow.result_active
 
 func enter_results():
+	_clear_sinks()
 	for peer in voice_buses:
 		var index = AudioServer.get_bus_index(voice_buses[peer])
 		if index >= 0:
-			AudioServer.set_bus_effect_enabled(index, 0, false)
-			AudioServer.set_bus_effect_enabled(index, 1, false)
-	_clear_sinks()
+			for effect in range(AudioServer.get_bus_effect_count(index)):
+				AudioServer.set_bus_effect_enabled(index, effect, false)
 
 func _voice_bus(peer):
 	if voice_buses.has(peer):
@@ -550,6 +575,26 @@ func _voice_bus(peer):
 	var index = AudioServer.bus_count - 1
 	AudioServer.set_bus_name(index, bus_name)
 	AudioServer.set_bus_send(index, "CruS Voice")
+	var pitch = AudioEffectPitchShift.new()
+	pitch.fft_size = AudioEffectPitchShift.FFT_SIZE_1024
+	pitch.oversampling = 4
+	AudioServer.add_bus_effect(index, pitch)
+	var filter = AudioEffectLowPassFilter.new()
+	filter.db = AudioEffectFilter.FILTER_24DB
+	AudioServer.add_bus_effect(index, filter)
+	var distortion = AudioEffectDistortion.new()
+	distortion.mode = AudioEffectDistortion.MODE_WAVESHAPE
+	distortion.drive = 0.92
+	distortion.pre_gain = 12.0
+	distortion.post_gain = -16.0
+	distortion.keep_hf_hz = 20000.0
+	AudioServer.add_bus_effect(index, distortion)
+	var delay = AudioEffectDelay.new()
+	delay.set("tap1/delay_ms", 16.0)
+	delay.set("tap1/level_db", -7.0)
+	delay.set("tap1/pan", 0.0)
+	delay.set("tap2/active", false)
+	AudioServer.add_bus_effect(index, delay)
 	var reverb = AudioEffectReverb.new()
 	reverb.room_size = 0.8
 	reverb.damping = 0.5
@@ -560,13 +605,84 @@ func _voice_bus(peer):
 	water_filter.cutoff_hz = 400.0
 	water_filter.db = AudioEffectFilter.FILTER_24DB
 	AudioServer.add_bus_effect(index, water_filter)
+	voice_effects[peer] = {"pitch": pitch, "filter": filter}
 	voice_buses[peer] = bus_name
 	return bus_name
 
 func _update_voice_effects(peer):
 	var index = AudioServer.get_bus_index(_voice_bus(peer))
-	AudioServer.set_bus_effect_enabled(index, 0, not result_screen() and peers.get(peer, {}).get("dead", false))
-	AudioServer.set_bus_effect_enabled(index, 1, not result_screen() and (local_water or peers.get(peer, {}).get("water", false)))
+	var active = effects_in_mission()
+	var mask = effect_mask(peer)
+	var dead = peers.get(peer, {}).get("dead", false)
+	AudioServer.set_bus_effect_enabled(index, BusEffect.REVERB, active and dead)
+	AudioServer.set_bus_effect_enabled(index, BusEffect.WATER, active and (local_water or peers.get(peer, {}).get("water", false)))
+	var scale = Effects.pitch(mask, OS.get_ticks_msec() * 0.001)
+	voice_effects[peer].pitch.pitch_scale = scale
+	voice_effects[peer].filter.cutoff_hz = Effects.cutoff(mask)
+	AudioServer.set_bus_effect_enabled(index, BusEffect.PITCH, mask != 0 and (abs(scale - 1.0) > 0.001 or (mask & Effects.GOO) != 0))
+	AudioServer.set_bus_effect_enabled(index, BusEffect.FILTER, (mask & (Effects.HELMET | Effects.HAZMAT | Effects.BIOSUIT)) != 0)
+	AudioServer.set_bus_effect_enabled(index, BusEffect.DISTORTION, (mask & Effects.BIOSUIT) != 0)
+	AudioServer.set_bus_effect_enabled(index, BusEffect.DELAY, (mask & Effects.BIOSUIT) != 0)
+
+func effects_in_mission():
+	return not result_screen() and is_instance_valid(Global.get("menu")) and Global.menu.in_game and Multiplayer.player_scene_loaded and Global.loader == null
+
+func local_voice_mask(dead):
+	if not effects_in_mission() or not is_instance_valid(Global.get("player")): return 0
+	if dead: return local_effect_mask
+	var implants = Global.implants
+	return Effects.mask_for([implants.head_implant, implants.torso_implant, implants.arm_implant, implants.leg_implant], Global.player.max_gravity < 0, Global.player.helmet_flag)
+
+func effect_mask(peer):
+	if not effects_in_mission(): return 0
+	if peers.get(peer, {}).get("dead", false):
+		if peers.get(bridge.get_id(), {}).get("dead", false) or not spatial_voice(peer, bridge.get_id()): return 0
+	return int(peers.get(peer, {}).get("effects", 0)) & Effects.ALL
+
+func state_bytes(enabled, dead, water, mask):
+	return PoolByteArray([1 if enabled else 0, 1 if dead else 0, 1 if water else 0, mask & 255, (mask >> 8) & 255])
+
+func _create_voice_layers(peer, sink):
+	var copies = 1 if sink.mask & Effects.GOLEM else (2 if sink.mask & Effects.BOUNCY else 0)
+	for copy in range(copies):
+		var bus = "CruS Layer %s %s" % [peer, copy]
+		AudioServer.add_bus()
+		var index = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(index, bus)
+		AudioServer.set_bus_send(index, voice_buses[peer])
+		AudioServer.set_bus_volume_db(index, -8.0 if sink.mask & Effects.GOLEM else (-10.0 - copy * 4.0))
+		var pitch = AudioEffectPitchShift.new()
+		pitch.fft_size = AudioEffectPitchShift.FFT_SIZE_1024
+		pitch.oversampling = 4
+		pitch.pitch_scale = 0.56 if sink.mask & Effects.GOLEM else rand_range(0.65, 1.6)
+		AudioServer.add_bus_effect(index, pitch)
+		var delay = AudioEffectDelay.new()
+		delay.dry = 0.0
+		delay.set("tap1/delay_ms", 12.0 if sink.mask & Effects.GOLEM else (45.0 + copy * 40.0))
+		delay.set("tap1/level_db", 0.0)
+		delay.set("tap1/pan", 0.0 if sink.mask & Effects.GOLEM else (-0.85 if copy == 0 else 0.85))
+		delay.set("tap2/active", false)
+		AudioServer.add_bus_effect(index, delay)
+		var player = AudioStreamPlayer3D.new() if sink.spatial else AudioStreamPlayer.new()
+		player.stream = sink.player.stream
+		player.bus = bus
+		add_child(player)
+		player.play()
+		sink.layers.append({"player": player, "playback": player.get_stream_playback(), "bus": bus, "pitch": pitch, "next_pitch": 0})
+
+func _update_voice_layers(sink):
+	for layer in sink.layers:
+		if sink.spatial:
+			layer.player.global_transform = sink.player.global_transform
+			layer.player.unit_size = sink.player.unit_size
+			layer.player.max_distance = sink.player.max_distance
+			layer.player.max_db = sink.player.max_db
+			layer.player.unit_db = sink.player.unit_db
+		else:
+			layer.player.volume_db = sink.player.volume_db
+		if sink.mask & Effects.BOUNCY and OS.get_ticks_msec() >= layer.next_pitch:
+			layer.pitch.pitch_scale = rand_range(0.65, 1.6)
+			layer.next_pitch = OS.get_ticks_msec() + 85
 
 func _remove_voice_bus(peer):
 	if voice_buses.has(peer):
@@ -574,3 +690,4 @@ func _remove_voice_bus(peer):
 		if index >= 0:
 			AudioServer.remove_bus(index)
 		voice_buses.erase(peer)
+		voice_effects.erase(peer)

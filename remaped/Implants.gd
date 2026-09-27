@@ -563,7 +563,7 @@ func _ready():
 	new_implant.head = true
 	new_implant.hidden = true
 	new_implant.shrink = true
-	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/Cortical Scaledown+.png")
+	new_implant.texture = load("res://Textures/Menu/Implants/scaledown.png")
 	
 	IMPLANTS.append(new_implant)
 

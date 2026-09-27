@@ -35,7 +35,7 @@ func prepare_mission():
 	used_orbs.clear()
 	waiting_peers.clear()
 	Multiplayer.first_aid_used.clear()
-	world = {"rain": rand_range(0, 100) > 90 or Global.implants.head_implant.fishing_bonus, "hour": OS.get_time().hour, "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty(), "ending_2": Global.ending_2}
+	world = {"participants": Multiplayer.players.keys(), "rain": rand_range(0, 100) > 90 or Global.implants.head_implant.fishing_bonus, "hour": OS.get_time().hour, "share": Multiplayer.hostSettings.get("shareDifficulty", false), "difficulty": difficulty(), "ending_2": Global.ending_2}
 	configure_world(null, world)
 	NetworkBridge.n_rpc(self, "configure_world", [world])
 

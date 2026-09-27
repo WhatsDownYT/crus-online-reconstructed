@@ -1320,6 +1320,7 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 		$SFX / IED2.stop()
 		$SFX / IED_alert.stop()
 		return 
+	GLOBAL.get_node("Multiplayer").drop_local_death_weapons()
 	dead = true
 	died = true
 	grab_hand.hide()

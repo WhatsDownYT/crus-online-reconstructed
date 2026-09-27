@@ -724,6 +724,19 @@ size_flags_horizontal = 3
 theme = ExtResource( 24 )
 align = 1
 
+[node name="MaxPlayers" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers"]
+size_flags_horizontal = 3
+text = "Max players:"
+
+[node name="CountEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers"]
+theme = ExtResource( 24 )
+min_value = 2.0
+max_value = 4096.0
+value = 16.0
+align = 1
+
 [node name="Port" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
 margin_top = 72.0
 margin_right = 641.0
@@ -825,6 +838,18 @@ text = "Friendly Fire:"
 rect_min_size = Vector2( 50, 0 )
 theme = ExtResource( 24 )
 pressed = true
+text = "<<"
+
+[node name="DropWeaponsOnDeath" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath"]
+size_flags_horizontal = 3
+text = "Drop weapons on death:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = false
 text = "<<"
 
 [node name="useVoiceChat" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]

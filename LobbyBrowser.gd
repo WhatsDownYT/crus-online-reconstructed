@@ -41,8 +41,9 @@ func _ready():
 	LobbyCode.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
 func create_lobby():
+	Multiplayer.apply_host_settings()
 	connecting = true
-	SteamLobby.create_lobby(2 if Multiplayer.config.get("hostLobbyType", "public") == "public" else 3, 16)
+	SteamLobby.create_lobby(2 if Multiplayer.config.get("hostLobbyType", "public") == "public" else 3, Multiplayer.selected_player_limit())
 	_show_connecting("Creating lobby...")
 
 func lobby_join_requested(id, code = ""):

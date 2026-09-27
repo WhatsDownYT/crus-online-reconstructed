@@ -1,9 +1,11 @@
 extends Node
 
 var version = "v1.0"
+const STEAM_MAX_PLAYERS = 250
+const LAN_MAX_PLAYERS = 4096
 var Commands
 
-enum errorType {UNKNOW, TIME_OUT, WRONG_VERSION, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED}
+enum errorType {UNKNOW, TIME_OUT, WRONG_VERSION, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED, LOBBY_FULL}
 
 var profile_loaded = false
 var playerInfo = {
@@ -22,6 +24,8 @@ var hostSettings = {
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
 	"friendlyFire": true,
+	"dropWeaponsOnDeath": false,
+	"maxPlayers": 16,
 	"gameMode": "cruelty",
 	"deathmatchSpawnNPCs": true,
 	"saveProgress": true,
@@ -49,6 +53,8 @@ var config = {
 	"changeModeOnDeath": true,
 	"shareDifficulty": false,
 	"friendlyFire": true,
+	"dropWeaponsOnDeath": false,
+	"maxPlayers": 16,
 	"useVoiceChat": true,
 	"proximityVoiceChat": true,
 	"hearDeadPlayers": false
@@ -59,6 +65,9 @@ var dataLoaded = false
 var players = {}
 var player_holds = {}
 var first_aid_used = {}
+var death_weapon_reports = {}
+var death_weapons_dropped = {}
+var death_weapon_sequence = 0
 
 var playerPuppet = null
 var _announce_difficulty = false
@@ -162,6 +171,7 @@ func _ready():
 		["apply_team_wipe", SteamNetwork.PERMISSION.SERVER],
 		["reward_npc_kill", SteamNetwork.PERMISSION.SERVER],
 		["spawn_enemy_weapon", SteamNetwork.PERMISSION.SERVER],
+		["report_death_weapons", SteamNetwork.PERMISSION.ALL],
 		["_player_respawn", SteamNetwork.PERMISSION.ALL],
 		["_request_player_revive", SteamNetwork.PERMISSION.ALL],
 		["sync_revive_state", SteamNetwork.PERMISSION.SERVER],
@@ -280,7 +290,19 @@ func clear_connection(recivedError):
 	
 	leave_server()
 
+func player_limit_ceiling():
+	var transport = NetworkBridge if is_instance_valid(NetworkBridge) else get_node_or_null("NetworkBridge")
+	return STEAM_MAX_PLAYERS if is_instance_valid(transport) and transport.is_steam() else LAN_MAX_PLAYERS
+
+func selected_player_limit():
+	return int(clamp(config.get("maxPlayers", 16), 2, player_limit_ceiling()))
+
+func lobby_is_full(peer = 0):
+	return not players.has(peer) and players.size() >= int(hostSettings.get("maxPlayers", 16))
+
 func apply_host_settings():
+	hostSettings.maxPlayers = max(selected_player_limit(), players.size() if NetworkBridge.is_world_authority() else 2)
+	hostSettings.dropWeaponsOnDeath = bool(config.get("dropWeaponsOnDeath", false))
 	hostSettings.bannedImplants = config.bannedImplants.duplicate()
 	hostSettings.deathmatchSpawnNPCs = config.get("deathmatchSpawnNPCs", true)
 	hostSettings.saveProgress = config.saveProgress
@@ -331,7 +353,10 @@ func host_server():
 		$Debug/VBoxContainer/GameType.text = "Player is host"
 		
 		var server = NetworkedMultiplayerENet.new()
-		server.create_server(config.hostPort, 16)
+		var server_error = server.create_server(config.hostPort, LAN_MAX_PLAYERS - 1)
+		if server_error != OK:
+			clear_connection(errorType.SERVER_CLOSED)
+			return
 		get_tree().set_network_peer(server)
 		apply_host_settings()
 
@@ -372,6 +397,8 @@ func leave_server():
 	player_scene_loaded = true
 	loaded_players.clear()
 	died_players.clear()
+	death_weapon_reports.clear()
+	death_weapons_dropped.clear()
 	clear_player_holds()
 	revives_used.clear()
 	revive_authorizations.clear()
@@ -446,6 +473,8 @@ puppet func disconnected(id):
 		
 		if NetworkBridge.is_world_authority():
 			_release_holds_for_peer(int(id))
+		death_weapon_reports.erase(id)
+		death_weapons_dropped.erase(id)
 		players.erase(id)
 		revives_used.erase(int(id))
 		revive_authorizations.erase(int(id))
@@ -478,6 +507,9 @@ master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo):
 	id = NetworkBridge.request_sender(id)
 	if not NetworkBridge.is_world_authority() or Commands.is_banned(id) or Commands.removed.has(id):
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.SERVER_CLOSED])
+		return
+	if lobby_is_full(id):
+		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.LOBBY_FULL])
 		return
 	if recivedVersion != version:
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.WRONG_VERSION])
@@ -719,6 +751,8 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	Flow.clear_result()
 	Flow.waiting_peers.clear()
 	died_players.clear()
+	death_weapon_reports.clear()
+	death_weapons_dropped.clear()
 	clear_player_holds()
 	reset_revive_state()
 	team_wipe_applied = false
@@ -1098,6 +1132,7 @@ master func _player_died(id, killer_id = 0, host = false):
 		return
 	_release_holds_for_peer(id)
 	died_players.append(id)
+	_commit_death_weapons(id)
 	reward_multiplayer_kill(killer_id, id)
 	revive_authorizations.erase(id)
 	sync_player_life(null, id, true)
@@ -1121,6 +1156,54 @@ master func _player_died(id, killer_id = 0, host = false):
 		set_death_label(null)
 		NetworkBridge.n_rpc(self, "set_death_label")
 
+func drop_local_death_weapons():
+	if not NetworkBridge.check_connection() or not hostSettings.get("dropWeaponsOnDeath", false) or not is_instance_valid(Global.player): return
+	var weapon = Global.player.weapon
+	var weapons = []
+	for slot in [weapon.weapon1, weapon.weapon2]:
+		if slot != null and typeof(slot) == TYPE_INT and slot >= 0 and slot < weapon.MAX_MAG_AMMO.size():
+			var duplicate = false
+			for item in weapons:
+				if item[0] == slot: duplicate = true
+			if not duplicate: weapons.append([slot, int(weapon.magazine_ammo[slot])])
+	NetworkBridge.request_host(self, "report_death_weapons", [weapons, SteamNetwork.scene_epoch])
+	weapon.weapon1 = null
+	weapon.weapon2 = null
+	weapon.current_weapon = null
+	if is_instance_valid(playerPuppet):
+		playerPuppet.set_current_weapon(null, null)
+		NetworkBridge.n_rpc(playerPuppet, "set_current_weapon", [null])
+
+master func report_death_weapons(sender, weapons, epoch):
+	var peer = NetworkBridge.request_sender(sender)
+	if not NetworkBridge.is_world_authority() or not players.has(peer) or not hostSettings.get("dropWeaponsOnDeath", false) or epoch != SteamNetwork.scene_epoch or not player_scene_loaded or Flow.waiting_peers.has(peer) or death_weapons_dropped.has(peer): return
+	if typeof(weapons) != TYPE_ARRAY or weapons.size() > 2: return
+	var validated = []
+	for item in weapons:
+		if typeof(item) != TYPE_ARRAY or item.size() != 2 or typeof(item[0]) != TYPE_INT or typeof(item[1]) != TYPE_INT or item[0] < 0 or item[0] >= Global.player.weapon.MAX_MAG_AMMO.size(): return
+		for previous in validated:
+			if previous[0] == item[0]: return
+		validated.append([item[0], int(clamp(item[1], 0, max(0, Global.player.weapon.MAX_MAG_AMMO[item[0]])))])
+	death_weapon_reports[peer] = validated
+	if died_players.has(peer): _commit_death_weapons(peer)
+
+func _commit_death_weapons(peer):
+	if not death_weapon_reports.has(peer) or death_weapons_dropped.has(peer): return
+	death_weapons_dropped[peer] = true
+	var actor = _revive_actor(peer)
+	if not is_instance_valid(actor) or not is_instance_valid(Global.current_scene): return
+	var position = actor.global_transform.origin + Vector3.UP * 0.7
+	var weapons = death_weapon_reports[peer]
+	death_weapon_reports.erase(peer)
+	for index in range(weapons.size()):
+		var item = weapons[index]
+		death_weapon_sequence += 1
+		var name = "DeathWeapon_%s_%s_%s" % [SteamNetwork.scene_epoch, peer, death_weapon_sequence]
+		var velocity = Vector3(-2.0 if index == 0 else 2.0, 2.0, 0)
+		var parent_path = Global.current_scene.get_path()
+		spawn_enemy_weapon(NetworkBridge.get_host_id(), parent_path, position, velocity, item[0], item[1], name)
+		NetworkBridge.n_rpc(self, "spawn_enemy_weapon", [parent_path, position, velocity, item[0], item[1], name])
+
 puppet func spawn_enemy_weapon(id, parent_path, position, velocity, weapon_id, ammo, drop_name):
 	var destination = get_node_or_null(parent_path)
 	if destination == null or destination.has_node(NodePath(drop_name)):
@@ -1143,6 +1226,8 @@ puppet func sync_player_life(id, peer_id, is_dead):
 		if not died_players.has(peer_id):
 			died_players.append(peer_id)
 	else:
+		death_weapon_reports.erase(peer_id)
+		death_weapons_dropped.erase(peer_id)
 		died_players.erase(peer_id)
 		team_wipe_applied = false
 	var puppet = players[peer_id].get("puppet")
