@@ -13,14 +13,15 @@ args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'tools/build_discord.ps1')], check=True)
 prefix = 'MOD_CONTENT/CruS Online/'
-excluded = {'.git', 'dist', 'dist codex', 'docs', 'tests', 'tools', '__pycache__'}
+excluded = {'.git', 'dist', 'dist codex', 'docs', 'tests', 'tools', 'custom_missions', '__pycache__'}
 runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.png', '.jpg', '.jpeg', '.webp', '.svg',
                     '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader'}
 if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
     raise SystemExit('Choose an output folder separate from the installed mod.')
 with zipfile.ZipFile(args.base_package) as base:
     entries = {name: base.read(name) for name in base.namelist()
-               if not name.endswith('/') and not name.startswith(prefix)}
+               if not name.endswith('/') and not name.startswith(prefix)
+               and not name.startswith(('.import/greyface1.png-', '.import/greyface2.png-'))}
     entries.pop('Menu/Main_Menu.tscn.remap', None)
     entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remaped/Switch.gd"\n'
     for script in (root / 'compatibility/modbase').glob('*.gd'):
@@ -36,6 +37,8 @@ with zipfile.ZipFile(args.base_package) as base:
         relative = path.relative_to(root)
         if not path.is_file() or any(part in excluded for part in relative.parts):
             continue
+        if relative.parts[0] == 'maps' and relative.name != 'crus_online_lobby.tscn':
+            continue
         if path.suffix.lower() in runtime_suffixes or relative.as_posix() == 'discord/CruSDiscord.exe':
             entries[prefix + relative.as_posix()] = path.read_bytes()
     for name, data in entries.items():
@@ -46,6 +49,8 @@ with zipfile.ZipFile(args.base_package) as base:
     for path in root.rglob('*.import'):
         relative = path.relative_to(root)
         if any(part in excluded for part in relative.parts):
+            continue
+        if relative.parts[0] == 'maps':
             continue
         archive_name = prefix + relative.as_posix()
         original_name = archive_name.removesuffix('.import')
