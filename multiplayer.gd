@@ -117,9 +117,17 @@ var CounterOp
 var Deathmatch
 var Eyecam
 var MeritPump
+var Extensions
+var Content
 
 func _ready():
 	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: version += "-debug"
+	Extensions = preload("res://MOD_CONTENT/CruS Online/ExtensionCompatibility.gd").new()
+	Extensions.name = "ExtensionCompatibility"
+	add_child(Extensions)
+	Content = preload("res://MOD_CONTENT/CruS Online/LobbyContent.gd").new()
+	Content.name = "LobbyContent"
+	add_child(Content)
 	Commands = preload("res://MOD_CONTENT/CruS Online/HostCommands.gd").new()
 	Commands.name = "HostCommands"
 	add_child(Commands)
@@ -362,6 +370,8 @@ func host_server():
 
 		players[1] = playerInfo.duplicate(true)
 		CounterOp.host_player_joined(1)
+		if is_instance_valid(Global.menu):
+			Global.menu._ensure_counterop_overlay()
 		
 		emit_signal("players_update", players)
 		emit_signal("status_update", "Hosting server")
@@ -371,6 +381,7 @@ func host_server():
 
 func join_to_server(ip, port):
 	if NetworkBridge.is_lan():
+		Content.set_destination({"transport": "lan", "ip": str(ip), "port": int(port)})
 		config.lastIp = ip
 		config.lastPort = port
 		
@@ -383,6 +394,8 @@ func join_to_server(ip, port):
 		print("[CRUS ONLINE / MAIN]: Client try to connect")
 
 func leave_server():
+	if is_instance_valid(Content):
+		Content.reset()
 	Commands.reset_session()
 	if is_instance_valid(CounterOp):
 		CounterOp.reset_session()
@@ -449,6 +462,8 @@ func steam_peers_connect():
 		playerInfo.nickname = SteamInit.steam_username
 	players[NetworkBridge.get_host_id()] = playerInfo.duplicate(true)
 	CounterOp.host_player_joined(NetworkBridge.get_host_id())
+	if is_instance_valid(Global.menu):
+		Global.menu._ensure_counterop_overlay()
 	
 	$Debug/VBoxContainer/GameType.text = "Player is host"
 	NetworkBridge.n_rpc(self, "client_peer_connect")
@@ -458,9 +473,10 @@ puppet func client_peer_connect(id):
 	
 	if str(playerInfo.nickname).strip_edges().empty():
 		playerInfo.nickname = SteamInit.steam_username
-	NetworkBridge.n_rpc(self, "connect_init", [SteamLobby.join_code(), version, playerInfo])
+	Content.begin_join()
 
 puppet func disconnected(id):
+	Content.host_offers.erase(id)
 	if NetworkBridge.is_lan():
 		var playerPuppet = get_node_or_null("Players/" + str(id))
 		
@@ -496,13 +512,13 @@ puppet func connected(id):
 func _connect_lan_host():
 	if NetworkBridge.is_lan() and NetworkBridge.check_connection() and not dataLoaded and not NetworkBridge.is_world_authority():
 		if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: print("[CruS admin LAN handshake] peers=",get_tree().get_network_connected_peers()," status=",get_tree().network_peer.get_connection_status()," id=",get_tree().get_network_unique_id())
-		NetworkBridge.n_rpc_id(self, NetworkBridge.get_host_id(), "connect_init", ["", version, playerInfo])
+		Content.begin_join()
 		print("[CRUS ONLINE / CLIENT]: Connect Init")
 
 puppet func disconnect_client(id, recivedError):
 	call_deferred("clear_connection", recivedError)
 
-master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo):
+master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo, content_fingerprint = ""):
 	if preload("res://MOD_CONTENT/CruS Online/BuildFlags.gd").DEBUG: print("[CruS admin connection] sender=", NetworkBridge.request_sender(id), " version=", recivedVersion)
 	id = NetworkBridge.request_sender(id)
 	if not NetworkBridge.is_world_authority() or Commands.is_banned(id) or Commands.removed.has(id):
@@ -511,10 +527,14 @@ master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo):
 	if lobby_is_full(id):
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.LOBBY_FULL])
 		return
-	if recivedVersion != version:
+	if recivedVersion != version + ":content1":
 		NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.WRONG_VERSION])
 	else:
 		if not NetworkBridge.is_steam() or SteamLobby.can_join(id, received_code):
+			if not Content.ready_for_join() or content_fingerprint != Content.fingerprint():
+				Content.offer(id, recivedPlayerInfo, received_code)
+				return
+			Content.host_offers.erase(id)
 			NetworkBridge.n_rpc_id(self, id, "client_connect_init", [hostSettings, _public_players(), SteamLobby.lobby_code() if NetworkBridge.is_steam() else ""])
 			host_add_player(id, recivedPlayerInfo)
 			emit_signal("throw_error", errorType.PLAYER_CONNECTED)
@@ -745,6 +765,9 @@ func goto_scene_host(scene):
 	Players.load_players()
 
 puppet func goto_scene_client(id, scene, level, epoch = -1):
+	if level >= Extensions.BASE_LEVEL_COUNT and not Extensions.set_scene(scene):
+		Content.fail("The host's custom mission is unavailable. Reconnect to synchronize content.")
+		return
 	enforce_implant_bans()
 	Deathmatch.reset_round()
 	_menu_destination = ""
@@ -766,7 +789,8 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	Global.border.show()
 	
 	disable_menu()
-	Global.CURRENT_LEVEL = level
+	if level < Extensions.BASE_LEVEL_COUNT:
+		Global.CURRENT_LEVEL = level
 	Global.goto_scene(scene)
 	print("[CRUS ONLINE / CLIENT]: Goto to scene [" + scene + "]")
 	
@@ -1327,7 +1351,7 @@ func game_init(level) -> bool:
 	return false
 
 func get_menu_scene():
-	if NetworkBridge.check_connection():
+	if NetworkBridge.check_connection() and players.has(NetworkBridge.get_id()):
 		return "res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn"
 	return "res://Menu/Main_Menu.tscn"
 

@@ -12,9 +12,6 @@ var stats_tab_update_pending = false
 var host_tooltips_ready = false
 var credit_logos_ready = false
 var credits_overlay = null
-var credit_logo_nodes = []
-var credit_logo_positions = []
-var credit_spacer_texture = null
 var host_tab_shown = null
 var lobby_type_mode_shown = null
 var modes_tab_shown = null
@@ -140,11 +137,6 @@ func _ready():
 	Multiplayer.config.helpTimer = int(clamp(Multiplayer.config.helpTimer, 0, 3600))
 	Multiplayer.config.reviveLives = int(clamp(Multiplayer.config.reviveLives, 0, 5))
 	
-	var modloaderVersion = Global.get_node_or_null("Menu/ModLoaderVersion")
-	
-	if modloaderVersion != null:
-		modloaderVersion.hide()
-	
 	IpEdit.text = Multiplayer.config.lastIp
 	PortEdit.text = str(Multiplayer.config.lastPort)
 	
@@ -199,43 +191,30 @@ func _credit_wave_material():
 	material.shader = shader
 	return material
 
-func _credit_spacer():
-	if credit_spacer_texture != null:
-		return credit_spacer_texture
-	var image = Image.new()
-	image.create(1, 1, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0, 0, 0, 0))
-	credit_spacer_texture = ImageTexture.new()
-	credit_spacer_texture.create_from_image(image, 0)
-	return credit_spacer_texture
-
-func _add_credit_logo(rich, texture, width):
-	var texture_size = texture.get_size()
-	var height = int(round(float(width) * texture_size.y / max(texture_size.x, 1.0)))
-	var y = rich.get_content_height()
-	rich.add_image(_credit_spacer(), width, height)
+func _credit_logo(texture, width, height):
 	var logo = TextureRect.new()
 	logo.texture = texture
 	logo.expand = true
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	logo.rect_size = Vector2(width, height)
+	logo.rect_min_size = Vector2(width, height)
 	logo.material = _credit_wave_material()
-	rich.add_child(logo)
-	credit_logo_nodes.append(logo)
-	credit_logo_positions.append(float(y))
+	return logo
 
-func _update_credit_logo_positions():
-	if credit_logo_nodes.empty():
-		return
-	var rich = get_node_or_null("Credits/VBoxContainer/RichTextLabel")
-	if rich == null:
-		return
-	var scroll = rich.get_v_scroll().value
-	for index in range(credit_logo_nodes.size()):
-		var logo = credit_logo_nodes[index]
-		if is_instance_valid(logo):
-			logo.rect_position = Vector2((rich.rect_size.x - logo.rect_size.x) * 0.5, credit_logo_positions[index] - scroll)
+func _credit_text():
+	var rich = RichTextLabel.new()
+	rich.rect_min_size.x = 320
+	rich.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rich.fit_content_height = true
+	rich.scroll_active = false
+	rich.bbcode_enabled = true
+	var font = DynamicFont.new()
+	font.font_data = load("res://Fonts/gamefont(1).ttf")
+	font.size = 14
+	rich.add_font_override("normal_font", font)
+	rich.add_constant_override("line_separation", 6)
+	rich.connect("meta_clicked", credits_overlay, "meta_clicked")
+	return rich
 
 func _credit_link(rich, label, url):
 	rich.push_color(Color(0, 0, 1))
@@ -252,38 +231,50 @@ func _credit_maroon(rich, text):
 func _setup_credit_logos():
 	if credit_logos_ready:
 		return
-	var rich = get_node_or_null("Credits/VBoxContainer/RichTextLabel")
-	if rich == null:
+	var sections = get_node_or_null("Credits/VBoxContainer/Scroll/Sections")
+	if sections == null:
 		return
-	rich.clear()
-	rich.push_align(1)
+	var reconstructed = HBoxContainer.new()
+	reconstructed.name = "Reconstructed"
+	reconstructed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reconstructed.add_constant_override("separation", 8)
+	sections.add_child(reconstructed)
 	var reconstructed_logo = _load_runtime_texture("res://MOD_CONTENT/CruS Online/crus_online_reconstructed_logo.png")
 	if reconstructed_logo != null:
-		_add_credit_logo(rich, reconstructed_logo, 330)
-	rich.add_text("\nCreated by ")
-	_credit_link(rich, "PurgaTeam", "https://www.youtube.com/@PurgaTeam")
-	rich.add_text("\nDeveloped by ")
-	_credit_link(rich, "WhatsDown", "https://www.youtube.com/@WhatsDown")
-	rich.add_text("\n\n")
+		reconstructed.add_child(_credit_logo(reconstructed_logo, 288, 250))
+	var reconstructed_text = _credit_text()
+	reconstructed_text.name = "CreditsText"
+	reconstructed.add_child(reconstructed_text)
+	reconstructed_text.push_align(2)
+	reconstructed_text.add_text("Created by ")
+	_credit_link(reconstructed_text, "PurgaTeam", "https://www.youtube.com/@PurgaTeam")
+	reconstructed_text.add_text("\nDeveloped by ")
+	_credit_link(reconstructed_text, "WhatsDown", "https://www.youtube.com/@WhatsDown")
+	reconstructed_text.add_text("\nArt & Design by Chasmy\n\nSpecial Thanks\nPBF Guy: ")
+	_credit_maroon(reconstructed_text, "Idea assistance & playtesting")
+	reconstructed_text.add_text("\ncorvid12: ")
+	_credit_maroon(reconstructed_text, "Idea inspiration for Pneumatic Merit Pump")
+	reconstructed_text.add_text("\nschpaceman: ")
+	_credit_maroon(reconstructed_text, "Idea inspiration for Surveillance Eyecam")
+	reconstructed_text.pop()
+	var original = HBoxContainer.new()
+	original.name = "Original"
+	original.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	original.add_constant_override("separation", 8)
+	sections.add_child(original)
+	var original_text = _credit_text()
+	original_text.name = "CreditsText"
+	original.add_child(original_text)
+	original_text.add_text("Created & Developed by ")
+	_credit_link(original_text, "TRIGGERED P", "https://www.youtube.com/@triggeredp")
+	original_text.add_text("\n\nSpecial Thanks\nDX: ")
+	_credit_maroon(original_text, "Player animation assistance, Online menu icon art, playtesting")
+	original_text.add_text("\nXuesos (4cne): ")
+	_credit_maroon(original_text, "Playtesting")
 	var online_logo = _load_runtime_texture("res://MOD_CONTENT/CruS Online/crus_online_logo.png")
 	if online_logo != null:
-		_add_credit_logo(rich, online_logo, 330)
-	rich.add_text("\nCreated by ")
-	_credit_link(rich, "TriggeredP", "https://www.youtube.com/@triggeredp")
-	rich.add_text("\n\nSpecial Thanks")
-	rich.pop()
-	rich.add_text("\n\nDX: ")
-	_credit_maroon(rich, "Helped with animations for the player, menu icon and CruS Online testing")
-	rich.add_text("\n\nKeith Mason: ")
-	_credit_maroon(rich, "creator of Construct map")
-	rich.add_text("\n\nXuesos (4cne): ")
-	_credit_maroon(rich, "My IRL friend who helped me with CruS Online testing")
-	rich.add_text("\n\nChasmy: ")
-	_credit_maroon(rich, "Reconstructed testing")
-	rich.add_text("\n\nPBF Guy: ")
-	_credit_maroon(rich, "Reconstructed testing")
+		original.add_child(_credit_logo(online_logo, 288, 180))
 	credit_logos_ready = true
-	call_deferred("_update_credit_logo_positions")
 
 func status_update(new_status):
 	if new_status == "Offline":
@@ -332,6 +323,7 @@ func _setup_credits_overlay():
 	credits_overlay.hide()
 	var rich = credits_overlay.get_node("RichTextLabel")
 	credits_overlay.remove_child(rich)
+	rich.queue_free()
 	var texture_background = Panel.new()
 	texture_background.name = "TextureBackground"
 	texture_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -340,8 +332,16 @@ func _setup_credits_overlay():
 	var box = VBoxContainer.new()
 	box.name = "VBoxContainer"
 	credits_overlay.add_child(box)
-	box.add_child(rich)
-	rich.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var scroll = ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_stylebox_override("bg", StyleBoxEmpty.new())
+	box.add_child(scroll)
+	var sections = VBoxContainer.new()
+	sections.name = "Sections"
+	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sections.add_constant_override("separation", 20)
+	scroll.add_child(sections)
 	var back = Button.new()
 	back.name = "Back"
 	back.text = " Back "
@@ -370,7 +370,6 @@ func _close_credits(_tab = 0):
 
 func _physics_process(delta):
 	_update_stats_tab()
-	_update_credit_logo_positions()
 	if credits_overlay.visible:
 		_layout_credits_overlay()
 	if $CenterContainer.visible:

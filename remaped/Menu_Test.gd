@@ -28,7 +28,7 @@ var cancel = false
 enum {B_START, B_SETTINGS, B_QUIT, B_LEVEL, B_MISSION_START, 
 	B_WEAPON_1, B_WEAPON_2, B_CHARACTER, B_STOCKS, B_W_PISTOL, B_W_SMG, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, 
 	B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_TRANQ, B_W_BLACKJACK, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT, B_EX_MENU, B_EX_LEVEL_SELECT, B_RETURN, B_RETRY, B_BONUS,
-	B_MULTIPLAYER_MENU}
+	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS}
 const BUTTON_TEXTURES:Array = [preload("res://Textures/Menu/start_normal.png"), 
 									preload("res://Textures/Menu/settings_normal.png"), 
 									preload("res://Textures/Menu/OS_normal.png"), 
@@ -181,6 +181,12 @@ var menu:Array = []
 var active_menus:Array = []
 var active_element:Control
 var level_buttons:Array = []
+var all_level_buttons:Array = []
+var level_page_start = 0
+var level_page_history:Array = []
+var page_buttons:Array = []
+const CUSTOM_LEVEL_PAGE_SIZE = 20
+const CUSTOM_LEVEL_BASE = 19
 var current_menu = 0
 var current_weapon_select = 0
 var weapon_1 = 0
@@ -221,6 +227,9 @@ func _physics_process(delta):
 	_apply_competitive_start_gate()
 	_apply_online_level_lock()
 	_position_level_online_button()
+	var modloader_version = get_node_or_null("ModLoaderVersion")
+	if modloader_version != null:
+		modloader_version.visible = not in_game and not active_menus.empty() and active_menus.back() == menu[START]
 	time += 1
 	
 	if in_game:
@@ -293,10 +302,16 @@ func _ready():
 	$Settings / GridContainer / PanelContainer / VBoxContainer / InvertYAxis.pressed = Global.invert_y
 	for level in range(Global.LEVELS.size()):
 		var meta_file = File.new()
-		meta_file.open(Global.LEVEL_META[level], File.READ)
 		var parsed_level_meta:Dictionary = {}
-		parsed_level_meta = parse_json(meta_file.get_as_text())
-		LEVEL_NAMES[level] = parsed_level_meta.get("name")
+		if typeof(Global.LEVEL_META[level]) == TYPE_DICTIONARY:
+			parsed_level_meta = Global.LEVEL_META[level]
+		else:
+			meta_file.open(Global.LEVEL_META[level], File.READ)
+			parsed_level_meta = parse_json(meta_file.get_as_text())
+		if level >= LEVEL_NAMES.size():
+			LEVEL_NAMES.append(parsed_level_meta.get("name"))
+		else:
+			LEVEL_NAMES[level] = parsed_level_meta.get("name")
 		meta_file.close()
 	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Reflections.pressed = Global.reflections
 	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Draw_Label.text = "Draw Distance:\n" + str(Global.draw_distance)
@@ -393,7 +408,7 @@ func _ready():
 	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_MULTIPLAYER_MENU]
 	menu[SETTINGS].buttons = [B_RETURN]
 	menu[LEVEL_SELECT].buttons = [B_RETURN, B_CHARACTER, B_STOCKS, B_WEAPON_1, B_WEAPON_2, B_MISSION_START]
-	for level in Global.LEVELS:
+	for level in range(min(CUSTOM_LEVEL_BASE, Global.LEVELS.size())):
 		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
 	
 		
@@ -435,7 +450,7 @@ func _counterop_restricted_path(level_path):
 func _restore_level_disabled_visual(index, button):
 	button.modulate = Color(1, 1, 1, 1)
 	button.hint_tooltip = ""
-	if index > Global.L_PUNISHMENT:
+	if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
 		var bonus_index = index - Global.L_PUNISHMENT - 1
 		var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
 		button.texture_disabled = BUTTON_TEXTURES_D[0] if unlocked else MYSTERY
@@ -457,7 +472,7 @@ func _apply_counterop_level_lock():
 		var button = level_buttons[index]
 		if should_lock and button.visible:
 			var mystery_locked = false
-			if index > Global.L_PUNISHMENT:
+			if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
 				var bonus_index = index - Global.L_PUNISHMENT - 1
 				mystery_locked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) == -1
 			button.disabled = true
@@ -467,7 +482,7 @@ func _apply_counterop_level_lock():
 			counterop_locked_levels[index] = true
 		elif counterop_locked_levels.has(index):
 			_restore_level_disabled_visual(index, button)
-			if index > Global.L_PUNISHMENT:
+			if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
 				var bonus_index = index - Global.L_PUNISHMENT - 1
 				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
 				button.disabled = index == Global.CURRENT_LEVEL or not unlocked
@@ -478,6 +493,10 @@ func _apply_counterop_level_lock():
 func _competitive_start_reason():
 	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority() == false:
 		return ""
+	if Global.CURRENT_LEVEL >= CUSTOM_LEVEL_BASE and Global.CURRENT_LEVEL < Global.LEVEL_META.size() and Global.LEVEL_META[Global.CURRENT_LEVEL] is Dictionary and Global.LEVEL_META[Global.CURRENT_LEVEL].get("local_debug", false):
+		return "Modbase development maps are available in singleplayer only."
+	if is_instance_valid(Multiplayer.Content) and not Multiplayer.Content.host_offers.empty():
+		return "Wait for players to finish installing the host's mods and missions."
 	if Multiplayer.players.size() < 2:
 		return "At least two players are needed to start an Online mission."
 	var mode = Multiplayer.hostSettings.get("gameMode", "cruelty")
@@ -548,6 +567,80 @@ func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
 		return
 	online_navigation_transitioning = false
 
+func register_custom_levels():
+	while level_buttons.size() < Global.LEVELS.size():
+		var index = level_buttons.size()
+		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
+		var button = create_button(LEVEL_SELECT, LEVEL_NAMES[index], "_on_Level_Pressed", B_LEVEL)
+		button.set_meta("level_index", index)
+		level_buttons.append(button)
+	all_level_buttons = level_buttons.duplicate()
+	while level_select_dir.size() < 26:
+		level_select_dir.append(DOWN)
+	if all_level_buttons.size() > CUSTOM_LEVEL_BASE:
+		show_level_page()
+
+func show_level_page():
+	for button in page_buttons:
+		menu[LEVEL_SELECT].remove_child(button)
+		all_buttons.erase(button)
+		button.queue_free()
+	page_buttons.clear()
+	for button in all_level_buttons:
+		if button.get_parent() == menu[LEVEL_SELECT]:
+			menu[LEVEL_SELECT].remove_child(button)
+	var previous = level_page_start > 0
+	var capacity = CUSTOM_LEVEL_PAGE_SIZE - int(previous)
+	var more = level_page_start + capacity < all_level_buttons.size()
+	if not previous and all_level_buttons.size() > CUSTOM_LEVEL_BASE:
+		capacity = CUSTOM_LEVEL_BASE
+		more = true
+	elif more:
+		capacity -= 1
+	menu[LEVEL_SELECT].buttons = menu[LEVEL_SELECT].buttons.slice(0, 5)
+	if previous:
+		page_buttons.append(create_button(LEVEL_SELECT, "Previous levels", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
+		menu[LEVEL_SELECT].buttons.append(B_PREV_LEVELS)
+	for index in range(level_page_start, min(level_page_start + capacity, all_level_buttons.size())):
+		menu[LEVEL_SELECT].add_child(all_level_buttons[index])
+		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
+	if more:
+		page_buttons.append(create_button(LEVEL_SELECT, "More levels", "_on_Next_Levels_Button_Pressed", B_NEXT_LEVELS))
+		menu[LEVEL_SELECT].buttons.append(B_NEXT_LEVELS)
+	if not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]:
+		var position = menu[LEVEL_SELECT].get_child(5).rect_position
+		for index in range(6, menu[LEVEL_SELECT].get_child_count()):
+			match level_select_dir[index]:
+				UP:
+					position.y -= button_size.y
+				RIGHT:
+					position.x += button_size.x
+				DOWN:
+					position.y += button_size.y
+				LEFT:
+					position.x -= button_size.x
+			var button = menu[LEVEL_SELECT].get_child(index)
+			button.rect_position = position
+			button.show()
+		$Hover_Panel.hide()
+		button_state()
+		_apply_online_level_lock()
+
+func _on_Next_Levels_Button_Pressed(_menu_index, _button):
+	if online_navigation_active:
+		return
+	level_page_history.append(level_page_start)
+	level_page_start += CUSTOM_LEVEL_PAGE_SIZE - int(level_page_start > 0) - 1
+	$SFX / Close.play()
+	show_level_page()
+
+func _on_Prev_Levels_Button_Pressed(_menu_index, _button):
+	if online_navigation_active:
+		return
+	level_page_start = level_page_history.pop_back() if not level_page_history.empty() else 0
+	$SFX / Close.play()
+	show_level_page()
+
 func create_buttons(m:int):
 	var level = 0
 	var bonus = 0
@@ -558,11 +651,13 @@ func create_buttons(m:int):
 			B_START:
 				create_button(m, "Start", "_on_Start_Button_Pressed", menu[m].buttons[i])
 			B_LEVEL:
-				level_buttons.append(create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i]))
+				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
+				level_button.set_meta("level_index", level)
+				level_buttons.append(level_button)
 				level += 1
 			
 			B_MULTIPLAYER_MENU:
-				create_button(m, "Online", "_on_Multiplayer_Button_Pressed", 44)
+				create_button(m, "Online", "_on_Multiplayer_Button_Pressed", B_MULTIPLAYER_MENU)
 			
 			B_SETTINGS:
 				create_button(m, "Settings", "_on_Settings_Button_Pressed", menu[m].buttons[i])
@@ -679,13 +774,23 @@ func create_button(m:int, n:String, connection:String, b:int):
 	menu[m].add_child(new_button)
 	new_button.name = n
 	new_button.set_meta("menu_button_type", b)
-	new_button.texture_normal = BUTTON_TEXTURES[b]
+	if b == B_PREV_LEVELS or b == B_NEXT_LEVELS:
+		var page_image = Image.new()
+		var page_path = "res://MOD_CONTENT/CruS Online/modbase_prev.png" if b == B_PREV_LEVELS else "res://MOD_CONTENT/CruS Online/modbase_next.png"
+		if page_image.load(page_path) == OK:
+			var page_texture = ImageTexture.new()
+			page_texture.create_from_image(page_image, 0)
+			new_button.texture_normal = page_texture
+	elif b == B_MULTIPLAYER_MENU:
+		new_button.texture_normal = BUTTON_TEXTURES.back()
+	else:
+		new_button.texture_normal = BUTTON_TEXTURES[b]
 	new_button.texture_hover = BUTTON_TEXTURES_H[0]
 	new_button.texture_disabled = BUTTON_TEXTURES_D[randi() % 3]
 	if b == B_LEVEL:
 		
 		var level_index = level_buttons.size()
-		if level_index > Global.L_PUNISHMENT:
+		if level_index > Global.L_PUNISHMENT and level_index < CUSTOM_LEVEL_BASE:
 			new_button.texture_disabled = MYSTERY
 		if Global.LEVEL_IMAGES.size() - 1 >= level_index:
 			new_button.texture_normal = Global.LEVEL_IMAGES[level_index]
@@ -988,7 +1093,7 @@ func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
 func _on_Level_Pressed(m:int, button_id:TextureButton):
 	if online_navigation_active:
 		return
-	var level_index = button_id.get_index() - 6
+	var level_index = button_id.get_meta("level_index") if button_id.has_meta("level_index") else button_id.get_index() - 6
 	if _counterop_level_locked(level_index):
 		return
 	Global.CURRENT_LEVEL = level_index
@@ -1002,7 +1107,7 @@ func _on_Level_Pressed(m:int, button_id:TextureButton):
 			level_buttons[button].disabled = true
 		else :
 			level_buttons[button].disabled = false
-		if button > Global.L_PUNISHMENT:
+		if button > Global.L_PUNISHMENT and button < CUSTOM_LEVEL_BASE:
 			if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1 and button != Global.CURRENT_LEVEL:
 				level_buttons[button].show()
 				level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
@@ -1232,7 +1337,7 @@ func button_state():
 					button.disabled = true
 			return
 		for button in range(level_buttons.size()):
-			if button <= Global.LEVELS_UNLOCKED:
+			if button <= Global.LEVELS_UNLOCKED or button >= CUSTOM_LEVEL_BASE:
 				level_buttons[button].show()
 			else :
 				level_buttons[button].hide()
@@ -1241,7 +1346,7 @@ func button_state():
 				level_buttons[button].disabled = true
 			else :
 				level_buttons[button].disabled = false
-			if button > Global.L_PUNISHMENT:
+			if button > Global.L_PUNISHMENT and button < CUSTOM_LEVEL_BASE:
 				if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1 and button != Global.CURRENT_LEVEL:
 					level_buttons[button].show()
 					level_buttons[button].disabled = false
@@ -1305,11 +1410,14 @@ func set_res(x, y):
 
 func update_level_info()->void :
 	var meta_file = File.new()
-	if not meta_file.file_exists(Global.LEVEL_META[Global.CURRENT_LEVEL]):
-		return 
-	meta_file.open(Global.LEVEL_META[Global.CURRENT_LEVEL], File.READ)
 	var parsed_level_meta:Dictionary = {}
-	parsed_level_meta = parse_json(meta_file.get_as_text())
+	if typeof(Global.LEVEL_META[Global.CURRENT_LEVEL]) == TYPE_DICTIONARY:
+		parsed_level_meta = Global.LEVEL_META[Global.CURRENT_LEVEL]
+	else:
+		if not meta_file.file_exists(Global.LEVEL_META[Global.CURRENT_LEVEL]):
+			return
+		meta_file.open(Global.LEVEL_META[Global.CURRENT_LEVEL], File.READ)
+		parsed_level_meta = parse_json(meta_file.get_as_text())
 	var level_name = parsed_level_meta.get("name")
 	var objectives = parsed_level_meta.get("objectives")
 	var description = parsed_level_meta.get("description")
@@ -1321,7 +1429,7 @@ func update_level_info()->void :
 		$Level_Info_Grid / HBoxContainer / VBoxContainer / Objective_Panel / Objectives.text += objective + "\n"
 	if Global.hope_discarded:
 		$Level_Info_Grid / HBoxContainer / VBoxContainer / Objective_Panel / Objectives.text += "???"
-	level_info.text += description
+	level_info.text += str(description) if description != null else ""
 	var level_time = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Time
 	var level_stime = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_STime
 	var level_hell_time = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Hell_Time
@@ -1799,6 +1907,20 @@ func _apply_online_level_lock():
 	var start_button = menu[LEVEL_SELECT].get_child(5)
 	if start_button.visible:
 		start_button.disabled = true
+	for button in page_buttons:
+		if is_instance_valid(button) and button.visible:
+			if not button.has_meta("online_page_disabled_texture"):
+				button.set_meta("online_page_disabled_texture", button.texture_disabled)
+			button.disabled = true
+			button.texture_disabled = BUTTON_TEXTURES_D[0]
+
+func _restore_online_page_buttons():
+	for button in page_buttons:
+		if is_instance_valid(button):
+			button.disabled = false
+			if button.has_meta("online_page_disabled_texture"):
+				button.texture_disabled = button.get_meta("online_page_disabled_texture")
+				button.remove_meta("online_page_disabled_texture")
 
 func _animate_level_sidebar(showing, generation):
 	var panel = $Level_Info_Grid
@@ -1860,6 +1982,7 @@ func close_online_navigation():
 	if is_instance_valid(online_button):
 		online_button.disabled = false
 	button_state()
+	_restore_online_page_buttons()
 	var start_button = menu[LEVEL_SELECT].get_child(5)
 	if not _client_mission_button(start_button):
 		start_button.disabled = false
@@ -1871,6 +1994,7 @@ func _reset_online_navigation_state():
 	online_navigation_active = false
 	online_navigation_transitioning = false
 	online_sidebar_was_visible = false
+	_restore_online_page_buttons()
 	$Level_Info_Grid.rect_scale = Vector2(1, 1)
 
 func open_online_destination(level_select):
@@ -1936,7 +2060,7 @@ func _update_waiting_menu():
 var _navigation_generation = 0
 
 func _client_mission_button(button):
-	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START]
+	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START, B_PREV_LEVELS, B_NEXT_LEVELS]
 
 func _hide_online_navigation():
 	_navigation_generation += 1

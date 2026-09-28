@@ -27,6 +27,7 @@ const SCENE_EVENT = 13
 const PROTOCOL_VERSION = 3
 const SNAPSHOT_BATCH = 14
 const RELIABLE_SEND_MODE = 2
+const CONTENT_METHODS = ["connect_init", "content_offer", "content_request", "content_chunk", "content_cancel"]
 const SNAPSHOT_CHANNEL = 1
 const MAX_PACKETS_PER_FRAME = 128
 const PACKET_BUDGET_USEC = 2000
@@ -355,7 +356,7 @@ func rpc_on_client(to_peer_id: int, caller: Node, method: String, args: Array = 
 
 func rpc_all_clients(caller: Node, method: String, args: Array = []):
 	for peer_id in _peers:
-		if peer_id != _my_steam_id:
+		if peer_id != _my_steam_id and (method == "client_peer_connect" or Global.get_node("Multiplayer").players.has(peer_id)):
 			rpc_on_client(peer_id, caller, method, args)
 
 
@@ -488,7 +489,7 @@ func _rpc(to_peer_id: int, node: Node, method: String, args: Array):
 	var serialized_payload = var2bytes(payload)
 	
 	packet.append_array(serialized_payload)
-	_send_scene_event(to_peer.steam_id, packet, method in ["goto_scene_client", "goto_menu_client"])
+	_send_scene_event(to_peer.steam_id, packet, method in ["goto_scene_client", "goto_menu_client"] or method in CONTENT_METHODS)
 
 func _rset(to_peer, node: Node, property: String, value):
 	if _waiting_world_target(to_peer.steam_id, node):
@@ -773,7 +774,10 @@ func _handle_packet(sender_id, payload: PoolByteArray):
 		if envelope[0] == -1:
 			var decoded = bytes2var(body)
 			var method_index = 2 if inner[0] == PACKET_TYPE.RPC_WITH_NODE_PATH else 1
-			if sender_id != get_server_steam_id() or not inner[0] in [PACKET_TYPE.RPC, PACKET_TYPE.RPC_WITH_NODE_PATH] or not decoded[method_index] in ["goto_scene_client", "goto_menu_client"]:
+			if not inner[0] in [PACKET_TYPE.RPC, PACKET_TYPE.RPC_WITH_NODE_PATH]:
+				return
+			var method = decoded[method_index]
+			if not method in CONTENT_METHODS and (sender_id != get_server_steam_id() or not method in ["goto_scene_client", "goto_menu_client"]):
 				return
 		elif envelope[0] != scene_epoch:
 			metrics.count("scene_mismatch")

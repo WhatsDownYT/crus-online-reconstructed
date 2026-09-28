@@ -88,7 +88,7 @@ var every_5 = false
 var every_20 = false
 onready var backup_timer = Timer.new()
 var screenmat = preload("res://Materials/screenmat.tres")
-const LEVELS:Array = ["res://Levels/Training_Level.tscn", 
+var LEVELS:Array = ["res://Levels/Training_Level.tscn", 
 						"res://Levels/Level1.tscn", 
 						"res://Levels/Level2.tscn", 
 						"res://Levels/Level3.tscn", 
@@ -412,6 +412,9 @@ func set_new_scene(scene_resource:PackedScene)->void :
 	get_node("/root").add_child(current_scene)
 	print("[CruS loading] Ready ", loading_path)
 	get_tree().get_root().set_disable_input(false)
+	var online = get_node_or_null("Multiplayer")
+	if online != null and is_instance_valid(online.Extensions):
+		online.Extensions.prepare_scene(current_scene)
 	raise()
 	emit_signal("scene_loaded")
 
@@ -674,9 +677,12 @@ func save()->Dictionary:
 	}
 	for level in range(LEVELS.size()):
 		var meta_file = File.new()
-		meta_file.open(LEVEL_META[level], File.READ)
 		var parsed_level_meta:Dictionary = {}
-		parsed_level_meta = parse_json(meta_file.get_as_text())
+		if typeof(LEVEL_META[level]) == TYPE_DICTIONARY:
+			parsed_level_meta = LEVEL_META[level]
+		else:
+			meta_file.open(LEVEL_META[level], File.READ)
+			parsed_level_meta = parse_json(meta_file.get_as_text())
 		var level_name = parsed_level_meta.get("name")
 		save_dict[level_name + "_raw_time"] = LEVEL_TIMES_RAW[level]
 		save_dict[level_name + "_string_stime"] = LEVEL_STIMES[level]
@@ -727,6 +733,10 @@ func save_game(path = "user://savegame.save")->void :
 	save_game.open(path, File.WRITE)
 	save_game.store_line(to_json(save()))
 	save_game.close()
+	if path == "user://savegame.save":
+		var extensions = get_node_or_null("Multiplayer/ExtensionCompatibility")
+		if extensions != null:
+			extensions.save_custom_records()
 
 func load_game()->void :
 	var save_game = File.new()
@@ -844,10 +854,10 @@ func load_game()->void :
 		LEVELS_UNLOCKED = 1
 	for level in range(LEVELS.size()):
 		var meta_file = File.new()
-		if LEVEL_META[level] != null:
+		if typeof(LEVEL_META[level]) == TYPE_STRING:
 			meta_file.open(LEVEL_META[level], File.READ)
-
-		var parsed_meta = parse_json(meta_file.get_as_text())
+		
+		var parsed_meta = LEVEL_META[level] if typeof(LEVEL_META[level]) == TYPE_DICTIONARY else parse_json(meta_file.get_as_text())
 		var level_name = parsed_meta.get("name")
 		if parsedJSON.get(level_name + "_string_time"):
 			LEVEL_TIMES[level] = parsedJSON.get(level_name + "_string_time")

@@ -486,6 +486,9 @@ func _level_select_open():
 	return menu_ref.active_menus.back() == menu_ref.menu[menu_ref.LEVEL_SELECT]
 
 func _process(_delta):
+	if NetworkBridge.check_connection() and is_instance_valid(Global.menu) and not Global.menu.in_game and not Global.menu.active_menus.empty() and Global.menu.active_menus.back() == Global.menu.menu[Global.menu.LEVEL_SELECT]:
+		if not is_instance_valid(overlay) or menu_ref != Global.menu:
+			attach_menu(Global.menu)
 	if is_instance_valid(overlay):
 		_update_overlay()
 
@@ -509,6 +512,12 @@ func _update_overlay():
 		_position_team_button()
 		team_button.modulate = Color(0, 1, 0, 1) if is_operative(NetworkBridge.get_id()) else Color(1, 0, 0, 1)
 	ready_count.visible = host
+	var more_levels_visible = false
+	for button in menu_ref.page_buttons:
+		if is_instance_valid(button) and button.name == "More levels" and button.visible:
+			more_levels_visible = true
+			break
+	ready_count.rect_position.x = 184 if more_levels_visible else 184 - menu_ref.button_size.x
 	var counts = ready_counts()
 	ready_count.text = "Players ready: %d/%d" % [counts[0], counts[1]]
 

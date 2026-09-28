@@ -38,8 +38,8 @@ func set_performance_info():
 		$Performance_Hbox/Performance_Scroll/RichTextLabel.text = message
 		return
 	if _mission_won():
-		$Level_Info_Vbox / Next_Level.show()
-		$Level_Info_Vbox / Level_Select.hide()
+		$Level_Info_Vbox / Next_Level.visible = Global.CURRENT_LEVEL < 19
+		$Level_Info_Vbox / Level_Select.visible = Global.CURRENT_LEVEL >= 19
 		$Performance_Hbox / Performance_Scroll / RichTextLabel.text = ""
 		if Global.punishment_mode:
 			$Performance_Hbox / Performance_Scroll / RichTextLabel.text += "PUNISHMENT RECEIVED.\n"
@@ -106,7 +106,7 @@ func set_performance_info():
 	var mp = Global.get_node_or_null("Multiplayer")
 	if mp != null and mp.NetworkBridge.check_connection() and mp.Flow.result_active:
 		$Level_Info_Vbox/Retry.visible = mp.NetworkBridge.is_world_authority()
-		$Level_Info_Vbox/Next_Level.visible = mp.Flow.result_won and mp.NetworkBridge.is_world_authority()
+		$Level_Info_Vbox/Next_Level.visible = mp.Flow.result_won and mp.NetworkBridge.is_world_authority() and Global.CURRENT_LEVEL < 19
 		$Level_Info_Vbox/Level_Select.visible = not $Level_Info_Vbox/Next_Level.visible
 
 func _mission_won():

@@ -92,11 +92,14 @@ func _read_join():
 	session.SteamLobby.call_deferred("emit_signal", "lobby_join_requested", int(parts[1]), parts[2])
 
 func _level_name(index):
-	if level_names.empty():
+	if level_names.size() != Global.LEVEL_META.size():
+		level_names.clear()
 		for path in Global.LEVEL_META:
 			var file = File.new()
 			var title = "Unknown Mission"
-			if file.open(path, File.READ) == OK:
+			if typeof(path) == TYPE_DICTIONARY:
+				title = str(path.get("name", title))
+			elif file.open(path, File.READ) == OK:
 				var parsed = JSON.parse(file.get_as_text())
 				if parsed.error == OK and typeof(parsed.result) == TYPE_DICTIONARY:
 					title = str(parsed.result.get("name", title))
@@ -105,13 +108,13 @@ func _level_name(index):
 	return level_names[index] if index >= 0 and index < level_names.size() else "Custom Mission"
 
 func activity():
-	var online = bridge.check_connection()
+	var online = bridge.check_connection() and session.players.has(bridge.get_id())
 	var scene = Global.current_scene
 	var menu_scene = not is_instance_valid(scene) or scene.filename in ["res://Menu/Main_Menu.tscn", "res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn"]
 	var in_level = not menu_scene and session._menu_destination.empty() and is_instance_valid(Global.menu) and Global.menu.in_game and Global.loader == null and get_node_or_null("/root/Level") != null
 	var index = Global.CURRENT_LEVEL
 	var title = _level_name(index) if in_level else "Main Menu"
-	var portrait = "level_%02d" % index if in_level and index >= 0 and index < Global.LEVELS.size() else "game_icon"
+	var portrait = "level_%02d" % index if in_level and index >= 0 and index < 19 else "game_icon"
 	var status = mission_counter() if in_level else "Main Menu"
 	var difficulty = preload("res://MOD_CONTENT/CruS Online/DifficultyLabel.gd").describe(Global.soul_intact, Global.husk_mode, Global.hope_discarded, Global.punishment_mode, Global.chaos_mode).replace("Host difficulty: ", "")
 	var result = {"details": status, "state": "Playing Online" if online else "Playing Singleplayer", "assets": {"large_image": portrait, "large_text": title if in_level else "Cruelty Squad", "small_image": "loading_screen", "small_text": difficulty}, "buttons": [{"label": "Get on Steam", "url": "https://store.steampowered.com/app/1388770/Cruelty_Squad/"}, {"label": "Play Online", "url": "http://purgateam.com/projects/crus-online-reconstructed/index.html"}]}

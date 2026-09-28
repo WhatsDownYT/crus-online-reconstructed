@@ -1,6 +1,7 @@
 extends WorldEnvironment
 export  var rotation_speed = 0.05
 export  var z = false
+export var ignore_cursed_sky = false
 
 var min_fog_end
 var min_fog_begin
@@ -21,7 +22,7 @@ func _apply_world_style():
 	var hope = mp.Flow.world.get("difficulty", {}).get("hope_discarded", Global.hope_discarded) if online else Global.hope_discarded
 	var ending_two = mp.Flow.world.get("ending_2", Global.ending_2) if online else Global.ending_2
 	world_style = [hope, ending_two]
-	if hope and Global.CURRENT_LEVEL != 18:
+	if hope and Global.CURRENT_LEVEL != 18 and not ignore_cursed_sky:
 		environment.background_sky.panorama = helltexture
 		environment.fog_color = Color(1, 0, 0)
 		if ending_two:

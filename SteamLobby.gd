@@ -1,6 +1,6 @@
 extends Node
 
-const BUILD_ID = "reconstructed-20260927-host-drops-capacity-1"
+const BUILD_ID = "reconstructed-20260927-extension-content-1"
 
 signal player_joined_lobby(steam_id)
 signal player_left_lobby(steam_id)
@@ -88,6 +88,7 @@ func join_lobby(lobby_id: int, code = ""):
 	if in_lobby():
 		Multiplayer.leave_server()
 	_pending_lobby_id = lobby_id
+	Multiplayer.Content.set_destination({"transport": "steam", "lobby": str(lobby_id), "code": str(code)})
 	_join_code = code.to_upper()
 	print("Trying to join lobby %s" % lobby_id)
 	_members.clear()
