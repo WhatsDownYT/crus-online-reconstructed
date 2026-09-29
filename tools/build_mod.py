@@ -14,7 +14,7 @@ root = Path(__file__).resolve().parents[1]
 subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'tools/build_discord.ps1')], check=True)
 prefix = 'MOD_CONTENT/CruS Online/'
 excluded = {'.git', 'dist', 'dist codex', 'docs', 'tests', 'tools', 'custom_missions', '__pycache__'}
-runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.png', '.jpg', '.jpeg', '.webp', '.svg',
+runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.json', '.png', '.jpg', '.jpeg', '.webp', '.svg',
                     '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader'}
 if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
     raise SystemExit('Choose an output folder separate from the installed mod.')

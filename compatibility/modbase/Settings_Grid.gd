@@ -25,3 +25,7 @@ func _on_Punishment_Mode_toggled(button_pressed):
 
 func _on_Chaos_Mode_toggled(value):
 	Global.chaos_mode = value
+	if value:
+		var goals = Global.get_node_or_null("AchievementGoals")
+		if goals != null:
+			goals.mark_discovered("chaos")

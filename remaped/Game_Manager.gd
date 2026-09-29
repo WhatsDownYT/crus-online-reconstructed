@@ -567,6 +567,9 @@ func level_finished()->void :
 		LEVEL_PUNISHED[CURRENT_LEVEL] = true
 	if levels_completed() and BONUS_UNLOCK.find("END") == - 1:
 		BONUS_UNLOCK.append("END")
+	var goals = get_node_or_null("AchievementGoals")
+	if goals != null:
+		goals.record_mission_win(CURRENT_LEVEL)
 	save_game()
 	get_tree().paused = true
 	
@@ -1226,6 +1229,9 @@ func record_multiplayer_win():
 		LEVEL_PUNISHED[CURRENT_LEVEL] = true
 	if levels_completed() and BONUS_UNLOCK.find("END") == - 1:
 		BONUS_UNLOCK.append("END")
+	var goals = get_node_or_null("AchievementGoals")
+	if goals != null:
+		goals.record_mission_win(CURRENT_LEVEL)
 	save_game()
 
 func _setup_game_audio():

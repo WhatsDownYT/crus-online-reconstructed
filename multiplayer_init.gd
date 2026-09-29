@@ -9,6 +9,8 @@ func _init():
 	
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/multiplayer.tscn").instance())
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/death_screen.tscn").instance())
+	Global.add_child(preload("res://MOD_CONTENT/CruS Online/achievements/AchievementPreview.gd").new())
+	Global.add_child(preload("res://MOD_CONTENT/CruS Online/achievements/AchievementGoals.gd").new())
 	var capture = preload("res://MOD_CONTENT/CruS Online/DebugCapture.gd").new()
 	capture.name = "DebugCapture"
 	Global.add_child(capture)

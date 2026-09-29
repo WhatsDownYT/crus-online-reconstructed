@@ -1,0 +1,403 @@
+{
+  "achievements": [
+    {
+      "id": "steam_pharmakokinetiks",
+      "name": "INFESTATION",
+      "description": "Complete Pharmakokinetics.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 1,
+      "stylish": false,
+      "secret": false
+    },
+    {
+      "id": "steam_paradise",
+      "name": "SUSTAINING A MASS GRAVE",
+      "description": "Complete Paradise.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/paradise.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 2,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_sin_space_engineering",
+      "name": "SACRIFICIAL SATIATION",
+      "description": "Complete Sin Space Engineering.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/sin_space_engineering.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 3,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_androgen_assault",
+      "name": "TO BE OR NOT TO BE A CASTLE",
+      "description": "Complete Androgen Assault.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/androgen_assault.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 4,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_mall_madness",
+      "name": "INVEST. INVEST. INVEST.",
+      "description": "Complete Mall Madness.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/mall_madness.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 5,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_apartment_atrocity",
+      "name": "EVICTION NOTICE",
+      "description": "Complete Apartment Atrocity.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/apartment_atrocity.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 6,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_seaside_shock",
+      "name": "SHITFACED SOVEREIGNS",
+      "description": "Complete Seaside Shock.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/seaside_shock.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 7,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_bog_business",
+      "name": "SLURPCULT",
+      "description": "Complete Bog Business.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/bog_business.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 8,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_casino_catastrophe",
+      "name": "JACK OFF JACK POT",
+      "description": "Complete Casino Catastrophe.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/casino_catastrophe.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 9,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_idiot_party",
+      "name": "BOHEMIAN GROVE",
+      "description": "Complete Idiot Party.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/idiot_party.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 10,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_office",
+      "name": "GOING POSTAL",
+      "description": "Complete Office.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/office.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 11,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_archon_grid",
+      "name": "GOD'S BLOOD EARTH",
+      "description": "Complete Archon Grid.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/archon_grid.png",
+      "reward": 1000,
+      "category": "campaign",
+      "level": 12,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_alpine_hospitality",
+      "name": "HUMANITARIAN AID",
+      "description": "Complete Alpine Hospitality.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/alpine_hospitality.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 14,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_darkworld",
+      "name": "GRATITUDE IN SUFFERING",
+      "description": "Complete Darkworld.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/darkworld.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 13,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_miner_s_miracle",
+      "name": "GODLESS MUD CASTLE",
+      "description": "Complete Miner's Miracle.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/miner_s_miracle.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 15,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_neuron_activator",
+      "name": "HUUDOT KAIKU",
+      "description": "Complete Neuron Activator.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/neuron_activator.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 16,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_house",
+      "name": "home",
+      "description": "Complete House.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/house.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 17,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_hq",
+      "name": "SACRIFICIAL HERO",
+      "description": "Complete HQ.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/hq.png",
+      "reward": 2000,
+      "category": "campaign",
+      "level": 0,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "steam_trauma_loop",
+      "name": "GOLDEN AGE",
+      "description": "Beat the campaign by completing Trauma Loop.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/trauma_loop.png",
+      "reward": 10000,
+      "category": "campaign",
+      "level": 18,
+      "stylish": false,
+      "secret": true
+    },
+    {
+      "id": "mastery_pharmakokinetiks",
+      "name": "Pharmakokinetiks Mastery",
+      "description": "Complete every mastery objective in Pharmakokinetiks.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks_stylish_rank.png",
+      "reward": 2000,
+      "category": "mastery",
+      "level": 1,
+      "secret": false
+    },
+    {
+      "id": "mastery_sin_space_engineering",
+      "name": "Sin Space Engineering Mastery",
+      "description": "Complete every mastery objective in Sin Space Engineering.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/sin_space_engineering_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 3,
+      "secret": true
+    },
+    {
+      "id": "mastery_paradise",
+      "name": "Paradise Mastery",
+      "description": "Complete every mastery objective in Paradise.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/paradise_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 2,
+      "secret": true
+    },
+    {
+      "id": "mastery_apartment_atrocity",
+      "name": "Apartment Atrocity Mastery",
+      "description": "Complete every mastery objective in Apartment Atrocity.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/apartment_atrocity_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 6,
+      "secret": true
+    },
+    {
+      "id": "mastery_androgen_assault",
+      "name": "Androgen Assault Mastery",
+      "description": "Complete every mastery objective in Androgen Assault.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/androgen_assault_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 4,
+      "secret": true
+    },
+    {
+      "id": "mastery_mall_madness",
+      "name": "Mall Madness Mastery",
+      "description": "Complete every mastery objective in Mall Madness.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/mall_madness_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 5,
+      "secret": true
+    },
+    {
+      "id": "mastery_seaside_shock",
+      "name": "Seaside Shock Mastery",
+      "description": "Complete every mastery objective in Seaside Shock.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/seaside_shock_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 7,
+      "secret": true
+    },
+    {
+      "id": "mastery_casino_catastrophe",
+      "name": "Casino Catastrophe Mastery",
+      "description": "Complete every mastery objective in Casino Catastrophe.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/casino_catastrophe_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 9,
+      "secret": true
+    },
+    {
+      "id": "mastery_bog_business",
+      "name": "Bog Business Mastery",
+      "description": "Complete every mastery objective in Bog Business.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/bog_business_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 8,
+      "secret": true
+    },
+    {
+      "id": "mastery_idiot_party",
+      "name": "Idiot Party Mastery",
+      "description": "Complete every mastery objective in Idiot Party.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/idiot_party_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 10,
+      "secret": true
+    },
+    {
+      "id": "mastery_office",
+      "name": "Office Mastery",
+      "description": "Complete every mastery objective in Office.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/office_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 11,
+      "secret": true
+    },
+    {
+      "id": "mastery_archon_grid",
+      "name": "Archon Grid Mastery",
+      "description": "Complete every mastery objective in Archon Grid.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/archon_grid_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 12,
+      "secret": true
+    },
+    {
+      "id": "mastery_alpine_hospitality",
+      "name": "Alpine Hospitality Mastery",
+      "description": "Complete every mastery objective in Alpine Hospitality.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/alpine_hospitality_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 14,
+      "secret": true
+    },
+    {
+      "id": "mastery_darkworld",
+      "name": "Darkworld Mastery",
+      "description": "Complete every mastery objective in Darkworld.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/darkworld_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 13,
+      "secret": true
+    },
+    {
+      "id": "mastery_hq",
+      "name": "HQ Mastery",
+      "description": "Complete every mastery objective in HQ.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/hq_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 0,
+      "secret": true
+    },
+    {
+      "id": "mastery_miner_s_miracle",
+      "name": "Miner's Miracle Mastery",
+      "description": "Complete every mastery objective in Miner's Miracle.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/miner_s_miracle_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 15,
+      "secret": true
+    },
+    {
+      "id": "mastery_neuron_activator",
+      "name": "Neuron Activator Mastery",
+      "description": "Complete every mastery objective in Neuron Activator.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/neuron_activator_stylish_rank.png",
+      "reward": 50000,
+      "category": "mastery",
+      "level": 16,
+      "secret": true
+    },
+    {
+      "id": "mastery_house",
+      "name": "House Mastery",
+      "description": "Complete every mastery objective in House.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/house_stylish_rank.png",
+      "reward": 5000,
+      "category": "mastery",
+      "level": 17,
+      "secret": true
+    },
+    {
+      "id": "mastery_trauma_loop",
+      "name": "Trauma Loop Mastery",
+      "description": "Complete every mastery objective in Trauma Loop.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/trauma_loop_stylish_rank.png",
+      "reward": 50000,
+      "category": "mastery",
+      "level": 18,
+      "secret": true
+    }
+  ]
+}

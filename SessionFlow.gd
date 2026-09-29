@@ -193,6 +193,10 @@ puppet func show_result(id, state):
 		Global.UI.notify(message, Color(1, 0, 1))
 	if state.ending.ends_with("End2.tscn"):
 		Global.character_mat.set_shader_param("albedoTex", load("res://Textures/NPC/bosssguy_clothes.png"))
+	if local_won and not competitive and Multiplayer.hostSettings.get("gameMode", "cruelty") == "cruelty":
+		var goals = Global.get_node_or_null("AchievementGoals")
+		if goals != null:
+			goals.record_mission_win(state.level)
 	Global.save_game()
 	Multiplayer.DeathScreen.hide()
 	Multiplayer.Menu.hide()
