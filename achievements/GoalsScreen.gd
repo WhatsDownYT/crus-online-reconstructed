@@ -57,6 +57,7 @@ func _ready():
 	set_process_input(false)
 	tap_player = AudioStreamPlayer.new()
 	tap_player.bus = "SFX"
+	tap_player.volume_db = 18.0
 	var tap_file = File.new()
 	if tap_file.open(TAP_SOUND, File.READ) == OK:
 		tap_file.seek(44)
@@ -87,15 +88,16 @@ func open():
 func _input(event):
 	if not visible or not event is InputEventMouseButton or not event.pressed:
 		return
+	var local_point = get_global_transform_with_canvas().affine_inverse().xform(event.position)
 	if event.button_index in [BUTTON_WHEEL_UP, BUTTON_WHEEL_DOWN]:
-		var mapped = _map_input_position(event.position - input_overlay.rect_position)
+		var mapped = _map_input_position(local_point - input_overlay.rect_position)
 		var list_rect = Rect2(ui_overlay.rect_position + list_scroll.rect_position, list_scroll.rect_size)
 		if mastery_level < 0 and not category_menu.visible and list_rect.has_point(mapped):
 			_scroll_by(-52 if event.button_index == BUTTON_WHEEL_UP else 52)
 			get_tree().set_input_as_handled()
 		return
 	if event.button_index in [BUTTON_LEFT, BUTTON_RIGHT] and tap_player.stream != null:
-		var mapped = _map_input_position(event.position - input_overlay.rect_position)
+		var mapped = _map_input_position(local_point - input_overlay.rect_position)
 		if Rect2(Vector2.ZERO, screen_viewport.size).has_point(mapped):
 			tap_player.play()
 
@@ -446,7 +448,7 @@ func _build_ui(phone):
 	ui_overlay.add_child(filter_label)
 	filter_count_label = _label("0/0", ming_body, Vector2(width - 88, 42), Vector2(76, 18))
 	filter_count_label.align = Label.ALIGN_RIGHT
-	filter_count_label.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+	filter_count_label.add_color_override("font_color", Color(1.0, 0.0, 0.68))
 	ui_overlay.add_child(filter_count_label)
 	list_scroll = ScrollContainer.new()
 	list_scroll.name = "GoalsList"
