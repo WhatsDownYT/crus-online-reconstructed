@@ -101,8 +101,29 @@ func run():
  player.tranquilize_timer.stop()
  player.remove_tranquilize()
  yield(barrier("all_checked"),"completed")
+ var npc_targets=[]
+ for npc in get_tree().get_nodes_in_group("admin_npcs"):
+  if npc.get_node_or_null("Body/Collisions/Torso")!=null and npc.enabled and not npc.dead:
+   npc_targets.append(npc)
+ npc_targets.sort_custom(self,"sort_npcs")
+ check(not npc_targets.empty(),"active NPC available for tranquilizer test")
+ if not npc_targets.empty():
+  var target=npc_targets[0]
+  if not HOST:
+   target.get_node("Body/Collisions/Torso").tranquilize(true)
+  yield(get_tree().create_timer(0.5),"timeout")
+  if HOST:
+   check(not target.tranqtimer.is_stopped(),"client tranquilizer reaches authoritative NPC")
+ if HOST:
+  mp.Players.get_node(str(client_id)).get_node("Puppet/GameplayCollision").tranq_timeout(false)
+ yield(get_tree().create_timer(0.5),"timeout")
+ if not HOST:
+  check(player.tranquilize_flag and player.UI.sleep,"baton stuns a remote player")
  print("SEDATIVE_RESULT host=",HOST," failures=",failures)
  get_tree().quit(1 if failures else 0)
+
+func sort_npcs(a,b):
+ return str(a.get_path())<str(b.get_path())
 
 func set_arms(label):
  for implant in Global.implants.IMPLANTS:

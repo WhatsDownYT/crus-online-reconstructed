@@ -1322,6 +1322,9 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 		return 
 	GLOBAL.get_node("Multiplayer").drop_local_death_weapons()
 	dead = true
+	if not GLOBAL.campaign_save.active:
+		GLOBAL.total_deaths += 1
+		GLOBAL.save_game()
 	died = true
 	grab_hand.hide()
 	player_view.fov = Global.FOV

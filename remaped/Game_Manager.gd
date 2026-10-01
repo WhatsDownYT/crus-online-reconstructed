@@ -9,6 +9,18 @@ var loading_path = ""
 var loading_report_msec = 0
 var play_time = 0
 var current_scene = null
+var level_transition_loadout = null
+
+func capture_level_transition_loadout():
+	level_transition_loadout = null
+	if not is_instance_valid(player) or not is_instance_valid(player.weapon):
+		return
+	level_transition_loadout = [player.weapon.weapon1, player.weapon.weapon2, player.weapon.current_weapon]
+
+func consume_level_transition_loadout():
+	var result = level_transition_loadout
+	level_transition_loadout = null
+	return result
 
 enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS}
 enum {L_HQ, L_PHARMA, L_PARADISE, L_SPACE, L_ANDROGEN, L_MALL, L_APARTMENT, L_CRUISE, L_SWAMP, L_CASINO, L_CASTLE, L_OFFICE, L_PUNISHMENT}
@@ -71,6 +83,8 @@ var resolution:Array = [1280, 720]
 var full_screen:bool = false
 var implants
 var enemy_count = 0
+var total_kills = 0
+var total_deaths = 0
 var consecutive_deaths = 0
 var enemy_count_total = 0
 var ending_1 = false
@@ -348,6 +362,9 @@ func list_files_in_directory(path:String, file_type:String)->Array:
 	return files
 
 func goto_scene(path:String):
+	var level_index = LEVELS.find(path)
+	if level_index >= 0:
+		CURRENT_LEVEL = level_index
 	$Loading_Screen.raise()
 	call_deferred("_deferred_goto_scene", path)
 
@@ -669,6 +686,8 @@ func save()->Dictionary:
 		"husk":husk_mode, 
 		"hope":hope_discarded, 
 		"consecutive_deaths":consecutive_deaths, 
+		"total_kills":total_kills,
+		"total_deaths":total_deaths,
 		"money":money, 
 		"dead_npcs":DEAD_CIVS, 
 		"ending_1":ending_1, 
@@ -792,6 +811,8 @@ func load_game()->void :
 	var p_time = parsedJSON.get("play_time")
 	if p_time != null:
 		play_time = p_time
+	total_kills = int(parsedJSON.get("total_kills", 0))
+	total_deaths = int(parsedJSON.get("total_deaths", 0))
 	
 	if items_found:
 		MONEY_ITEMS = items_found

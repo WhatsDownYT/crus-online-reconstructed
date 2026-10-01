@@ -26,6 +26,9 @@ func set_toxic():
 func tranquilize(unused = null):
 	client.set_tranquilize()
 
+func tranq_timeout(unused = null):
+	client.set_tranquilize()
+
 func cancer():
 	client.set_cancer()
 
@@ -34,4 +37,3 @@ func multiplayer_peer_id():
 
 func multiplayer_sedative(source_id):
 	client.set_multiplayer_sedative(source_id)
-

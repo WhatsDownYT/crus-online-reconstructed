@@ -3,21 +3,32 @@ extends Node
 const DATA_PATH = "res://MOD_CONTENT/CruS Online/achievements/achievements.json"
 const SAVE_PATH = "user://crus_online_goals.save"
 const MASTERY_KEYS = ["s_rank", "hope_eradicated", "punishment", "chaos", "extravagance", "stripped"]
+const STATE_CHECK_INTERVAL = 0.25
+const TRIAGON_MARKERS = ["Raymond Shocktroop Tactical received.", "$1000000 received.", "Golem Exosystem received."]
+const FULLY_PEELED_ID = "fully_peeled"
 
 var entries_by_level = {}
+var entries_by_id = {}
 var unlocked = {}
 var mastery = {}
 var discovered = {}
+var state_check_time = 0.0
 
 func _ready():
 	name = "AchievementGoals"
+	pause_mode = Node.PAUSE_MODE_PROCESS
 	var file = File.new()
 	if file.open(DATA_PATH, File.READ) == OK:
 		var parsed = JSON.parse(file.get_as_text())
 		file.close()
 		if parsed.error == OK and typeof(parsed.result) == TYPE_DICTIONARY:
 			for entry in parsed.result.get("achievements", []):
-				if typeof(entry) != TYPE_DICTIONARY or not entry.has("level"):
+				if typeof(entry) != TYPE_DICTIONARY:
+					continue
+				var id = str(entry.get("id", ""))
+				if not id.empty():
+					entries_by_id[id] = entry
+				if not entry.has("level"):
 					continue
 				var level = int(entry.level)
 				if not entries_by_level.has(level):
@@ -45,6 +56,14 @@ func _ready():
 				var progress = mastery_for(level)
 				progress["extravagance"] = true
 				mastery[str(level)] = progress
+	call_deferred("evaluate_progress")
+
+func _process(delta):
+	state_check_time += delta
+	if state_check_time < STATE_CHECK_INTERVAL:
+		return
+	state_check_time = 0.0
+	evaluate_progress()
 
 func level_beaten(level):
 	level = int(level)
@@ -54,6 +73,14 @@ func level_beaten(level):
 
 func is_hidden(entry):
 	return entry.get("secret", false) and not unlocked.has(str(entry.get("id", ""))) and not level_beaten(entry.get("level", -1))
+
+func should_show_entry(entry):
+	var id = str(entry.get("id", ""))
+	if id == "synaptic_cascade":
+		return Global.hell_discovered or unlocked.has(id)
+	if id == "suffering_for_aeons":
+		return Global.ending_3 or unlocked.has(id)
+	return true
 
 func mastery_for(level):
 	var saved = mastery.get(str(int(level)), {})
@@ -65,7 +92,7 @@ func mastery_for(level):
 func known_condition(key):
 	if key == "hope_eradicated" and Global.hell_discovered:
 		return true
-	if key == "chaos" and Global.chaos_mode:
+	if key == "chaos" and Global.ending_3:
 		return true
 	if key == "extravagance" and Global.implants != null:
 		if Global.implants.purchased_implants.has("Extravagant Suit") or (Global.implants.torso_implant != null and Global.implants.torso_implant.i_name == "Extravagant Suit"):
@@ -118,6 +145,132 @@ func _award(entry, earned):
 	earned.append(id)
 	return true
 
+func _award_id(id, earned):
+	if not entries_by_id.has(id):
+		return false
+	return _award(entries_by_id[id], earned)
+
+func _campaign_levels():
+	var levels = []
+	for level in entries_by_level:
+		for entry in entries_by_level[level]:
+			if entry.get("category", "") == "campaign":
+				levels.append(int(level))
+				break
+	levels.sort()
+	return levels
+
+func _all_mastery_condition(key):
+	var levels = _campaign_levels()
+	if levels.empty():
+		return false
+	for level in levels:
+		if not mastery_for(level).get(key, false):
+			return false
+	return true
+
+func _all_stock_assets_found(asset_type):
+	if Global.STOCKS == null or Global.STOCKS.stocks.empty():
+		return false
+	var found = Global.STOCKS.FISH_FOUND if asset_type == "fish" else Global.STOCKS.ORGANS_FOUND
+	var required = {}
+	for stock in Global.STOCKS.stocks:
+		if str(stock.asset_type) != asset_type:
+			continue
+		var key = str(stock.ticker) if asset_type == "fish" else str(stock.s_name)
+		required[key] = true
+	if required.empty():
+		return false
+	for key in required:
+		if found.find(key) == -1:
+			return false
+	return true
+
+func _all_weapons_unlocked():
+	if Global.WEAPONS_UNLOCKED.empty():
+		return false
+	for value in Global.WEAPONS_UNLOCKED:
+		if not value:
+			return false
+	return true
+
+func _all_purchasable_implants_owned():
+	if Global.implants == null or Global.implants.IMPLANTS.empty():
+		return false
+	var required = 0
+	for implant in Global.implants.IMPLANTS:
+		if implant == null or str(implant.i_name) == "N/A" or int(implant.price) <= 0:
+			continue
+		required += 1
+		if Global.implants.purchased_implants.find(implant.i_name) == -1:
+			return false
+	return required > 0
+
+func _triagons_complete():
+	for marker in TRIAGON_MARKERS:
+		if Global.DEAD_CIVS.find(marker) == -1:
+			return false
+	return true
+
+func _all_regular_achievements_unlocked():
+	var required = 0
+	for id in entries_by_id:
+		if id == FULLY_PEELED_ID:
+			continue
+		var entry = entries_by_id[id]
+		if entry.get("category", "") == "mastery":
+			continue
+		required += 1
+		if not unlocked.has(id):
+			return false
+	return required > 0
+
+func _evaluate_global_conditions(earned):
+	var changed = false
+	if Global.death:
+		changed = _award_id("soul_emulation", earned) or changed
+	if Global.money >= 1000000:
+		changed = _award_id("financial_ascension", earned) or changed
+	if Global.DEAD_CIVS.find("Limit Chancellor") != -1:
+		changed = _award_id("open_your_eyes", earned) or changed
+	if _all_mastery_condition("hope_eradicated"):
+		changed = _award_id("synaptic_cascade", earned) or changed
+	if _all_mastery_condition("s_rank"):
+		changed = _award_id("eternal_malice", earned) or changed
+	if _all_mastery_condition("punishment"):
+		changed = _award_id("entrapment", earned) or changed
+	if _all_mastery_condition("chaos"):
+		changed = _award_id("suffering_for_aeons", earned) or changed
+	if _all_mastery_condition("extravagance"):
+		changed = _award_id("beauty_of_life", earned) or changed
+	if _triagons_complete():
+		changed = _award_id("the_unholy_trinity", earned) or changed
+	if _all_stock_assets_found("part"):
+		changed = _award_id("biological_traversal", earned) or changed
+	if _all_stock_assets_found("fish"):
+		changed = _award_id("catch_of_the_day", earned) or changed
+	if _all_weapons_unlocked():
+		changed = _award_id("the_first_transaction", earned) or changed
+	if _all_purchasable_implants_owned():
+		changed = _award_id("metabolic_abomination", earned) or changed
+	if _all_regular_achievements_unlocked():
+		changed = _award_id(FULLY_PEELED_ID, earned) or changed
+	return changed
+
+func evaluate_progress():
+	if Global.campaign_save.active:
+		return
+	var earned = []
+	var changed = false
+	if Global.ending_3 and not discovered.get("chaos", false):
+		discovered["chaos"] = true
+		changed = true
+	changed = _evaluate_global_conditions(earned) or changed
+	if not changed:
+		return
+	_save_progress()
+	_notify_earned(earned)
+
 func record_mission_win(level):
 	level = int(level)
 	if Global.campaign_save.active or not entries_by_level.has(level):
@@ -153,13 +306,20 @@ func record_mission_win(level):
 		for entry in entries_by_level[level]:
 			if entry.get("category", "") == "mastery":
 				changed = _award(entry, earned) or changed
+	if Global.enemy_count_total > 0 and Global.enemy_count == 0:
+		changed = _award_id("controlled_depopulation", earned) or changed
+	changed = _evaluate_global_conditions(earned) or changed
 	if not changed:
 		return
 	_save_progress()
+	_notify_earned(earned)
+
+func _notify_earned(earned):
 	var preview = Global.get_node_or_null("AchievementPreview")
-	if preview != null:
-		for id in earned:
-			preview.show_achievement(id)
+	if preview == null:
+		return
+	for id in earned:
+		preview.show_achievement(id)
 
 func _save_progress():
 	var file = File.new()

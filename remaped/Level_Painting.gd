@@ -23,7 +23,7 @@ func _on_Area_body_entered(body):
 				Global.BONUS_UNLOCK.append(level_name)
 				NetworkBridge.n_rpc(self, "unlock_level")
 			Global.save_game()
-			Multiplayer.goto_scene_host(Global.LEVELS[level_index])
+			Multiplayer.goto_scene_host(Global.LEVELS[level_index], true)
 		else:
 			Global.UI.notify("It feels like a normal painting", Color(1, 0, 0))
 

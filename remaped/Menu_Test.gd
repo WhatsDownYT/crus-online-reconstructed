@@ -14,6 +14,8 @@ func multiplayer_enter():
 	_hide_online_navigation()
 	if is_instance_valid(goals_screen):
 		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
 	visible = false
 	in_game = true
 	menu[START].hide()
@@ -24,13 +26,13 @@ func multiplayer_enter():
 
 enum {UP, RIGHT, DOWN, LEFT}
 enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS}
-enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS}
+enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS}
 var confirmed = false
 var cancel = false
 enum {B_START, B_SETTINGS, B_QUIT, B_LEVEL, B_MISSION_START, 
 	B_WEAPON_1, B_WEAPON_2, B_CHARACTER, B_STOCKS, B_W_PISTOL, B_W_SMG, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, 
 	B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_TRANQ, B_W_BLACKJACK, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT, B_EX_MENU, B_EX_LEVEL_SELECT, B_RETURN, B_RETRY, B_BONUS,
-	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS, B_GOALS}
+	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS, B_GOALS, B_STATS}
 const BUTTON_TEXTURES:Array = [preload("res://Textures/Menu/start_normal.png"), 
 									preload("res://Textures/Menu/settings_normal.png"), 
 									preload("res://Textures/Menu/OS_normal.png"), 
@@ -400,7 +402,7 @@ func _ready():
 	resolution_list = $Settings / GridContainer / PanelContainer5 / Resolution_List
 	for r in RESOLUTIONS:
 		resolution_list.add_item(str(r.x) + "x" + str(r.y))
-	for i in range(9):
+	for i in range(10):
 		var new_menu = Menu.new()
 		add_child(new_menu)
 		menu.append(new_menu)
@@ -408,9 +410,10 @@ func _ready():
 
 
 	
-	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_MULTIPLAYER_MENU, B_GOALS]
+	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_MULTIPLAYER_MENU, B_GOALS, B_STATS]
 	menu[SETTINGS].buttons = [B_RETURN]
 	menu[GOALS].buttons = [B_RETURN]
+	menu[STATS].buttons = [B_RETURN]
 	menu[LEVEL_SELECT].buttons = [B_RETURN, B_CHARACTER, B_STOCKS, B_WEAPON_1, B_WEAPON_2, B_MISSION_START]
 	for level in range(min(CUSTOM_LEVEL_BASE, Global.LEVELS.size())):
 		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
@@ -427,6 +430,9 @@ func _ready():
 	goals_screen = load("res://MOD_CONTENT/CruS Online/achievements/GoalsScreen.gd").new()
 	add_child(goals_screen)
 	move_child(goals_screen, menu[START].get_index())
+	statistics_screen = load("res://MOD_CONTENT/CruS Online/StatisticsScreen.gd").new()
+	add_child(statistics_screen)
+	move_child(statistics_screen, menu[START].get_index())
 	for child in menu[START].get_children():
 		child.show()
 		child.set_position(b_position)
@@ -659,6 +665,8 @@ func create_buttons(m:int):
 				create_button(m, "Start", "_on_Start_Button_Pressed", menu[m].buttons[i])
 			B_GOALS:
 				create_button(m, "Goals", "_on_Goals_Button_Pressed", menu[m].buttons[i])
+			B_STATS:
+				create_button(m, "Statistics", "_on_Statistics_Button_Pressed", menu[m].buttons[i])
 			B_LEVEL:
 				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
 				level_button.set_meta("level_index", level)
@@ -794,6 +802,8 @@ func create_button(m:int, n:String, connection:String, b:int):
 		new_button.texture_normal = BUTTON_TEXTURES.back()
 	elif b == B_GOALS:
 		new_button.texture_normal = GOALS_BUTTON_TEXTURE
+	elif b == B_STATS:
+		new_button.texture_normal = BUTTON_TEXTURES[B_CHARACTER]
 	else:
 		new_button.texture_normal = BUTTON_TEXTURES[b]
 	new_button.texture_hover = BUTTON_TEXTURES_H[0]
@@ -899,10 +909,17 @@ func _on_Goals_Button_Pressed(m:int, button_id:TextureButton):
 	active_element = goals_screen
 	goals_screen.open()
 
+func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
+	if in_game or menu_changing:
+		return
+	_close_online_panel()
+	goto_menu(m, STATS, button_id)
+	active_element = statistics_screen
+	statistics_screen.open()
+
 func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, SETTINGS, button_id)
 	active_element = $Settings
-	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / PlayTime.text = "Active Play Time:\n" + Global.time2str(Global.play_time)
 	$Settings.rect_position.x = 320
 	$Settings.raise()
 	$Settings.come()
@@ -1777,7 +1794,8 @@ func _on_ClearSave_pressed():
 		return 
 	Global.money = 0
 	Global.play_time = 0
-	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / PlayTime.text = "Active Play Time:\n0.0.0"
+	Global.total_kills = 0
+	Global.total_deaths = 0
 	Global.BONUS_UNLOCK = []
 	Global.implants.purchased_implants = []
 	$Character_Menu / Character_Container.clear_equips()
@@ -1838,6 +1856,9 @@ func _on_ClearSave_pressed():
 	var goals = Global.get_node_or_null("AchievementGoals")
 	if goals != null:
 		goals.clear_progress()
+	var online_stats = Global.get_node_or_null("Multiplayer/OnlineStats")
+	if online_stats != null:
+		online_stats.clear()
 	Global.save_game()
 
 
@@ -1871,7 +1892,6 @@ func _on_Timer_toggled(value):
 
 func _on_ResetTimer_pressed():
 	Global.play_time = 0
-	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / PlayTime.text = "Active Play Time:\n0.0.0"
 
 func _retry_solo(m:int, b:TextureButton):
 	Global.STOCKS.save_stocks("user://stocks.save")
@@ -1900,7 +1920,7 @@ func _retry_solo(m:int, b:TextureButton):
 
 func _refresh_start_buttons():
 	var buttons = menu[START].get_children()
-	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 7, 1, 5]
+	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 7, 8, 1, 5]
 	var origin = buttons[0].rect_position
 	buttons[0].name = "Unpause" if in_game else "Start"
 	for index in range(buttons.size()):
@@ -2023,6 +2043,8 @@ func open_online_destination(level_select):
 	_hide_online_navigation()
 	if is_instance_valid(goals_screen):
 		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
 	if level_select:
 		_ensure_counterop_overlay()
 	_close_online_panel()
@@ -2047,6 +2069,7 @@ func open_online_destination(level_select):
 
 var _waiting_label
 var goals_screen
+var statistics_screen
 
 func _close_online_panel():
 	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
@@ -2097,6 +2120,8 @@ func _hide_online_navigation():
 		panel.hide()
 	if is_instance_valid(goals_screen):
 		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
 	if is_instance_valid(_waiting_label):
 		_waiting_label.hide()
 	active_element = null

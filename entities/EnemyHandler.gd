@@ -366,7 +366,7 @@ func _ready():
 	new_alert_sphere.global_transform.origin = body.global_transform.origin
 	if not civilian:
 		weapon = get_node_or_null("Body/Rotation_Helper/Weapon")
-		if enabled and NetworkBridge.is_world_authority():
+		if enabled and not immortal and NetworkBridge.is_world_authority():
 			glob.enemy_count += 1
 			glob.enemy_count_total = glob.enemy_count
 			population_registered = true
@@ -438,8 +438,8 @@ func tranq_timeout(dart):
 				return 
 		if dead:
 			return 
-		if body.has_method("set_tranquilized"):
-			body.set_tranquilized()
+		if body.has_method("tranquilize"):
+			body.tranquilize()
 			body.set_collision_layer_bit(4, false)
 
 func interpolate(a, b, t):

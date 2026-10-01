@@ -7,7 +7,7 @@ var stock_state = {}
 var stocks = []
 var menu_weapons = []
 
-const FIELDS = ["WEAPONS_UNLOCKED", "LEVELS_UNLOCKED", "LEVEL_PUNISHED", "BONUS_UNLOCK", "MONEY_ITEMS", "soul_intact", "husk_mode", "hope_discarded", "consecutive_deaths", "money", "DEAD_CIVS", "ending_1", "ending_2", "ending_3", "hell_discovered", "death", "play_time", "LEVEL_TIMES", "LEVEL_TIMES_RAW", "LEVEL_STIMES", "LEVEL_STIMES_RAW", "HELL_TIMES", "HELL_TIMES_RAW", "HELL_STIMES", "HELL_STIMES_RAW", "level_ranks", "level_stock_ranks", "hell_ranks", "hell_stock_ranks", "CURRENT_WEAPONS", "punishment_mode", "chaos_mode", "stock_mode", "CURRENT_LEVEL"]
+const FIELDS = ["WEAPONS_UNLOCKED", "LEVELS_UNLOCKED", "LEVEL_PUNISHED", "BONUS_UNLOCK", "MONEY_ITEMS", "soul_intact", "husk_mode", "hope_discarded", "consecutive_deaths", "total_kills", "total_deaths", "money", "DEAD_CIVS", "ending_1", "ending_2", "ending_3", "hell_discovered", "death", "play_time", "LEVEL_TIMES", "LEVEL_TIMES_RAW", "LEVEL_STIMES", "LEVEL_STIMES_RAW", "HELL_TIMES", "HELL_TIMES_RAW", "HELL_STIMES", "HELL_STIMES_RAW", "level_ranks", "level_stock_ranks", "hell_ranks", "hell_stock_ranks", "CURRENT_WEAPONS", "punishment_mode", "chaos_mode", "stock_mode", "CURRENT_LEVEL"]
 
 func copy_value(value):
 	return value.duplicate(true) if value is Array or value is Dictionary else value

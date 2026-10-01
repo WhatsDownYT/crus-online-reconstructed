@@ -12,6 +12,9 @@ var helper_pid = -1
 var last_state = ""
 var level_names = []
 var last_error = ""
+var target_scene_id = 0
+var target_seen = {}
+var target_remote_total = 0
 
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
@@ -142,7 +145,34 @@ func mission_counter():
 		for peer in roster:
 			if session.players.has(peer) and not session.died_players.has(peer) and not session.Flow.waiting_peers.has(peer): alive += 1
 		return "Players: %d/%d" % [alive, roster.size()]
-	return "Targets: %d/%d" % [max(0, Global.objectives), max(Global.objectives, Global.objectives_total)]
+	return "Targets: %d/%d" % [max(0, Global.objectives), max(Global.objectives, current_target_total())]
+
+func _check_target_scene():
+	var scene_id = Global.current_scene.get_instance_id() if is_instance_valid(Global.current_scene) else 0
+	if scene_id != target_scene_id:
+		target_scene_id = scene_id
+		target_seen.clear()
+		target_remote_total = 0
+
+func current_target_total():
+	_check_target_scene()
+	if bridge.check_connection() and not bridge.is_world_authority():
+		return target_remote_total
+	if not is_instance_valid(Global.current_scene):
+		return 0
+	for npc in get_tree().get_nodes_in_group("admin_npcs"):
+		if not is_instance_valid(npc) or not Global.current_scene.is_a_parent_of(npc):
+			continue
+		if "objective" in npc:
+			if npc.objective and npc.enabled and not npc.dead:
+				target_seen[npc.get_instance_id()] = true
+		elif "npc_name" in npc and npc.npc_name == "Abraxas" and not npc.dead:
+			target_seen[npc.get_instance_id()] = true
+	return max(target_seen.size(), Global.objectives)
+
+func set_target_total(total):
+	_check_target_scene()
+	target_remote_total = max(0, int(total))
 
 func _write_state():
 	var serialized = to_json(activity())

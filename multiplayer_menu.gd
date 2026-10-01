@@ -7,8 +7,6 @@ var profile_store = preload("res://MOD_CONTENT/CruS Online/ProfileStore.gd").new
 
 var ip = "127.0.0.1"
 var port = 25567
-var stats_tab
-var stats_tab_update_pending = false
 var host_tooltips_ready = false
 var credit_logos_ready = false
 var credits_overlay = null
@@ -35,7 +33,7 @@ var counterop_settings_descriptions = {
 	"enemyFriendlyFire": ["Enemy Friendly Fire", "Allow Counter-Operatives to damage and kill hostile NPCs and mission targets."],
 	"neutralEnemies": ["Neutral Enemies", "When a Counter-Operative attacks a friendly NPC, that NPC becomes hostile to Counter-Operatives. Requires Enemy Friendly Fire."],
 	"randomizeTeams": ["Randomize Teams", "Hide manual team selection and give every player an equal random chance of being assigned to either team when a round starts."],
-	"overrideTeams": ["Override Teams", "Prevent players from choosing their own team and allow the host to reassign teams from Stats."]
+	"overrideTeams": ["Override Teams", "Prevent players from choosing their own team and allow the host to reassign teams from Profile."]
 }
 var host_tooltips = {
 	"LobbyName": "The name shown for your Steam lobby. An empty or invalid name uses your Steam name.",
@@ -156,10 +154,11 @@ func _ready():
 	
 	cruelty_settings_tab.get_node("VBoxContainer/SaveProgress/TickEdit").pressed = Multiplayer.config.saveProgress
 	NicknameEdit.text = Multiplayer.playerInfo.nickname
-	NicknameEdit.connect("focus_exited", self, "save_player")
 	NicknameColor.color = Multiplayer.playerInfo.color
-	
+	$CenterContainer/TabContainer/Player/VBoxContainer/ClientSettings.text = "PROFILE"
 	$CenterContainer/TabContainer/Player/VBoxContainer/Skin.set_texture(Multiplayer.playerInfo.skinPath)
+	$CenterContainer/TabContainer/Player/VBoxContainer/Nickname.hide()
+	$CenterContainer/TabContainer/Player/VBoxContainer/Skin.hide()
 	
 	$CenterContainer/TabContainer/Player/VBoxContainer/Color.r_change(str(NicknameColor.color.r8))
 	$CenterContainer/TabContainer/Player/VBoxContainer/Color.g_change(str(NicknameColor.color.g8))
@@ -167,6 +166,7 @@ func _ready():
 	
 	$CenterContainer.hide()
 	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Implants.get_index(), true)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Player.get_index(), true)
 	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Chat.get_index(), true)
 	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Host.get_index(), true)
 	host_tab_shown = false
@@ -369,7 +369,6 @@ func _close_credits(_tab = 0):
 		credits_overlay.hide()
 
 func _physics_process(delta):
-	_update_stats_tab()
 	if credits_overlay.visible:
 		_layout_credits_overlay()
 	if $CenterContainer.visible:
@@ -386,13 +385,7 @@ func _physics_process(delta):
 		show()
 
 func save_player():
-	Multiplayer.playerInfo.nickname = NicknameEdit.text.strip_edges()
 	Multiplayer.playerInfo.color = NicknameColor.color.to_html(false)
-	Multiplayer.playerInfo.skinPath = $CenterContainer/TabContainer/Player/VBoxContainer/Skin.get_texture()
-	
-	if Multiplayer.playerInfo.nickname.empty():
-		Multiplayer.playerInfo.nickname = "MT Foxtrot"
-	NicknameEdit.text = Multiplayer.playerInfo.nickname
 	save_data("player.save", Multiplayer.playerInfo)
 	Multiplayer.refresh_local_profile()
 
@@ -431,11 +424,6 @@ func get_data():
 	port = int(PortEdit.text)
 	
 	Multiplayer.playerInfo.color = NicknameColor.color.to_html(false)
-	
-	if NicknameEdit.text == "":
-		Multiplayer.playerInfo.nickname = "Mt Foxtrot"
-	else:
-		Multiplayer.playerInfo.nickname = NicknameEdit.text
 
 func host():
 	get_data()
@@ -467,7 +455,7 @@ func disable_tabs():
 
 func enable_tabs():
 	_sync_host_tab_visibility()
-	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Player.get_index(), false)
+	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Player.get_index(), true)
 	$CenterContainer/TabContainer.set_tab_hidden($CenterContainer/TabContainer/Chat.get_index(), true)
 	_sync_modes_tab()
 
@@ -823,59 +811,6 @@ func _add_voice_tabs():
 	var vc = preload("res://MOD_CONTENT/CruS Online/VoiceSettings.gd").new()
 	vc.name = "VC"
 	tabs.add_child(vc)
-	var stats = PanelContainer.new()
-	stats.name = "Stats"
-	stats_tab = stats
-	var source = Multiplayer.get_node("Menu/Stats")
-	stats.theme = source.theme
-	var box = VBoxContainer.new()
-	box.name = "VBoxContainer"
-	box.add_constant_override("separation", 3)
-	stats.add_child(box)
-	var header = Label.new()
-	header.text = "Stats"
-	header.align = Label.ALIGN_CENTER
-	header.add_font_override("font", source.get_node("VBoxContainer/Label").get_font("font"))
-	header.add_stylebox_override("normal", source.get_node("VBoxContainer/Label").get_stylebox("normal"))
-	box.add_child(header)
-	var panel = PanelContainer.new()
-	panel.name = "PanelContainer"
-	panel.size_flags_vertical = SIZE_EXPAND_FILL
-	panel.add_stylebox_override("panel", source.get_node("VBoxContainer/PanelContainer").get_stylebox("panel"))
-	box.add_child(panel)
-	var scroll = ScrollContainer.new()
-	scroll.add_stylebox_override("bg", StyleBoxEmpty.new())
-	scroll.name = "ScrollContainer"
-	scroll.size_flags_vertical = SIZE_EXPAND_FILL
-	panel.add_child(scroll)
-	scroll.add_child(preload("res://MOD_CONTENT/CruS Online/VoiceRoster.gd").new())
-	_update_stats_tab()
-
-func _update_stats_tab():
-	if stats_tab == null or stats_tab_update_pending:
-		return
-	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
-	if in_lobby != (stats_tab.get_parent() != null):
-		stats_tab_update_pending = true
-		call_deferred("_sync_stats_tab")
-
-func _sync_stats_tab():
-	stats_tab_update_pending = false
-	var tabs = $CenterContainer/TabContainer
-	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
-	var selected = tabs.get_current_tab_control()
-	if in_lobby and stats_tab.get_parent() == null:
-		tabs.add_child(stats_tab)
-	elif not in_lobby and stats_tab.get_parent() != null:
-		if tabs.current_tab == stats_tab.get_index():
-			tabs.current_tab = 0
-		tabs.remove_child(stats_tab)
-	if is_instance_valid(selected) and selected.get_parent() == tabs:
-		tabs.current_tab = selected.get_index()
-
-func _exit_tree():
-	if is_instance_valid(stats_tab) and stats_tab.get_parent() == null:
-		stats_tab.free()
 
 func _ensure_cruelty_settings_tab():
 	var tabs = $CenterContainer/TabContainer

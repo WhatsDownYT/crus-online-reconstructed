@@ -1,4 +1,8 @@
 extends Node
+class TargetFixture extends Node:
+	var objective = true
+	var enabled = true
+	var dead = false
 var mp
 var failures = 0
 func check(ok, label):
@@ -133,11 +137,24 @@ func run():
 	voice._update_voice_effects(peer)
 	check(voice.effect_mask(peer)==0 and not AudioServer.is_bus_effect_enabled(bus,voice.BusEffect.REVERB),"menus have unmodified voice")
 	Global.menu.in_game=true
-	Global.objectives_total=2
+	var presence=mp.get_node("DiscordPresence")
+	var original_scene=Global.current_scene
+	var target_scene=Spatial.new()
+	get_tree().root.add_child(target_scene)
+	Global.current_scene=target_scene
+	var first_target=TargetFixture.new()
+	target_scene.add_child(first_target)
+	first_target.add_to_group("admin_npcs")
+	var second_target=TargetFixture.new()
+	target_scene.add_child(second_target)
+	second_target.add_to_group("admin_npcs")
+	presence.set_target_total(2)
 	Global.objectives=2
-	check(mp.get_node("DiscordPresence").mission_counter()=="Targets: 2/2","discord total and remaining targets")
+	check(presence.mission_counter()=="Targets: 2/2","discord total and remaining targets")
 	Global.objectives=0
-	check(mp.get_node("DiscordPresence").mission_counter()=="Targets: 0/2","discord killed targets retain initial total")
+	check(presence.mission_counter()=="Targets: 0/2","discord killed targets retain initial total")
+	second_target.enabled=false
+	check(presence.mission_counter()=="Targets: 0/2","discord total remains after a target is removed")
 	mp.hostSettings.gameMode="deathmatch"
 	mp.Flow.world.participants=[1,client_id]
 	mp.died_players.clear()
@@ -145,7 +162,9 @@ func run():
 	mp.died_players.append(client_id)
 	check(mp.get_node("DiscordPresence").mission_counter()=="Players: 1/2","discord deathmatch excludes dead players")
 	mp.hostSettings.gameMode="counter_op"
-	check(mp.get_node("DiscordPresence").mission_counter()=="Targets: 0/2","discord counter-opps uses mission targets")
+	check(presence.mission_counter()=="Targets: 0/2","discord counter-opps uses mission targets")
+	Global.current_scene=original_scene
+	target_scene.queue_free()
 	var reverse=fx.new()
 	var ramp=PoolVector2Array()
 	ramp.resize(320)

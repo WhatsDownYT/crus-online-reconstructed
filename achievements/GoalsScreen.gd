@@ -453,7 +453,7 @@ func _build_ui(phone):
 	list_scroll = ScrollContainer.new()
 	list_scroll.name = "GoalsList"
 	list_scroll.rect_position = Vector2(12, 58)
-	list_scroll.rect_size = Vector2(width - 24, ui_overlay.rect_size.y - 64)
+	list_scroll.rect_size = Vector2(width - 16, ui_overlay.rect_size.y - 64)
 	var clear = StyleBoxEmpty.new()
 	list_scroll.add_stylebox_override("bg", clear)
 	list_scroll.scroll_horizontal_enabled = false
@@ -776,14 +776,15 @@ func _update_category_menu_styles():
 		_on_category_number_hover(id, false)
 
 func _filtered_goals():
-	if current_category == "all":
-		return goals
 	var filtered = []
+	var manager = Global.get_node_or_null("AchievementGoals")
 	for goal in goals:
 		if typeof(goal) != TYPE_DICTIONARY:
 			continue
+		if manager != null and not manager.should_show_entry(goal):
+			continue
 		var category = str(goal.get("category", "campaign")).to_lower()
-		if category == current_category:
+		if current_category == "all" or category == current_category:
 			filtered.append(goal)
 	return filtered
 

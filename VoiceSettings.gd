@@ -8,6 +8,7 @@ var push_to_talk
 var binding
 var volume_label
 var device_names = []
+var roster_panel
 
 func _ready():
 	name = "VC"
@@ -54,6 +55,15 @@ func _ready():
 	binding.text = voice.binding_text()
 	_row(box, "Push-To-Talk:", binding)
 	binding.connect("pressed", self, "_bind_pressed")
+	roster_panel = PanelContainer.new()
+	roster_panel.size_flags_vertical = SIZE_EXPAND_FILL
+	roster_panel.add_stylebox_override("panel", host.get_stylebox("panel"))
+	box.add_child(roster_panel)
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = SIZE_EXPAND_FILL
+	scroll.add_stylebox_override("bg", StyleBoxEmpty.new())
+	roster_panel.add_child(scroll)
+	scroll.add_child(preload("res://MOD_CONTENT/CruS Online/VoiceRoster.gd").new())
 
 func _row(box, title, control):
 	var row = HBoxContainer.new()
@@ -139,6 +149,9 @@ func _input(event):
 	get_tree().set_input_as_handled()
 
 func _process(_delta):
+	if roster_panel != null:
+		var multiplayer = voice.get_parent()
+		roster_panel.visible = multiplayer.NetworkBridge.check_connection() and multiplayer.players.has(multiplayer.NetworkBridge.get_id())
 	if not is_visible_in_tree() and voice.binding_active:
 		voice.binding_active = false
 		binding.text = voice.binding_text()

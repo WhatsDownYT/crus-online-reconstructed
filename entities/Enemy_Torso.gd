@@ -45,7 +45,8 @@ puppet func _client_damage(id):
 
 func _ready():
 	NetworkBridge.register_rpcs(self, [
-		["tranquilize", NetworkBridge.PERMISSION.ALL],
+		["network_tranquilize", NetworkBridge.PERMISSION.ALL],
+		["network_baton_stun", NetworkBridge.PERMISSION.ALL],
 		["request_cancer", NetworkBridge.PERMISSION.ALL],
 		["network_damage", NetworkBridge.PERMISSION.ALL],
 		["network_piercing_damage", NetworkBridge.PERMISSION.ALL],
@@ -104,21 +105,31 @@ func set_water(a):
 				soul.body.set_water(a)
 
 func add_velocity(normal, amount):
-	if NetworkBridge.n_is_network_master(self):
-		soul.add_velocity(normal, amount)
+	soul.add_velocity(normal, amount)
 
-master func tranquilize(id, dart):
+func tranquilize(dart):
+	network_tranquilize(null, dart)
+
+master func network_tranquilize(id, dart):
 	if NetworkBridge.n_is_network_master(self):
 		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
 		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, soul):
 			return
 		soul.set_tranquilized(dart)
 	else:
-		NetworkBridge.n_rpc_id(self, 0, "tranquilize", [dart])
+		NetworkBridge.n_rpc_id(self, 0, "network_tranquilize", [dart])
 
 func tranq_timeout(dart):
+	network_baton_stun(null, dart)
+
+master func network_baton_stun(id, dart):
 	if NetworkBridge.n_is_network_master(self):
+		var source_peer = NetworkBridge.request_sender(id) if id != null else NetworkBridge.damage_source_context
+		if not Global.get_node("Multiplayer").CounterOp.can_damage_npc(source_peer, soul):
+			return
 		soul.tranq_timeout(dart)
+	else:
+		NetworkBridge.n_rpc_id(self, 0, "network_baton_stun", [dart])
 
 func grapple(pos:Position3D):
 	soul.grapple(pos)

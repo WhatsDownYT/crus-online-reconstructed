@@ -1,4 +1,4 @@
-[gd_scene load_steps=50 format=2]
+[gd_scene load_steps=49 format=2]
 
 [ext_resource path="res://Menu/menu_theme.tres" type="Theme" id=1]
 [ext_resource path="res://Textures/Misc/mainguy_clothes.png" type="Texture" id=2]
@@ -13,7 +13,6 @@
 [ext_resource path="res://Textures/NPC/bosssguy_clothes.png" type="Texture" id=16]
 [ext_resource path="res://Textures/NPC/Enemy_Civilian2.png" type="Texture" id=17]
 [ext_resource path="res://Textures/NPC/Enemy_Assassin_Alt.png" type="Texture" id=18]
-[ext_resource path="res://Textures/NPC/Elsa.png" type="Texture" id=19]
 [ext_resource path="res://Textures/NPC/Enemy_Assassin.png" type="Texture" id=20]
 [ext_resource path="res://Textures/NPC/Objective_CEO.png" type="Texture" id=21]
 [ext_resource path="res://Textures/NPC/Enemy_Kevin.png" type="Texture" id=22]
@@ -1090,7 +1089,7 @@ margin_right = 641.0
 margin_bottom = 397.0
 custom_constants/separation = 5
 script = SubResource( 2 )
-playerSkins = [ [ "Default", "res://Textures/Misc/mainguy_clothes.png", ExtResource( 2 ) ], [ "Worker", "res://Textures/NPC/Enemy_Worker.png", ExtResource( 6 ) ], [ "Nude (FREE???)", "res://Textures/NPC/Enemy_Nude.png", ExtResource( 4 ) ], [ "Cultist", "res://Textures/NPC/cultist_civilian.png", ExtResource( 15 ) ], [ "Boss guy", "res://Textures/NPC/bosssguy_clothes.png", ExtResource( 16 ) ], [ "Assassin", "res://Textures/NPC/Enemy_Assassin.png", ExtResource( 20 ) ], [ "Assassin (Alt)", "res://Textures/NPC/Enemy_Assassin_Alt.png", ExtResource( 18 ) ], [ "Civilian", "res://Textures/NPC/Enemy_Civilian2.png", ExtResource( 17 ) ], [ "Cop", "res://Textures/NPC/Enemy_Cop1.png", ExtResource( 23 ) ], [ "Kevin", "res://Textures/NPC/Enemy_Kevin.png", ExtResource( 22 ) ], [ "CEO", "res://Textures/NPC/Objective_CEO.png", ExtResource( 21 ) ], [ "Elsa", "res://Textures/NPC/Elsa.png", ExtResource( 19 ) ] ]
+playerSkins = [ [ "Default", "res://Textures/Misc/mainguy_clothes.png", ExtResource( 2 ) ], [ "Worker", "res://Textures/NPC/Enemy_Worker.png", ExtResource( 6 ) ], [ "Nude (FREE???)", "res://Textures/NPC/Enemy_Nude.png", ExtResource( 4 ) ], [ "Cultist", "res://Textures/NPC/cultist_civilian.png", ExtResource( 15 ) ], [ "Boss guy", "res://Textures/NPC/bosssguy_clothes.png", ExtResource( 16 ) ], [ "Assassin", "res://Textures/NPC/Enemy_Assassin.png", ExtResource( 20 ) ], [ "Assassin (Alt)", "res://Textures/NPC/Enemy_Assassin_Alt.png", ExtResource( 18 ) ], [ "Civilian", "res://Textures/NPC/Enemy_Civilian2.png", ExtResource( 17 ) ], [ "Cop", "res://Textures/NPC/Enemy_Cop1.png", ExtResource( 23 ) ], [ "Kevin", "res://Textures/NPC/Enemy_Kevin.png", ExtResource( 22 ) ], [ "CEO", "res://Textures/NPC/Objective_CEO.png", ExtResource( 21 ) ] ]
 
 [node name="Label3" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer/Skin"]
 margin_top = 115.0

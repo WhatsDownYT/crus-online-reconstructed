@@ -8,7 +8,7 @@ func is_target_action(method):
 func is_owner_state(method):
 	return method in ["_update_puppet", "respawn_puppet", "set_current_weapon",
 		"set_is_on_floor", "set_kick", "set_sit", "set_crouch", "set_gravity",
-		"shoot_commit", "sync_goop", "sync_implants", "set_flashlight", "_set_death", "hideHelpLabel"]
+		"shoot_commit", "sync_goop", "sync_implants", "set_flashlight", "_set_death", "hideHelpLabel", "set_orb_attack"]
 
 func validate_network_action(sender, target, method, args):
 	if not Multiplayer.players.has(sender) or not Multiplayer.players.has(target):
@@ -72,6 +72,11 @@ var _body_meshes = []
 var _body_base_materials = []
 var _body_stealth_materials = []
 var _body_visual_mode = ""
+var _golem_model = null
+var _golem_anim = null
+var _golem_animation = ""
+var _golem_visible = false
+var _golem_attack_until = 0
 
 var grapple_pos = null
 
@@ -122,6 +127,7 @@ func _ready():
 		["_set_death", NetworkBridge.PERMISSION.ALL],
 		["set_is_on_floor", NetworkBridge.PERMISSION.ALL],
 		["set_kick", NetworkBridge.PERMISSION.ALL],
+		["set_orb_attack", NetworkBridge.PERMISSION.ALL],
 		["set_sit", NetworkBridge.PERMISSION.ALL],
 		["set_crouch", NetworkBridge.PERMISSION.ALL],
 		["set_gravity", NetworkBridge.PERMISSION.ALL],
@@ -139,6 +145,7 @@ func _ready():
 	weaponsMesh = $Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons.get_children()
 	var skinMaterial = SpatialMaterial.new()
 	skinMaterial.albedo_texture = load(skinPath)
+	_apply_outfit_mesh()
 	$Puppet/PlayerModel/Armature/Skeleton/Torso_Mesh.material_override = skinMaterial
 	_setup_multiplayer_body_materials()
 	$Puppet/PlayerModel/Nickname.text = nickname
@@ -227,6 +234,7 @@ remote func set_sit(id, recived_value):
 
 func _process(delta):
 	_update_player_indicator()
+	_update_golem_visual()
 	_update_multiplayer_body_visuals()
 	_update_local_hold_position()
 	if not label_font_ready:
@@ -256,7 +264,8 @@ func _process(delta):
 	if not global_transform.is_equal_approx(transform_lerp):
 		global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
 	
-	$Puppet/PlayerModel/Nickname.global_transform.origin = $Puppet.global_transform.origin + Vector3(0, 2.15 if not playerCrouch else 1.45, 0)
+	var name_height = 2.55 if implant_state.get("golem_exosystem", false) else (2.15 if not playerCrouch else 1.45)
+	$Puppet/PlayerModel/Nickname.global_transform.origin = $Puppet.global_transform.origin + Vector3(0, name_height, 0)
 	if label_font_ready and centered_name != $Puppet/PlayerModel/Nickname.text:
 		centered_name = $Puppet/PlayerModel/Nickname.text
 		call_deferred("_center_nickname")
@@ -415,6 +424,13 @@ remote func set_kick(id):
 		NetworkBridge.n_rpc(self, "set_kick")
 	else:
 		animTree.set("parameters/KICK/active", true)
+		_golem_attack_until = OS.get_ticks_msec() + 450
+
+remote func set_orb_attack(id):
+	if int(self.name) == NetworkBridge.get_id():
+		NetworkBridge.n_rpc(self, "set_orb_attack")
+	else:
+		_golem_attack_until = OS.get_ticks_msec() + 450
 
 remote func _set_cancer(id):
 	Global.player.cancer()
@@ -542,6 +558,71 @@ remote func sync_implants(id, names):
 	if state != null:
 		implant_state = state
 		_refresh_multiplayer_body_materials()
+		_update_golem_visual()
+
+func _apply_outfit_mesh():
+	var outfit_scenes = {
+		"res://Textures/NPC/Enemy_Worker.png": "res://Entities/Enemies/E_Civilian_Worker.tscn",
+		"res://Textures/NPC/Enemy_Nude.png": "res://Entities/Enemies/E_Civilian_Nude.tscn",
+		"res://Textures/NPC/cultist_civilian.png": "res://Entities/Enemies/E_Civilian_Cultist_1.tscn",
+		"res://Textures/NPC/bosssguy_clothes.png": "res://Entities/Enemies/E_Boss_Life.tscn",
+		"res://Textures/NPC/Enemy_Assassin.png": "res://Entities/Enemies/E_Assassin.tscn",
+		"res://Textures/NPC/Enemy_Assassin_Alt.png": "res://Entities/Enemies/E_Assassin_Weak.tscn",
+		"res://Textures/NPC/Enemy_Civilian2.png": "res://Entities/Enemies/E_Civilian2.tscn",
+		"res://Textures/NPC/Enemy_Cop1.png": "res://Entities/Enemies/E_Cop_Shotgun.tscn",
+		"res://Textures/NPC/Enemy_Kevin.png": "res://Entities/Enemies/E_Kevin.tscn",
+		"res://Textures/NPC/Objective_CEO.png": "res://Entities/Enemies/Obj_CEO.tscn",
+		"res://Textures/NPC/Elsa.png": "res://Entities/Enemies/Elsa.tscn"
+	}
+	if not outfit_scenes.has(skinPath):
+		return
+	var scene = load(outfit_scenes[skinPath])
+	if scene == null:
+		return
+	var source = scene.instance()
+	var source_skeleton = source.get_node_or_null("Nemesis/Armature/Skeleton")
+	var source_torso = source.get_node_or_null("Nemesis/Armature/Skeleton/Torso_Mesh")
+	var target_skeleton = $Puppet/PlayerModel/Armature/Skeleton
+	if source_skeleton != null and source_torso != null and source_skeleton.get_bone_count() == target_skeleton.get_bone_count():
+		var compatible = true
+		for bone in range(target_skeleton.get_bone_count()):
+			if source_skeleton.get_bone_name(bone) != target_skeleton.get_bone_name(bone):
+				compatible = false
+				break
+		if compatible:
+			var target_torso = target_skeleton.get_node("Torso_Mesh")
+			target_torso.mesh = source_torso.mesh
+			target_torso.skin = source_torso.skin
+	source.free()
+
+func _update_golem_visual():
+	var equipped = implant_state.get("golem_exosystem", false)
+	if equipped and _golem_model == null:
+		_golem_model = load("res://Imported_Mesh/orbot.glb").instance()
+		_golem_model.name = "GolemModel"
+		$Puppet.add_child(_golem_model)
+		_golem_model.translation = Vector3(0, 1.0, 0)
+		_golem_model.rotation.y = PI
+		_golem_anim = _golem_model.get_node_or_null("AnimationPlayer")
+		var torso = _golem_model.get_node_or_null("Armature/Skeleton/Torso_Mesh")
+		if torso != null:
+			torso.material_override = load("res://Materials/rod.tres")
+	if equipped != _golem_visible:
+		_golem_visible = equipped
+		if _golem_model != null:
+			_golem_model.visible = equipped
+		var skeleton = $Puppet/PlayerModel/Armature/Skeleton
+		skeleton.get_node("Torso_Mesh").visible = not equipped
+		skeleton.get_node("Head_Mesh").visible = not equipped
+		skeleton.get_node("Head/glasses").visible = not equipped
+		skeleton.get_node("RightHand/Weapons").visible = not equipped
+	if not equipped or _golem_anim == null:
+		_golem_animation = ""
+		return
+	var next_animation = "Death1" if death else ("Attack" if OS.get_ticks_msec() < _golem_attack_until else ("Run" if abs(playerMovement[0]) + abs(playerMovement[1]) > 0.15 else "Idle"))
+	if next_animation != _golem_animation and _golem_anim.has_animation(next_animation):
+		_golem_animation = next_animation
+		_golem_anim.play(next_animation)
 
 func _setup_multiplayer_body_materials():
 	var shader = preload("res://MOD_CONTENT/CruS Online/effects/player_stealth_dither.shader")

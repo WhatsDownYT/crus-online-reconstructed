@@ -8,7 +8,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 1,
-      "stylish": false,
       "secret": false
     },
     {
@@ -19,7 +18,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 2,
-      "stylish": false,
       "secret": true
     },
     {
@@ -30,7 +28,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 3,
-      "stylish": false,
       "secret": true
     },
     {
@@ -41,7 +38,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 4,
-      "stylish": false,
       "secret": true
     },
     {
@@ -52,7 +48,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 5,
-      "stylish": false,
       "secret": true
     },
     {
@@ -63,7 +58,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 6,
-      "stylish": false,
       "secret": true
     },
     {
@@ -74,7 +68,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 7,
-      "stylish": false,
       "secret": true
     },
     {
@@ -85,7 +78,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 8,
-      "stylish": false,
       "secret": true
     },
     {
@@ -96,7 +88,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 9,
-      "stylish": false,
       "secret": true
     },
     {
@@ -107,7 +98,6 @@
       "reward": 1000,
       "category": "campaign",
       "level": 10,
-      "stylish": false,
       "secret": true
     },
     {
@@ -118,18 +108,16 @@
       "reward": 1000,
       "category": "campaign",
       "level": 11,
-      "stylish": false,
       "secret": true
     },
     {
       "id": "steam_archon_grid",
       "name": "GOD'S BLOOD EARTH",
-      "description": "Complete Archon Grid.",
+      "description": "Reach the first ending by completing Archon Grid.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/archon_grid.png",
-      "reward": 1000,
+      "reward": 5000,
       "category": "campaign",
       "level": 12,
-      "stylish": false,
       "secret": true
     },
     {
@@ -140,7 +128,6 @@
       "reward": 2000,
       "category": "campaign",
       "level": 14,
-      "stylish": false,
       "secret": true
     },
     {
@@ -151,7 +138,6 @@
       "reward": 2000,
       "category": "campaign",
       "level": 13,
-      "stylish": false,
       "secret": true
     },
     {
@@ -162,7 +148,6 @@
       "reward": 2000,
       "category": "campaign",
       "level": 15,
-      "stylish": false,
       "secret": true
     },
     {
@@ -173,7 +158,6 @@
       "reward": 2000,
       "category": "campaign",
       "level": 16,
-      "stylish": false,
       "secret": true
     },
     {
@@ -181,21 +165,19 @@
       "name": "home",
       "description": "Complete House.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/house.png",
-      "reward": 2000,
+      "reward": 5000,
       "category": "campaign",
       "level": 17,
-      "stylish": false,
       "secret": true
     },
     {
       "id": "steam_hq",
       "name": "SACRIFICIAL HERO",
-      "description": "Complete HQ.",
+      "description": "Reach the second ending by completing HQ.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/hq.png",
       "reward": 2000,
       "category": "campaign",
       "level": 0,
-      "stylish": false,
       "secret": true
     },
     {
@@ -206,8 +188,142 @@
       "reward": 10000,
       "category": "campaign",
       "level": 18,
-      "stylish": false,
       "secret": true
+    },
+    {
+      "id": "soul_emulation",
+      "name": "SOUL EMULATION",
+      "description": "Flip the matrix of life upside down.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "financial_ascension",
+      "name": "FINANCIAL ASCENSION",
+      "description": "Reach $1,000,000.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "open_your_eyes",
+      "name": "OPEN YOUR EYES",
+      "description": "Free yourself from the Limit Chancellor.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "synaptic_cascade",
+      "name": "SYNAPTIC CASCADE",
+      "description": "Beat every mission in Hope Eradicated.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "mastery",
+      "secret": false
+    },
+    {
+      "id": "eternal_malice",
+      "name": "ETERNAL MALICE",
+      "description": "Get an S rank in every mission.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "mastery",
+      "secret": false
+    },
+    {
+      "id": "entrapment",
+      "name": "ENTRAPMENT",
+      "description": "Beat every mission in Punishment mode.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "mastery",
+      "secret": false
+    },
+    {
+      "id": "suffering_for_aeons",
+      "name": "SUFFERING FOR AEONS",
+      "description": "Beat every mission in Chaos mode.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "mastery",
+      "secret": false
+    },
+    {
+      "id": "beauty_of_life",
+      "name": "BEAUTY OF LIFE",
+      "description": "Beat every mission with the Extravagant Suit.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "mastery",
+      "secret": false
+    },
+    {
+      "id": "the_unholy_trinity",
+      "name": "THE UNHOLY TRINITY",
+      "description": "Be bestowed the power of the Triagons.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "biological_traversal",
+      "name": "BIOLOGICAL TRAVERSAL",
+      "description": "Collect all organs and body parts.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "catch_of_the_day",
+      "name": "CATCH OF THE DAY",
+      "description": "Collect all fish.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "controlled_depopulation",
+      "name": "CONTROLLED DEPOPULATION",
+      "description": "Complete a mission after killing all killable hostile NPCs.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "the_first_transaction",
+      "name": "THE FIRST TRANSACTION",
+      "description": "Collect all weapons.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "metabolic_abomination",
+      "name": "METABOLIC ABOMINATION",
+      "description": "Purchase all equipment/implants.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
+    },
+    {
+      "id": "fully_peeled",
+      "name": "FULLY PEELED",
+      "description": "Collect all game achievements.",
+      "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
+      "reward": 0,
+      "category": "extras",
+      "secret": false
     },
     {
       "id": "mastery_pharmakokinetiks",

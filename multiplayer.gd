@@ -115,6 +115,7 @@ var Flow
 var Voice
 var CounterOp
 var Deathmatch
+var OnlineStats
 var Eyecam
 var MeritPump
 var Extensions
@@ -137,6 +138,9 @@ func _ready():
 	CounterOp = preload("res://MOD_CONTENT/CruS Online/CounterOp.gd").new()
 	CounterOp.name = "CounterOp"
 	add_child(CounterOp)
+	OnlineStats = preload("res://MOD_CONTENT/CruS Online/OnlineStats.gd").new()
+	OnlineStats.name = "OnlineStats"
+	add_child(OnlineStats)
 	Flow = preload("res://MOD_CONTENT/CruS Online/SessionFlow.gd").new()
 	Flow.name = "SessionFlow"
 	add_child(Flow)
@@ -723,7 +727,9 @@ signal scene_loaded()
 var loaded_players = []
 var player_scene_loaded = true
 
-func goto_scene_host(scene):
+func goto_scene_host(scene, preserve_loadout = false):
+	if preserve_loadout:
+		Global.capture_level_transition_loadout()
 	enforce_implant_bans()
 	_menu_destination = ""
 	if not NetworkBridge.check_connection():
@@ -759,12 +765,12 @@ func goto_scene_host(scene):
 		SteamInit.Steam.setLobbyJoinable(SteamLobby.get_lobby_id(), false)
 		
 	Global.goto_scene(scene)
-	NetworkBridge.n_rpc(self, "goto_scene_client", [scene, Global.CURRENT_LEVEL, SteamNetwork.scene_epoch])
+	NetworkBridge.n_rpc(self, "goto_scene_client", [scene, Global.CURRENT_LEVEL, SteamNetwork.scene_epoch, preserve_loadout])
 	print("[CRUS ONLINE / HOST]: Goto to scene [" + scene + "]")
 	
 	Players.load_players()
 
-puppet func goto_scene_client(id, scene, level, epoch = -1):
+puppet func goto_scene_client(id, scene, level, epoch = -1, preserve_loadout = false):
 	if level >= Extensions.BASE_LEVEL_COUNT and not Extensions.set_scene(scene):
 		Content.fail("The host's custom mission is unavailable. Reconnect to synchronize content.")
 		return
@@ -789,6 +795,8 @@ puppet func goto_scene_client(id, scene, level, epoch = -1):
 	Global.border.show()
 	
 	disable_menu()
+	if preserve_loadout:
+		Global.capture_level_transition_loadout()
 	if level < Extensions.BASE_LEVEL_COUNT:
 		Global.CURRENT_LEVEL = level
 	Global.goto_scene(scene)
@@ -862,7 +870,8 @@ puppet func notify_host_difficulty(id, message):
 
 func publish_mission_state():
 	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
-		NetworkBridge.n_rpc(self, "sync_mission_state", [Global.objectives, Global.objective_complete, Global.objectives_total])
+		var target_total = $DiscordPresence.current_target_total()
+		NetworkBridge.n_rpc(self, "sync_mission_state", [Global.objectives, Global.objective_complete, target_total])
 
 puppet func sync_mission_state(id, remaining, complete, total = -1):
 	if typeof(remaining) != TYPE_INT or remaining < 0 or typeof(complete) != TYPE_BOOL:
@@ -873,6 +882,8 @@ puppet func sync_mission_state(id, remaining, complete, total = -1):
 	var was_complete = Global.objective_complete
 	Global.objectives = remaining
 	Global.objectives_total = total if total >= 0 else max(Global.objectives_total, remaining)
+	if total >= 0:
+		$DiscordPresence.set_target_total(total)
 	Global.objective_complete = complete
 	if remaining < previous_remaining and Global.UI != null:
 		Global.UI.notify("Target Eliminated", Color(1, 0, 0))
@@ -1099,7 +1110,10 @@ func reward_multiplayer_kill(killer, victim):
 		return
 	killer = int(killer)
 	victim = int(victim)
-	if killer <= 0 or killer == victim or not players.has(killer) or died_players.has(killer):
+	if killer <= 0 or killer == victim or not players.has(killer):
+		return
+	OnlineStats.award_player_kill(killer)
+	if died_players.has(killer):
 		return
 	if not peer_has_implant_flag(killer, "multiplayer_cursed_torch"):
 		return
@@ -1398,6 +1412,9 @@ func host_session_ended():
 	emit_signal("disconnected_from_server", errorType.SERVER_CLOSED)
 
 puppet func reward_npc_kill(id):
+	if not Global.campaign_save.active:
+		Global.total_kills += 1
+		Global.save_game()
 	if is_instance_valid(Global.player) and not Global.player.died and Global.implants.arm_implant.cursed_torch and Global.player.health < 100:
 		Global.player.health += 1
 		Global.player.UI.set_health(Global.player.health)

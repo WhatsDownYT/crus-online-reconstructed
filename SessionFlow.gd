@@ -153,6 +153,8 @@ puppet func show_result(id, state):
 	var local_won = state.won if not competitive else Multiplayer.CounterOp.team_of(NetworkBridge.get_id()) == winner_team
 	if winner_team == "deathmatch":
 		local_won = state.get("winner_peer", 0) == NetworkBridge.get_id()
+	if competitive:
+		Multiplayer.OnlineStats.record_result(winner_team, local_won)
 	result_won = local_won
 	result_reward = 1000 if competitive and local_won else 0
 	if result_reward > 0:

@@ -222,7 +222,7 @@ puppet func _client_create_drop_weapon(id, recived_id, parentPath, recivedTransf
 	if recived_id != NetworkBridge.get_id():
 		_create_drop_weapon(recived_id, parentPath, recivedTransform,recivedHoldPos, implantThrowBonus, recivedCurrentWeapon, recivedAmmo, playerVelocity, recivdeRandName, playerIgnoreId)
 
-remote func _spawn_object(id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity = null):
+remote func _spawn_object(id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity = null, recivedCollisionMask = -1):
 	if NetworkBridge.is_world_authority():
 		id = NetworkBridge.request_sender(id)
 	var newObject = load(recivedObject).instance()
@@ -234,13 +234,15 @@ remote func _spawn_object(id, parentPath, recivedObject, recivedName, recivedTra
 	newObject.global_transform = recivedTransform
 	if recivedVelocity != null:
 		newObject.velocity = recivedVelocity
+	if recivedCollisionMask >= 0:
+		newObject.collision_mask = recivedCollisionMask
 	
 	if NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rpc(self, "_client_spawn_object", [id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity])
+		NetworkBridge.n_rpc(self, "_client_spawn_object", [id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity, recivedCollisionMask])
 
-puppet func _client_spawn_object(id, recived_id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity = null):
+puppet func _client_spawn_object(id, recived_id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity = null, recivedCollisionMask = -1):
 	if recived_id != NetworkBridge.get_id():
-		_spawn_object(recived_id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity)
+		_spawn_object(recived_id, parentPath, recivedObject, recivedName, recivedTransform, recivedVelocity, recivedCollisionMask)
 
 remote func _play_sound(id, soundName):
 	var players = Global.get_node("Multiplayer").players
@@ -433,6 +435,11 @@ func _ready() -> void :
 		ammo[weapon1] += MAX_MAG_AMMO[weapon1] * glob.implants.torso_implant.ammo_bonus
 		ammo[weapon2] += MAX_MAG_AMMO[weapon2] * glob.implants.torso_implant.ammo_bonus
 		current_weapon = weapon1
+		var transition_loadout = glob.consume_level_transition_loadout()
+		if transition_loadout != null and transition_loadout.size() >= 3:
+			weapon1 = transition_loadout[0]
+			weapon2 = transition_loadout[1]
+			current_weapon = transition_loadout[2]
 		
 		
 		if orb:
@@ -1167,12 +1174,16 @@ func _process(delta)->void :
 				if orb_anim.is_playing():
 					return 
 				orb_anim.play("Attack", - 1)
+				if is_instance_valid(playerPuppet):
+					playerPuppet.set_orb_attack(null)
 				orb_left = not orb_left
 				
 			else :
 				if $orbarms / AnimationPlayer2.is_playing():
 					return 
 				$orbarms / AnimationPlayer2.play("AttackR", - 1)
+				if is_instance_valid(playerPuppet):
+					playerPuppet.set_orb_attack(null)
 				orb_left = not orb_left
 				
 		if Input.is_action_pressed("mouse_1") and reload_timer.is_stopped() and current_weapon != null:
@@ -1562,6 +1573,7 @@ func blackjack()->void :
 		
 func blackjack_timeout():
 	if current_weapon == W_BLACKJACK:
+		raycast.force_raycast_update()
 		if raycast.is_colliding():
 			var col = raycast.get_collider()
 			var col_p = raycast.get_collision_point()
@@ -1574,9 +1586,9 @@ func blackjack_timeout():
 				glob.player.player_velocity += 5 * col_n
 				glob.player.player_view.fov *= 1.02
 				if col.has_method("tranq_timeout"):
-					col.tranq_timeout(false)
+					NetworkBridge.apply_damage(self, col, "tranq_timeout", [false])
 				if col.has_method("add_velocity"):
-					col.add_velocity(5, col_n)
+					NetworkBridge.apply_damage(self, col, "add_velocity", [5, col_n])
 	elif current_weapon == W_ROD:
 		if fishing_hook != null:
 			if fishing_hook.fish_caught:
@@ -2657,7 +2669,7 @@ func tranq()->void :
 			if missile_new.has_method("update_rpcs"):
 				missile_new.update_rpcs()
 			
-			NetworkBridge.n_rpc(self, "_spawn_object", [missleParent.get_path(), "res://Entities/Bullets/tranquilizer_dart.tscn", missile_new.name, missile_new.global_transform, missile_new.velocity])
+			NetworkBridge.n_rpc(self, "_spawn_object", [missleParent.get_path(), "res://Entities/Bullets/tranquilizer_dart.tscn", missile_new.name, missile_new.global_transform, missile_new.velocity, missile_new.collision_mask])
 			
 			audio[current_weapon].play()
 			if player:

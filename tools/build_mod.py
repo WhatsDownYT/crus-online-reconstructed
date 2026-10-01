@@ -41,6 +41,11 @@ with zipfile.ZipFile(args.base_package) as base:
             continue
         if path.suffix.lower() in runtime_suffixes or relative.as_posix() == 'discord/CruSDiscord.exe':
             entries[prefix + relative.as_posix()] = path.read_bytes()
+    for name in base.namelist():
+        if not name.startswith(prefix) or not name.endswith('.import') or name in entries:
+            continue
+        for imported in re.findall(r'^path(?:\.s3tc)?="res://(\.import/[^"]+)"', base.read(name).decode('utf-8'), re.MULTILINE):
+            entries.pop(imported, None)
     for name, data in entries.items():
         if name.endswith('.remap'):
             for target in re.findall(r'path="res://([^"]+)"', data.decode('utf-8-sig')):

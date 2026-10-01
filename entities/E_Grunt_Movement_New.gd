@@ -126,6 +126,9 @@ puppet func set_animation(id, anim:String, speed:float)->void :
 	anim_player.play(anim)
 	anim_player.playback_speed = speed
 
+puppet func set_tranquilized_state(id, value):
+	tranq = value
+
 var lerp_transform : Transform
 var last_transform : Transform
 
@@ -162,6 +165,7 @@ func _ready()->void :
 		["set_in_sight", NetworkBridge.PERMISSION.SERVER],
 		["set_psychosis", NetworkBridge.PERMISSION.SERVER],
 		["set_animation", NetworkBridge.PERMISSION.SERVER],
+		["set_tranquilized_state", NetworkBridge.PERMISSION.SERVER],
 		["set_puppet_transform", NetworkBridge.PERMISSION.SERVER],
 		["hide_muzzleflash", NetworkBridge.PERMISSION.SERVER]
 	])
@@ -670,6 +674,7 @@ master func network_set_tranquilized(id):
 	if NetworkBridge.n_is_network_master(self):
 		if not tranq:
 			tranq = true
+			NetworkBridge.n_rpc(self, "set_tranquilized_state", [true])
 			if anim_player.has_animation(DEATH_ANIMS[0]):
 				set_animation(null, DEATH_ANIMS[0], 1)
 				NetworkBridge.n_rpc(self, "set_animation", [DEATH_ANIMS[0], 1])
@@ -688,6 +693,7 @@ func tranq_timeout():
 		if dead:
 			return
 		tranq = false
+		NetworkBridge.n_rpc(self, "set_tranquilized_state", [false])
 		set_animation(null, "Idle", 1)
 		NetworkBridge.n_rpc(self, "set_animation", ["Idle", 1])
 		set_collision_layer_bit(4, true)

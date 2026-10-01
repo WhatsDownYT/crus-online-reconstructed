@@ -15,6 +15,7 @@ static func resolve(catalog, names):
 		"multiplayer_cursed_torch": false,
 		"multiplayer_augmented_arms": false,
 		"sedative_immune": false,
+		"golem_exosystem": false,
 		"eyecam_pro": false,
 		"merit_pump": false
 	}
@@ -35,6 +36,7 @@ static func resolve(catalog, names):
 					result.multiplayer_camo = implant.multiplayer_camo
 					result.multiplayer_stealth = implant.multiplayer_stealth
 					result.sedative_immune = implant.terror or implant.orbsuit
+					result.golem_exosystem = implant.orbsuit
 				if index == 2:
 					result.merit_pump = implant.i_name == "Pneumatic Merit Pump"
 					result.cursed_torch = implant.cursed_torch
