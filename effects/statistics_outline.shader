@@ -1,12 +1,13 @@
 shader_type canvas_item;
 
 uniform bool selected = false;
+uniform float outline_width = 3.0;
 
 void fragment() {
 	if (!selected) {
 		COLOR = vec4(0.0);
 	} else {
-		vec2 pixel = TEXTURE_PIXEL_SIZE * 3.0;
+		vec2 pixel = TEXTURE_PIXEL_SIZE * outline_width;
 		float center = texture(TEXTURE, UV).a;
 		float outside = max(texture(TEXTURE, UV + vec2(pixel.x, 0.0)).a, texture(TEXTURE, UV - vec2(pixel.x, 0.0)).a);
 		outside = max(outside, texture(TEXTURE, UV + vec2(0.0, pixel.y)).a);

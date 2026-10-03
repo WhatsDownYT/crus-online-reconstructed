@@ -199,6 +199,7 @@ puppet func show_result(id, state):
 		var goals = Global.get_node_or_null("AchievementGoals")
 		if goals != null:
 			goals.record_mission_win(state.level)
+		Multiplayer.Extensions.record_campaign_win(state.level)
 	Global.save_game()
 	Multiplayer.DeathScreen.hide()
 	Multiplayer.Menu.hide()

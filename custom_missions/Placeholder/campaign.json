@@ -1,0 +1,77 @@
+{
+  "id": "placeholder",
+  "name": "Placeholder",
+  "version": 1,
+  "levels": [
+    {
+      "id": "01",
+      "folder": "01",
+      "index": 0,
+      "unlock_after": [],
+      "secret": false
+    },
+    {
+      "id": "02",
+      "folder": "02",
+      "index": 1,
+      "unlock_after": [
+        "01"
+      ],
+      "secret": false
+    },
+    {
+      "id": "03",
+      "folder": "03",
+      "index": 2,
+      "unlock_after": [
+        "02"
+      ],
+      "secret": false
+    },
+    {
+      "id": "04",
+      "folder": "04",
+      "index": 3,
+      "unlock_after": [
+        "03"
+      ],
+      "secret": false
+    },
+    {
+      "id": "05",
+      "folder": "05",
+      "index": 4,
+      "unlock_after": [
+        "04"
+      ],
+      "secret": false
+    },
+    {
+      "id": "06",
+      "folder": "06",
+      "index": 5,
+      "unlock_after": [
+        "05"
+      ],
+      "secret": true
+    },
+    {
+      "id": "07",
+      "folder": "07",
+      "index": 6,
+      "unlock_after": [
+        "06"
+      ],
+      "secret": true
+    },
+    {
+      "id": "08",
+      "folder": "08",
+      "index": 7,
+      "unlock_after": [
+        "07"
+      ],
+      "secret": true
+    }
+  ]
+}

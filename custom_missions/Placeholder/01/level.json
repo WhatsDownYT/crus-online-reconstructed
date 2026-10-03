@@ -1,0 +1,32 @@
+{
+  "name": "Hilton Hitjob 01",
+  "author": "wget",
+  "version": "0.0.0",
+  "description": "",
+  "objectives": [
+    "Delay",
+    "Deny",
+    "Depose"
+  ],
+  "level_scene": "HiltonHitjob.scn",
+  "image": "preview.png",
+  "music": "res://Sfx/Music/officemachines.ogg",
+  "reward": 0,
+  "fish": [
+    "CIV"
+  ],
+  "ranks": {
+    "normal": [
+      10000,
+      20000,
+      30000
+    ],
+    "normal_stock_s": 12000,
+    "hell": [
+      10000,
+      20000,
+      30000
+    ],
+    "hell_stock_s": 12000
+  }
+}

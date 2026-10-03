@@ -3,8 +3,13 @@ extends Node
 signal catalog_ready
 
 const BASE_LEVEL_COUNT = 19
+const CAMPAIGN_ROOT = "user://campaigns"
+const DEFAULT_CAMPAIGN = "res://MOD_CONTENT/CruS Online/campaigns/cruelty_squad/campaign.json"
 var custom_levels = []
 var custom_folders = {}
+var campaigns = []
+var campaign_stages = {}
+var completed_stages = {}
 var initialized = false
 var records_loaded = false
 var blocked = false
@@ -32,8 +37,10 @@ func initialize():
 	initialized = true
 	if base != null:
 		load_custom_levels()
+		load_campaigns()
 		load_custom_records()
 		Global.menu.register_custom_levels()
+		Global.menu.register_campaigns(campaigns)
 		ensure_mods_control()
 	emit_signal("catalog_ready")
 	Multiplayer.Content.resume_join()
@@ -49,7 +56,9 @@ func read_json(path):
 func level_file(folder, value):
 	if typeof(value) != TYPE_STRING or value.empty():
 		return ""
-	return value if value.begins_with("res://") or value.begins_with("user://") else "user://levels/" + folder + "/" + value
+	if value.begins_with("res://") or value.begins_with("user://"):
+		return value
+	return folder + "/" + value if str(folder).begins_with("user://") else "user://levels/" + folder + "/" + value
 
 func media(folder, value):
 	var path = level_file(folder, value)
@@ -97,6 +106,133 @@ func load_custom_levels():
 		custom_levels.append(level)
 		append_level(level)
 
+func load_campaigns():
+	campaigns.clear()
+	campaign_stages.clear()
+	completed_stages = read_json(Global.slot_path("campaign_progress.save")).get("completed", {})
+	var original = read_json(DEFAULT_CAMPAIGN)
+	if original.get("id", "") == "cruelty_squad":
+		var indices = []
+		for stage in original.get("levels", []):
+			if stage is Dictionary and int(stage.get("index", -1)) >= 0 and int(stage.get("index", -1)) < BASE_LEVEL_COUNT:
+				indices.append(int(stage.index))
+		campaigns.append({"id": "cruelty_squad", "name": str(original.get("name", "Cruelty Squad")), "indices": indices})
+	else:
+		campaigns.append({"id": "cruelty_squad", "name": "Cruelty Squad", "indices": range(BASE_LEVEL_COUNT)})
+	var standalone_mission_count = custom_levels.size()
+	var directory = Directory.new()
+	if directory.open(CAMPAIGN_ROOT) != OK:
+		campaigns.append({"id": "custom_missions", "name": "Custom Missions", "indices": range(BASE_LEVEL_COUNT, BASE_LEVEL_COUNT + standalone_mission_count)})
+		return
+	directory.list_dir_begin(true, true)
+	var folder = directory.get_next()
+	var folders = []
+	while not folder.empty():
+		if directory.current_is_dir() and preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(folder):
+			folders.append(folder)
+		folder = directory.get_next()
+	directory.list_dir_end()
+	folders.sort()
+	for campaign_folder in folders:
+		load_campaign(CAMPAIGN_ROOT + "/" + campaign_folder)
+	campaigns.append({"id": "custom_missions", "name": "Custom Missions", "indices": range(BASE_LEVEL_COUNT, BASE_LEVEL_COUNT + standalone_mission_count)})
+
+func load_campaign(root):
+	var definition = read_json(root + "/campaign.json")
+	var campaign_id = str(definition.get("id", ""))
+	if not preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(campaign_id) or campaign_id in ["cruelty_squad", "custom_missions"]:
+		return
+	for known in campaigns:
+		if known.id == campaign_id:
+			return
+	var stages = definition.get("levels", [])
+	if not stages is Array or stages.empty():
+		return
+	var ordered = stages.duplicate(true)
+	ordered.sort_custom(self, "_stage_before")
+	var indices = []
+	var stage_ids = {}
+	for stage in ordered:
+		if not stage is Dictionary:
+			continue
+		var stage_id = str(stage.get("id", ""))
+		var folder = str(stage.get("folder", ""))
+		if stage_ids.has(stage_id) or not preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(stage_id) or not preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(folder):
+			continue
+		var stage_root = root + "/" + folder
+		var level = read_json(stage_root + "/level.json")
+		var scene_name = str(level.get("level_scene", ""))
+		if not preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(scene_name):
+			continue
+		var scene = stage_root + "/" + scene_name
+		if not ResourceLoader.exists(scene):
+			continue
+		level["scene_path"] = scene
+		level["folder"] = stage_root
+		level["name"] = str(level.get("name", campaign_id + " " + stage_id))
+		var image_name = str(level.get("image", ""))
+		if preload("res://MOD_CONTENT/CruS Online/ContentPaths.gd").safe_relative(image_name):
+			var image = Image.new()
+			if image.load(stage_root + "/" + image_name) == OK:
+				var texture = ImageTexture.new()
+				texture.create_from_image(image, 0)
+				level["image"] = texture
+		var index = Global.LEVELS.size()
+		stage_ids[stage_id] = true
+		level["campaign_id"] = campaign_id
+		level["stage_id"] = stage_id
+		campaign_stages[index] = {"campaign": campaign_id, "id": stage_id, "unlock_after": stage.get("unlock_after", []), "secret": bool(stage.get("secret", false))}
+		custom_levels.append(level)
+		append_level(level)
+		indices.append(index)
+	if not indices.empty():
+		campaigns.append({"id": campaign_id, "name": str(definition.get("name", campaign_id)), "version": str(definition.get("version", "")), "folder": root.get_file(), "indices": indices})
+
+func _stage_before(a, b):
+	return int(a.get("index", 0)) < int(b.get("index", 0))
+
+func stage_unlocked(index):
+	if not campaign_stages.has(index):
+		return true
+	var stage = campaign_stages[index]
+	var required = stage.unlock_after
+	if not required is Array:
+		return false
+	for previous in required:
+		if not completed_stages.has(stage.campaign + "/" + str(previous)):
+			return false
+	return true
+
+func next_campaign_level(index):
+	if not campaign_stages.has(index):
+		return -1
+	var campaign_id = campaign_stages[index].campaign
+	for campaign in campaigns:
+		if campaign.id != campaign_id:
+			continue
+		var position = campaign.indices.find(index)
+		if position >= 0 and position + 1 < campaign.indices.size():
+			return campaign.indices[position + 1]
+		break
+	return -1
+
+func record_campaign_win(index):
+	if not campaign_stages.has(index):
+		return
+	var stage = campaign_stages[index]
+	completed_stages[stage.campaign + "/" + stage.id] = true
+	var file = File.new()
+	if file.open(Global.slot_path("campaign_progress.save"), File.WRITE) == OK:
+		file.store_line(to_json({"completed": completed_stages}))
+		file.close()
+
+func reset_campaign_progress():
+	completed_stages.clear()
+	var file = File.new()
+	if file.open(Global.slot_path("campaign_progress.save"), File.WRITE) == OK:
+		file.store_line(to_json({"completed": {}}))
+		file.close()
+
 func custom_rank(value, limits):
 	if value >= 99999999:
 		return "N"
@@ -109,7 +245,8 @@ func custom_rank(value, limits):
 	return "C"
 
 func load_custom_records():
-	var saved = read_json("user://custom_level_times.save")
+	completed_stages = read_json(Global.slot_path("campaign_progress.save")).get("completed", {})
+	var saved = read_json(Global.slot_path("custom_level_times.save"))
 	for offset in range(custom_levels.size()):
 		var index = BASE_LEVEL_COUNT + offset
 		var name = str(custom_levels[offset].name)
@@ -150,7 +287,7 @@ func save_custom_records():
 			saved[name + category[0]] = category[1][index]
 		saved[name + "_punished"] = Global.LEVEL_PUNISHED[index]
 	var file = File.new()
-	if file.open("user://custom_level_times.save", File.WRITE) == OK:
+	if file.open(Global.slot_path("custom_level_times.save"), File.WRITE) == OK:
 		file.store_line(to_json(saved))
 		file.close()
 

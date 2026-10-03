@@ -1,6 +1,97 @@
 extends Node
 
 var campaign_save = preload("res://MOD_CONTENT/CruS Online/CampaignSave.gd").new()
+var slot_index = 1
+var save_slot_selected = false
+var slot_defaults = {}
+var slot_implants_default = []
+
+func slot_path(filename):
+	if slot_index == 1:
+		return "user://" + filename
+	var folder = "user://crus_online_slots/slot" + str(slot_index)
+	Directory.new().make_dir_recursive(folder)
+	return folder.plus_file(filename)
+
+func slot_path_for(index, filename):
+	if index == 1:
+		return "user://" + filename
+	return ("user://crus_online_slots/slot" + str(index)).plus_file(filename)
+
+func select_save_slot(index):
+	if index < 1 or index > 4:
+		return
+	save_slot_selected = true
+	if slot_index != index:
+		var extra_arrays = {}
+		for key in campaign_save.FIELDS:
+			var original = slot_defaults.get(key)
+			var current = get(key)
+			if original is Array and current is Array and current.size() > original.size():
+				extra_arrays[key] = current.size() - original.size()
+		campaign_save.restore(self, slot_defaults)
+		for key in extra_arrays:
+			var values = get(key)
+			for unused in range(extra_arrays[key]):
+				if key.find("RANK") >= 0 or key.find("ranks") >= 0:
+					values.append("N")
+				elif key.find("RAW") >= 0:
+					values.append(99999999)
+				elif key.find("TIMES") >= 0:
+					values.append("N/A")
+				else:
+					values.append(false)
+		implants.purchased_implants = slot_implants_default.duplicate(true)
+		implants.head_implant = implants.empty_implant
+		implants.torso_implant = implants.empty_implant
+		implants.arm_implant = implants.empty_implant
+		implants.leg_implant = implants.empty_implant
+		slot_index = index
+		STOCKS.reset_slot_data()
+		load_game()
+		apply_hope_music_pitch()
+		STOCKS.load_stocks()
+		LEVELS_UNLOCKED = clamp(LEVELS_UNLOCKED, 1, 12)
+		if ending_3:
+			water_material.set_shader_param("albedoTex", blue_water)
+		elif ending_1:
+			water_material.set_shader_param("albedoTex", red_water)
+		else:
+			water_material.set_shader_param("albedoTex", blue_water)
+		character_mat.set_shader_param("albedoTex", load("res://Textures/NPC/bosssguy_clothes.png" if ending_2 else "res://Textures/Misc/mainguy_clothes.png"))
+		border.texture = BORDERS[3] if hope_discarded else (BORDERS[2] if husk_mode else (BORDERS[1] if soul_intact else BORDERS[0]))
+		if WEAPONS_UNLOCKED.size() > 1 and WEAPONS_UNLOCKED[1]:
+			CURRENT_WEAPONS[1] = true
+		var extensions = get_node_or_null("Multiplayer/ExtensionCompatibility")
+		if extensions != null:
+			extensions.load_custom_records()
+		var goals = get_node_or_null("AchievementGoals")
+		if goals != null:
+			goals.reload_slot()
+		var online_stats = get_node_or_null("Multiplayer/OnlineStats")
+		if online_stats != null:
+			online_stats.reload_slot()
+		var multiplayer = get_node_or_null("Multiplayer")
+		if multiplayer != null:
+			multiplayer.profile_loaded = false
+			multiplayer.playerInfo = {"nickname": "MT Foxtrot", "color": "ff00ff", "skinPath": "res://Textures/Misc/mainguy_clothes.png"}
+			var store = load("res://MOD_CONTENT/CruS Online/ProfileStore.gd").new()
+			multiplayer.playerInfo = store.merge_defaults(multiplayer.playerInfo, store.load_data("player.save"))
+			multiplayer.profile_loaded = true
+			if multiplayer.Menu != null:
+				multiplayer.Menu.NicknameEdit.text = multiplayer.playerInfo.nickname
+				multiplayer.Menu.NicknameColor.color = Color(multiplayer.playerInfo.color)
+				multiplayer.Menu.get_node("CenterContainer/TabContainer/Player/VBoxContainer/Skin").set_texture(multiplayer.playerInfo.skinPath)
+		menu.button_state()
+		menu.update_level_info()
+		var character_menu = menu.get_node_or_null("Character_Menu/Character_Container")
+		if character_menu != null:
+			character_menu.update_buttons()
+	else:
+		slot_index = index
+		var goals = get_node_or_null("AchievementGoals")
+		if goals != null:
+			goals.reload_slot()
 
 var loader:ResourceInteractiveLoader
 var wait_frames:int
@@ -283,6 +374,9 @@ func _enter_tree()->void :
 		HELL_STIMES.append("N/A")
 		HELL_STIMES_RAW.append(99999999)
 		LEVEL_PUNISHED.append(false)
+	for key in campaign_save.FIELDS:
+		slot_defaults[key] = campaign_save.copy_value(get(key))
+	slot_implants_default = implants.purchased_implants.duplicate(true)
 	load_game()
 	LEVELS_UNLOCKED = clamp(LEVELS_UNLOCKED, 1, 12)
 	
@@ -303,6 +397,7 @@ func set_soul():
 	consecutive_deaths = 0
 	hope_discarded = false
 	husk_mode = false
+	apply_hope_music_pitch()
 func status():
 	return death
 func set_hope():
@@ -318,6 +413,14 @@ func set_hope():
 		soul_intact = false
 		husk_mode = false
 		consecutive_deaths = 0
+		apply_hope_music_pitch()
+
+func apply_hope_music_pitch():
+	var pitch = 0.75 if hope_discarded else 1.0
+	if is_instance_valid(music):
+		music.pitch_scale = pitch
+	if is_instance_valid(ambience):
+		ambience.pitch_scale = pitch
 
 func _backup():
 	save_game("user://backup.save")
@@ -344,6 +447,7 @@ func _ready()->void :
 	else :
 		border.texture = BORDERS[0]
 	music = $Music
+	apply_hope_music_pitch()
 	var root = get_tree().get_root()
 	current_scene = root.get_child(root.get_child_count() - 1)
 	print(levels_completed())
@@ -425,8 +529,23 @@ func set_new_scene(scene_resource:PackedScene)->void :
 	$Loading_Screen.visible = false
 	print("[CruS loading] Instantiate ", loading_path)
 	current_scene = scene_resource.instance()
+	if loading_path.begins_with("res://Levels/") and loading_path != "res://Levels/Level1.tscn" and loading_path != "res://Levels/Level2.tscn":
+		var stray_handler_message = current_scene.get_node_or_null("Message_Area")
+		if stray_handler_message != null:
+			stray_handler_message.free()
+	if loading_path == "res://Levels/Level2.tscn":
+		var pizza_block = current_scene.get_node_or_null("QodotMap/entity_224_Elevator")
+		if pizza_block != null:
+			pizza_block.set_script(null)
+			pizza_block.set_process(false)
+			pizza_block.set_physics_process(false)
+	if loading_path == "res://Menu/Main_Menu.tscn":
+		screenmat.set_shader_param("intro", false)
+		screenmat.set_shader_param("amplitude", 0.0)
 	print("[CruS loading] Initialize ", loading_path)
 	get_node("/root").add_child(current_scene)
+	if loading_path == "res://Menu/Main_Menu.tscn":
+		apply_hope_music_pitch()
 	print("[CruS loading] Ready ", loading_path)
 	get_tree().get_root().set_disable_input(false)
 	var online = get_node_or_null("Multiplayer")
@@ -587,6 +706,9 @@ func level_finished()->void :
 	var goals = get_node_or_null("AchievementGoals")
 	if goals != null:
 		goals.record_mission_win(CURRENT_LEVEL)
+	var campaign_extensions = get_node_or_null("Multiplayer/ExtensionCompatibility")
+	if campaign_extensions != null:
+		campaign_extensions.record_campaign_win(CURRENT_LEVEL)
 	save_game()
 	get_tree().paused = true
 	
@@ -751,11 +873,14 @@ func save_settings()->void :
 func save_game(path = "user://savegame.save")->void :
 	if campaign_save.active:
 		return
+	var primary = path == "user://savegame.save"
+	if path in ["user://savegame.save", "user://backup.save"]:
+		path = slot_path(path.get_file())
 	var save_game = File.new()
 	save_game.open(path, File.WRITE)
 	save_game.store_line(to_json(save()))
 	save_game.close()
-	if path == "user://savegame.save":
+	if primary:
 		var extensions = get_node_or_null("Multiplayer/ExtensionCompatibility")
 		if extensions != null:
 			extensions.save_custom_records()
@@ -763,7 +888,9 @@ func save_game(path = "user://savegame.save")->void :
 func load_game()->void :
 	var save_game = File.new()
 	var settings = File.new()
-	if not save_game.file_exists("user://savegame.save"):
+	var primary_path = slot_path("savegame.save")
+	var backup_path = slot_path("backup.save")
+	if not save_game.file_exists(primary_path):
 		save_game()
 	if not settings.file_exists("user://settings.save"):
 		save_settings()
@@ -775,18 +902,18 @@ func load_game()->void :
 	
 	
 
-	save_game.open("user://savegame.save", File.READ)
+	save_game.open(primary_path, File.READ)
 	if save_game.get_len() < 2:
 		save_game.close()
-		if not save_game.file_exists("user://backup.save"):
+		if not save_game.file_exists(backup_path):
 			save_game()
-			save_game.open("user://savegame.save", File.READ)
+			save_game.open(primary_path, File.READ)
 		else :
-			save_game.open("user://backup.save", File.READ)
+			save_game.open(backup_path, File.READ)
 			if save_game.get_len() < 2:
 				save_game.close()
 				save_game()
-				save_game.open("user://savegame.save", File.READ)
+				save_game.open(primary_path, File.READ)
 	var parsedJSON:Dictionary = {}
 	parsedJSON = parse_json(save_game.get_line())
 	var new_weapons_unlocked = parsedJSON.get("weapons_unlocked")

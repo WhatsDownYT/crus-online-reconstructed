@@ -15,6 +15,7 @@ var gibsPath = [
 ]
 
 var EXPLOSION = preload("res://Entities/Bullets/Self_Destruct_Explosion.tscn")
+const IntroFade = preload("res://MOD_CONTENT/CruS Online/IntroFade.gd")
 var VOMIT = preload("res://Entities/Decals/FleshDecal2.tscn")
 var stair = true
 var toxic = false
@@ -236,7 +237,7 @@ remote func _play_sound(id, soundName):
 		sound = AudioStreamPlayer3D.new()
 		sound.name = soundName
 		parent.add_child(sound)
-	sound.stream = source.stream
+	sound.stream = (orbWalkSound if puppet.implant_state.get("golem_exosystem", false) else playerWalkSound) if soundName == "FootStep" else source.stream
 	sound.pitch_scale = source.pitch_scale
 	sound.bus = source.bus
 	sound.unit_size = 4.0
@@ -501,6 +502,9 @@ func _ready():
 	cmd = Cmd.new()
 	shader_screen.material.set_shader_param("amplitude", amp)
 	shader_screen.material.set_shader_param("intro", true)
+	var intro_fade = IntroFade.new()
+	intro_fade.player = self
+	add_child(intro_fade)
 	$SFX / Intro_Laugh.play()
 	var leg_implant = GLOBAL.implants.leg_implant
 	var arm_implant = GLOBAL.implants.arm_implant
@@ -526,10 +530,7 @@ func _ready():
 		terrorsuit.show()
 		UI.hide()
 		shader_screen.material.set_shader_param("scope", true)
-	if GLOBAL.hope_discarded:
-		GLOBAL.music.pitch_scale = 0.75
-	else :
-		GLOBAL.music.pitch_scale = 1
+	GLOBAL.apply_hope_music_pitch()
 	
 	yield (get_tree(), "idle_frame")
 	if Global.CURRENT_LEVEL == 18:
@@ -732,15 +733,7 @@ func _physics_process(delta):
 			UI.toxic = false
 			toxic_damage_count = 0
 			set_move_speed()
-	amp -= delta * 0.5
 	if amp >= 0:
-		shader_screen.material.set_shader_param("amplitude", amp)
-	if amp < 0:
-		if not start_flag:
-			shader_screen.material.set_shader_param("intro", false)
-			set_process_input(true)
-			start_flag = true
-	else :
 		player_velocity.x = 0
 		player_velocity.z = 0
 	_update_multiplayer_sedative(delta)

@@ -32,6 +32,15 @@ func show_menu(type = null):
 	Global.player.set_process_input(false)
 	Global.player.set_process_unhandled_key_input(false)
 
+func open_settings(_type = null):
+	hide_menu()
+	var game_menu = Global.menu
+	game_menu.online_pause_settings = true
+	game_menu.visible = true
+	game_menu.menu[game_menu.START].show()
+	game_menu._refresh_start_buttons()
+	game_menu._on_Settings_Button_Pressed(game_menu.START, game_menu.menu[game_menu.START].get_child(1))
+
 func _layout_menu():
 
 
@@ -50,6 +59,8 @@ func _layout_menu():
 
 func _input(event):
 	if parent.Flow.result_active:
+		return
+	if is_instance_valid(Global.menu) and Global.menu.online_pause_settings:
 		return
 	if not NetworkBridge.check_connection():
 		return

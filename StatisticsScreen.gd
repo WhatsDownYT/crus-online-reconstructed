@@ -4,6 +4,9 @@ const PROFILE_STORE = preload("res://MOD_CONTENT/CruS Online/ProfileStore.gd")
 const PLAYER_MODEL_SCENE = preload("res://MOD_CONTENT/CruS Online/player_model/player_model.tscn")
 const FONT_PATH = "res://Fonts/gamefont(1).ttf"
 const HEADER_FONT_PATH = "res://Fonts/MingLiU-ExtB-01.ttf"
+const ONLINE_IMPLANTS = ["Pneumatic Merit Pump", "Surveillance Eyecam", "Surveillance Eyecam PRO MAX", "Military Camouflage+", "Stealth Suit+", "ZZzzz Special Sedative Grenade+", "First Aid Kit+", "Cursed Torch+", "Augmented Arms+"]
+const TRIAGON_MARKERS = ["Raymond Shocktroop Tactical received.", "$1000000 received.", "Golem Exosystem received."]
+const MASTERY_KEYS = ["s_rank", "hope_eradicated", "punishment", "chaos", "extravagance", "stripped"]
 const OUTFITS = [
 	{"name": "Default", "path": "res://Textures/Misc/mainguy_clothes.png"},
 	{"name": "Worker", "path": "res://Textures/NPC/Enemy_Worker.png"},
@@ -37,11 +40,13 @@ var title_font
 var header_font
 var body_font
 var value_font
+var name_font
 var center_panel
 var right_panel
 var online_mode_select
 var name_edit
 var color_swatch
+var color_swatch_frame
 var color_controls
 var color_sliders = {}
 var preview_holder
@@ -52,6 +57,11 @@ var preview_camera
 var preview_mask_camera
 var preview_model
 var preview_display
+var preview_world_environment
+var preview_environment
+var preview_base_environment
+var preview_light
+var preview_weather_state = []
 var preview_mask_viewport
 var preview_mask_model
 var preview_mask_display
@@ -60,6 +70,7 @@ var stat_labels = {}
 var profile_labels = {}
 var selected_outfit_index = 0
 var color_syncing = false
+var preview_exosuit = false
 
 func _ready():
 	name = "StatisticsScreen"
@@ -89,6 +100,12 @@ func go():
 func _process(delta):
 	if not visible or preview_model == null:
 		return
+	if _golem_equipped() != preview_exosuit:
+		_rebuild_preview_model()
+		_update_outfit_stat()
+	_update_preview_environment()
+	if preview_environment != null and preview_environment.background_sky != null:
+		preview_environment.background_sky_rotation.y += 0.05 * delta
 	preview_spin += delta * 0.45
 	var angle = sin(preview_spin) * 0.9
 	preview_camera.translation = Vector3(sin(angle) * 2.45, 1.12, cos(angle) * 2.45)
@@ -107,9 +124,10 @@ func _build_ui():
 	header_font = _font(20, HEADER_FONT_PATH)
 	body_font = _font(17)
 	value_font = _font(17)
+	name_font = _font(18, HEADER_FONT_PATH)
 	rect_size = Vector2(1280, 720)
-	center_panel = _panel(Vector2(93, 24), Vector2(540, 660))
-	right_panel = _panel(Vector2(647, 24), Vector2(540, 660))
+	center_panel = _panel(Vector2(273, 24), Vector2(540, 660))
+	right_panel = _panel(Vector2(827, 24), Vector2(360, 660))
 	add_child(center_panel)
 	add_child(right_panel)
 	_build_center_panel()
@@ -124,19 +142,27 @@ func _build_center_panel():
 	name_edit.rect_size = Vector2(center_panel.rect_size.x - 68, 32)
 	name_edit.max_length = 15
 	name_edit.align = LineEdit.ALIGN_CENTER
-	name_edit.add_font_override("font", body_font)
-	name_edit.add_color_override("font_color", Color(0.95, 0.93, 0.82))
+	name_edit.add_font_override("font", name_font)
+	name_edit.add_color_override("font_color", Color(1.0, 0.0, 0.0))
 	name_edit.add_color_override("cursor_color", Color(0.0, 1.0, 0.0))
 	name_edit.add_stylebox_override("normal", _slot_style())
 	name_edit.add_stylebox_override("focus", _slot_style(Color(0.04, 0.58, 0.12)))
 	name_edit.connect("text_entered", self, "_on_name_committed")
 	name_edit.connect("focus_exited", self, "_on_name_focus_exited")
 	center_panel.add_child(name_edit)
+	color_swatch_frame = Panel.new()
+	color_swatch_frame.rect_position = Vector2(center_panel.rect_size.x - 45, 43)
+	color_swatch_frame.rect_size = Vector2(34, 34)
+	color_swatch_frame.mouse_filter = MOUSE_FILTER_IGNORE
+	color_swatch_frame.add_stylebox_override("panel", _swatch_outline_style(false))
+	center_panel.add_child(color_swatch_frame)
 	color_swatch = ColorRect.new()
 	color_swatch.rect_position = Vector2(center_panel.rect_size.x - 44, 44)
 	color_swatch.rect_size = Vector2(32, 32)
 	color_swatch.mouse_filter = MOUSE_FILTER_STOP
 	color_swatch.connect("gui_input", self, "_on_color_swatch_input")
+	color_swatch.connect("mouse_entered", self, "_on_color_swatch_entered")
+	color_swatch.connect("mouse_exited", self, "_on_color_swatch_exited")
 	center_panel.add_child(color_swatch)
 	color_controls = Panel.new()
 	color_controls.rect_position = Vector2(12, 80)
@@ -185,19 +211,18 @@ func _build_center_panel():
 	_build_body_overlay()
 
 func _build_body_overlay():
-	var title = _section_title("BODY")
-	title.rect_position = Vector2(12, 10)
-	preview_holder.add_child(title)
-	var y = 40
-	stat_labels.armor = _body_row(y, "ARMOR")
+	var y = 12
+	stat_labels.armor = _body_row(y, "Armor")
 	y += 28
-	stat_labels.speed = _body_row(y, "MOVE SPEED")
+	stat_labels.speed_bonus = _body_row(y, "Speed")
 	y += 28
-	stat_labels.speed_bonus = _body_row(y, "SPEED")
+	stat_labels.jump = _body_row(y, "Jump")
 	y += 28
-	stat_labels.jump = _body_row(y, "JUMP")
-	y += 28
-	stat_labels.matrix = _body_row(y, "MATRIX")
+	stat_labels.matrix = _body_row(y, "Matrix")
+	stat_labels.outfit = _body_row(preview_holder.rect_size.y - 36, "Outfit")
+	stat_labels.outfit.rect_position.x = 108
+	stat_labels.outfit.rect_size.x = preview_holder.rect_size.x - 120
+	stat_labels.outfit.clip_text = false
 
 func _body_row(y, title):
 	var left = _label(title, body_font, Color(0.96, 0.96, 0.92))
@@ -222,55 +247,53 @@ func _build_right_panel():
 	title.rect_position = Vector2(12, 10)
 	right_panel.add_child(title)
 	var y = 42
-	profile_labels.completion = _stat_row(right_panel, y, "COMPLETION")
+	profile_labels.completion = _stat_row(right_panel, y, "Completion")
 	y += 32
-	profile_labels.money = _stat_row(right_panel, y, "MONEY")
+	profile_labels.money = _stat_row(right_panel, y, "Money")
 	profile_labels.money.rect_position.x = 96
 	profile_labels.money.rect_size.x = right_panel.rect_size.x - 126
 	y += 32
-	profile_labels.deaths = _stat_row(right_panel, y, "DEATHS")
+	profile_labels.play_time = _stat_row(right_panel, y, "Playtime")
 	y += 32
-	profile_labels.dead_civs = _stat_row(right_panel, y, "KILLS")
+	profile_labels.dead_civs = _stat_row(right_panel, y, "Kills")
 	y += 32
-	profile_labels.play_time = _stat_row(right_panel, y, "PLAYTIME")
+	profile_labels.deaths = _stat_row(right_panel, y, "Deaths")
 	y += 32
-	profile_labels.weapons = _stat_row(right_panel, y, "WEAPONS")
+	profile_labels.weapons = _stat_row(right_panel, y, "Weapons")
 	y += 32
-	profile_labels.equipment = _stat_row(right_panel, y, "EQUIPMENT")
+	profile_labels.equipment = _stat_row(right_panel, y, "Equipment")
 	y += 32
-	profile_labels.fish = _stat_row(right_panel, y, "FISH COLLECTED")
+	profile_labels.fish = _stat_row(right_panel, y, "Fish Found")
 	y += 32
-	profile_labels.organs = _stat_row(right_panel, y, "BODY PARTS")
+	profile_labels.organs = _stat_row(right_panel, y, "Body Parts")
 	y += 32
-	profile_labels.goals = _stat_row(right_panel, y, "GOALS")
+	profile_labels.goals = _stat_row(right_panel, y, "Goals")
 	y += 42
 	var online_title = _section_title("ONLINE STATS")
 	online_title.rect_position = Vector2(12, y)
 	right_panel.add_child(online_title)
 	y += 32
+	profile_labels.player_kills = _stat_row(right_panel, y, "Player Kills")
+	y += 32
+	profile_labels.online_equipment = _stat_row(right_panel, y, "Online Equipment")
+	y += 36
 	online_mode_select = OptionButton.new()
 	online_mode_select.rect_position = Vector2(10, y)
 	online_mode_select.rect_size = Vector2(right_panel.rect_size.x - 20, 32)
-	online_mode_select.add_item("TOTAL")
-	online_mode_select.add_item("DEATHMATCH")
-	online_mode_select.add_item("COUNTER-OPPS")
+	online_mode_select.add_item("Total")
+	online_mode_select.add_item("Deathmatch")
+	online_mode_select.add_item("Counter-Opps")
 	online_mode_select.select(0)
 	var lobby_type = multiplayer_node.get_node_or_null("Menu/CenterContainer/TabContainer/Host/VBoxContainer/LobbyType/TypeSelect")
 	if lobby_type != null:
 		online_mode_select.theme = lobby_type.theme
-	online_mode_select.add_font_override("font", body_font)
-	online_mode_select.add_color_override("font_color", Color(0.1, 1, 0.1))
-	online_mode_select.add_stylebox_override("normal", _slot_style())
-	online_mode_select.add_stylebox_override("hover", _slot_style(Color(0.1, 1, 0.1)))
-	online_mode_select.add_stylebox_override("pressed", _slot_style(Color(0.1, 1, 0.1)))
+	_style_online_dropdown()
 	online_mode_select.connect("item_selected", self, "_on_online_mode_selected")
 	right_panel.add_child(online_mode_select)
 	y += 38
-	profile_labels.player_kills = _stat_row(right_panel, y, "PLAYER KILLS")
+	profile_labels.wins = _stat_row(right_panel, y, "Wins")
 	y += 32
-	profile_labels.wins = _stat_row(right_panel, y, "WINS")
-	y += 32
-	profile_labels.losses = _stat_row(right_panel, y, "LOSSES")
+	profile_labels.losses = _stat_row(right_panel, y, "Losses")
 
 func _build_preview():
 	preview_viewport = Viewport.new()
@@ -285,21 +308,26 @@ func _build_preview():
 	preview_viewport.world = preview_world
 	preview_scene_root = Spatial.new()
 	preview_viewport.add_child(preview_scene_root)
-	var environment = Environment.new()
+	preview_environment = Environment.new()
 	var sky = PanoramaSky.new()
 	sky.panorama = load("res://Textures/sky3.png")
-	environment.background_mode = Environment.BG_SKY
-	environment.background_sky = sky
-	environment.ambient_light_color = Color(0.54902, 0.309804, 0.164706)
-	environment.ambient_light_sky_contribution = 0.0
-	environment.ambient_light_energy = 0.75
-	var world_environment = WorldEnvironment.new()
-	world_environment.environment = environment
-	preview_scene_root.add_child(world_environment)
-	var light = DirectionalLight.new()
-	light.rotation_degrees = Vector3(-48, 28, 0)
-	light.light_energy = 0.9
-	preview_scene_root.add_child(light)
+	preview_environment.background_mode = Environment.BG_SKY
+	preview_environment.background_sky = sky
+	preview_environment.background_energy = 1.0
+	preview_environment.background_color = Color(0.54902, 0.309804, 0.164706)
+	preview_environment.fog_color = Color(0.54902, 0.309804, 0.164706)
+	preview_environment.ambient_light_color = Color(0.54902, 0.309804, 0.164706)
+	preview_environment.ambient_light_sky_contribution = 0.0
+	preview_environment.ambient_light_energy = 0.75
+	preview_base_environment = preview_environment.duplicate(true)
+	preview_world_environment = WorldEnvironment.new()
+	preview_world_environment.name = "WorldEnvironment"
+	preview_world_environment.environment = preview_environment
+	preview_scene_root.add_child(preview_world_environment)
+	preview_light = DirectionalLight.new()
+	preview_light.rotation_degrees = Vector3(-48, 28, 0)
+	preview_light.light_energy = 0.9
+	preview_scene_root.add_child(preview_light)
 	preview_camera = Camera.new()
 	preview_camera.fov = 45
 	preview_scene_root.add_child(preview_camera)
@@ -307,6 +335,7 @@ func _build_preview():
 	preview_camera.look_at(Vector3(0, 0.95, 0), Vector3.UP)
 	preview_camera.current = true
 	preview_display.texture = preview_viewport.get_texture()
+	_update_preview_environment(true)
 	_build_mask_preview()
 	_rebuild_preview_model()
 
@@ -328,6 +357,100 @@ func _build_mask_preview():
 	preview_mask_camera.current = true
 	preview_mask_display.texture = preview_mask_viewport.get_texture()
 
+func _style_online_dropdown():
+	online_mode_select.add_font_override("font", body_font)
+	online_mode_select.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+	online_mode_select.add_color_override("font_color_hover", Color(0.12, 1.0, 0.18))
+	online_mode_select.add_color_override("font_color_pressed", Color(0.12, 1.0, 0.18))
+	online_mode_select.add_color_override("font_color_focus", Color(0.12, 1.0, 0.18))
+	online_mode_select.add_stylebox_override("normal", _dropdown_style(Color(0, 0, 0, 0.56), Color(0.2, 0.2, 0.2, 0.7)))
+	online_mode_select.add_stylebox_override("hover", _dropdown_style(Color(0.03, 0.20, 0.05, 0.92), Color(0.12, 1.0, 0.18)))
+	online_mode_select.add_stylebox_override("pressed", _dropdown_style(Color(0.04, 0.28, 0.07, 0.96), Color(0.12, 1.0, 0.18)))
+	online_mode_select.add_stylebox_override("focus", _dropdown_style(Color(0, 0, 0, 0.56), Color(0.2, 0.2, 0.2, 0.7)))
+	var popup = online_mode_select.get_popup()
+	popup.add_font_override("font", body_font)
+	popup.add_color_override("font_color", Color(0.88, 0.84, 0.9))
+	popup.add_color_override("font_color_hover", Color(0.12, 1.0, 0.18))
+	popup.add_color_override("font_color_disabled", Color(0.42, 0.26, 0.46))
+	popup.add_stylebox_override("panel", _stats_background_style())
+	popup.add_stylebox_override("hover", _dropdown_style(Color(0.03, 0.42, 0.08, 0.96), Color(0.12, 1.0, 0.18)))
+
+func _stats_background_style():
+	var style = StyleBoxTexture.new()
+	style.texture = load("res://Textures/Menu/background_1.png")
+	style.region_rect = Rect2(0, 0, 256, 256)
+	style.margin_left = 7
+	style.margin_right = 7
+	style.margin_top = 4
+	style.margin_bottom = 4
+	style.modulate_color = Color(0.52, 0.0, 0.72, 0.67)
+	return style
+
+func _dropdown_style(bg, border):
+	var style = StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = border
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.content_margin_left = 7
+	style.content_margin_right = 7
+	style.content_margin_top = 4
+	style.content_margin_bottom = 4
+	return style
+
+func _preview_environment_state():
+	var hope = Global.hope_discarded
+	var ending_two = Global.ending_2
+	var hour = OS.get_time().hour
+	if multiplayer_node != null and multiplayer_node.NetworkBridge.check_connection():
+		var world = multiplayer_node.Flow.world
+		var difficulty = world.get("difficulty", {})
+		hope = difficulty.get("hope_discarded", Global.hope_discarded)
+		ending_two = world.get("ending_2", Global.ending_2)
+		hour = int(world.get("hour", OS.get_time().hour))
+	return [hope, ending_two, hour]
+
+func _update_preview_environment(force := false):
+	if preview_world_environment == null or preview_base_environment == null:
+		return
+	var state = _preview_environment_state()
+	if not force and state == preview_weather_state:
+		return
+	preview_weather_state = state.duplicate()
+	preview_environment = preview_base_environment.duplicate(true)
+	preview_world_environment.environment = preview_environment
+	var hope = bool(state[0])
+	var ending_two = bool(state[1])
+	var hour = int(state[2])
+	if hope:
+		preview_environment.background_sky.panorama = load("res://Textures/sky10.png")
+		preview_environment.fog_color = Color(1, 0, 0)
+		preview_environment.background_color = preview_environment.fog_color
+		if ending_two:
+			preview_environment.background_sky.panorama = load("res://Textures/sky11.png")
+			preview_environment.fog_color = Color(0, 1, 0)
+			preview_environment.background_color = preview_environment.fog_color
+		if preview_light != null:
+			preview_light.light_color = Color(1, 1, 1)
+		return
+	if hour == 0:
+		hour = 24
+	var distance = abs(12 - hour)
+	var light_amount = 1.0 - clamp(float(distance) / 12.0, 0.0, 0.95)
+	var base_fog = preview_environment.fog_color
+	preview_environment.fog_color = Color(base_fog.r * light_amount, base_fog.g * light_amount, base_fog.b * light_amount)
+	if preview_environment.background_mode == Environment.BG_COLOR:
+		preview_environment.background_color = preview_environment.fog_color
+	preview_environment.background_energy = clamp(light_amount, 0.0, 1.0)
+	var light_color = clamp(light_amount + 0.5, 0.8, 1.0)
+	if preview_light != null:
+		preview_light.light_color = Color(light_color, light_color, 1.0)
+
+func _golem_equipped():
+	return Global.implants != null and Global.implants.torso_implant != null and Global.implants.torso_implant.orbsuit
+
 func _panel(position, size):
 	var panel = Panel.new()
 	panel.rect_position = position
@@ -347,6 +470,17 @@ func _slot_style(border = Color(0.2, 0.2, 0.2, 0.7)):
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0.56)
 	style.border_color = border
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	return style
+
+
+func _swatch_outline_style(hovered):
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	style.border_color = Color(1, 1, 1, 1) if hovered else Color(1, 1, 1, 0)
 	style.border_width_left = 1
 	style.border_width_top = 1
 	style.border_width_right = 1
@@ -436,6 +570,8 @@ func _load_current_profile():
 	color_sliders.B.value = color.b8
 	color_syncing = false
 	color_swatch.color = color
+	name_edit.add_color_override("font_color", color)
+	name_edit.add_color_override("font_color_selected", color)
 	color_controls.hide()
 	if preview_mask_display != null:
 		preview_mask_display.material.set_shader_param("selected", false)
@@ -459,11 +595,21 @@ func _update_stat_values():
 	var armor_mul = head.armor * torso.armor * arm.armor * leg.armor
 	var armor_text = _format_armor(armor_mul)
 	stat_labels.armor.text = armor_text
-	stat_labels.speed.text = str(9 + speed_bonus)
 	stat_labels.speed_bonus.text = "%+d" % int(speed_bonus)
 	stat_labels.jump.text = str(8 + jump_bonus)
 	stat_labels.matrix.text = "DEATH" if Global.death else "LIFE"
 	stat_labels.matrix.add_color_override("font_color", Color(1, 0, 1) if Global.death else Color(0, 1, 0))
+	_update_outfit_stat()
+
+func _update_outfit_stat():
+	if not stat_labels.has("outfit"):
+		return
+	var outfit_name = "Golem Exosystem" if _golem_equipped() else str(OUTFITS[selected_outfit_index].name)
+	stat_labels.outfit.text = outfit_name
+	stat_labels.outfit.add_font_override("font", value_font)
+	stat_labels.outfit.rect_position.x = 108
+	stat_labels.outfit.rect_size.x = preview_holder.rect_size.x - 120
+	stat_labels.outfit.clip_text = false
 
 func _update_profile_values():
 	var goals = Global.get_node_or_null("AchievementGoals")
@@ -474,7 +620,7 @@ func _update_profile_values():
 		for id in goals.entries_by_id:
 			if goals.unlocked.has(id):
 				goal_count += 1
-	profile_labels.completion.text = str(_completion_percentage(goals)) + "%"
+	profile_labels.completion.text = "%.1f%%" % _completion_percentage(goals)
 	var money_text = "$" + str(Global.money)
 	profile_labels.money.text = money_text
 	var money_width = value_font.get_string_size(money_text).x
@@ -484,7 +630,8 @@ func _update_profile_values():
 	profile_labels.dead_civs.text = str(Global.total_kills)
 	profile_labels.play_time.text = _format_time(Global.play_time)
 	profile_labels.weapons.text = "%d / %d" % [_count_true(Global.WEAPONS_UNLOCKED), Global.WEAPONS_UNLOCKED.size()]
-	profile_labels.equipment.text = "%d / %d" % [Global.implants.purchased_implants.size(), Global.implants.IMPLANTS.size()]
+	var equipment = _equipment_progress(false)
+	profile_labels.equipment.text = "%d / %d" % equipment
 	var fish = _collection_progress("fish")
 	var organs = _collection_progress("part")
 	profile_labels.fish.text = "%d / %d" % fish
@@ -492,6 +639,8 @@ func _update_profile_values():
 	profile_labels.goals.text = "%d / %d" % [goal_count, goal_total]
 	var online = multiplayer_node.OnlineStats.values
 	profile_labels.player_kills.text = str(online.player_kills)
+	var online_equipment = _equipment_progress(true)
+	profile_labels.online_equipment.text = "%d / %d" % online_equipment
 	_update_online_results()
 
 func _on_online_mode_selected(_index):
@@ -531,23 +680,113 @@ func _collection_progress(kind):
 
 func _completion_percentage(goals):
 	if goals == null:
-		return 0
-	var totals = {"base": 0, "mastery": 0, "online": 0}
-	var earned = totals.duplicate()
+		return 0.0
+	var totals = {"base": 0.0, "mastery": 0.0, "online": 0.0}
+	var earned = {"base": 0.0, "mastery": 0.0, "online": 0.0}
 	for id in goals.entries_by_id:
-		var category = str(goals.entries_by_id[id].get("category", "extras"))
+		var entry = goals.entries_by_id[id]
+		var category = str(entry.get("category", "extras"))
 		var tier = category if category in ["mastery", "online"] else "base"
-		totals[tier] += 1
-		if goals.unlocked.has(id):
-			earned[tier] += 1
+		totals[tier] += 1.0
+		earned[tier] += _goal_progress_fraction(goals, str(id), entry)
 	if totals.base == 0:
-		return 0
+		return 0.0
 	var percent = 100.0 * earned.base / totals.base
-	if earned.base == totals.base and totals.mastery > 0:
+	if earned.base >= totals.base - 0.0001 and totals.mastery > 0:
 		percent += 50.0 * earned.mastery / totals.mastery
-		if earned.mastery == totals.mastery and totals.online > 0:
+		if earned.mastery >= totals.mastery - 0.0001 and totals.online > 0:
 			percent += 50.0 * earned.online / totals.online
-	return int(round(percent))
+	return percent
+
+func _goal_progress_fraction(goals, id, entry):
+	if goals.unlocked.has(id):
+		return 1.0
+	match id:
+		"synaptic_cascade":
+			return _mastery_condition_progress(goals, "hope_eradicated")
+		"eternal_malice":
+			return _mastery_condition_progress(goals, "s_rank")
+		"entrapment":
+			return _mastery_condition_progress(goals, "punishment")
+		"suffering_for_aeons":
+			return _mastery_condition_progress(goals, "chaos")
+		"beauty_of_life":
+			return _mastery_condition_progress(goals, "extravagance")
+		"the_unholy_trinity":
+			var found = 0
+			for marker in TRIAGON_MARKERS:
+				if Global.DEAD_CIVS.has(marker):
+					found += 1
+			return float(found) / float(TRIAGON_MARKERS.size())
+		"biological_traversal":
+			return _progress_fraction(_collection_progress("part"))
+		"catch_of_the_day":
+			return _progress_fraction(_collection_progress("fish"))
+		"the_first_transaction":
+			var starter_weapons = 4
+			var unlocked_beyond_start = max(0, _count_true(Global.WEAPONS_UNLOCKED) - starter_weapons)
+			var unlockable_beyond_start = max(1, Global.WEAPONS_UNLOCKED.size() - starter_weapons)
+			return float(unlocked_beyond_start) / float(unlockable_beyond_start)
+		"metabolic_abomination":
+			return _progress_fraction(_equipment_progress(false))
+		"fully_peeled":
+			return _regular_achievement_progress(goals)
+	if str(entry.get("category", "")) == "mastery" and entry.has("level"):
+		var progress = goals.mastery_for(int(entry.level))
+		var completed = 0
+		for key in MASTERY_KEYS:
+			if progress.get(key, false):
+				completed += 1
+		return float(completed) / float(MASTERY_KEYS.size())
+	return 0.0
+
+func _mastery_condition_progress(goals, key):
+	var levels = goals._campaign_levels()
+	if levels.empty():
+		return 0.0
+	var completed = 0
+	for level in levels:
+		if goals.mastery_for(level).get(key, false):
+			completed += 1
+	return float(completed) / float(levels.size())
+
+func _regular_achievement_progress(goals):
+	var total = 0
+	var completed = 0
+	for id in goals.entries_by_id:
+		if str(id) == "fully_peeled":
+			continue
+		var entry = goals.entries_by_id[id]
+		if entry.get("category", "") == "mastery":
+			continue
+		total += 1
+		if goals.unlocked.has(id):
+			completed += 1
+	return float(completed) / float(max(1, total))
+
+func _progress_fraction(progress):
+	return float(progress[0]) / float(max(1, int(progress[1])))
+
+func _equipment_progress(online):
+	var owned = 0
+	var total = 0
+	if Global.implants == null:
+		return [0, 0]
+	for implant in Global.implants.IMPLANTS:
+		if implant == null:
+			continue
+		var implant_name = str(implant.i_name)
+		var is_online = ONLINE_IMPLANTS.has(implant_name)
+		if online:
+			if not is_online:
+				continue
+		else:
+			if is_online or implant_name in ["N/A", "House"]:
+				continue
+		total += 1
+		if Global.implants.purchased_implants.has(implant_name):
+			owned += 1
+	return [owned, total]
 
 func _on_name_committed(_text):
 	_save_profile()
@@ -557,8 +796,11 @@ func _on_name_focus_exited():
 		_save_profile()
 
 func _on_outfit_pressed():
+	if _golem_equipped():
+		return
 	selected_outfit_index = (selected_outfit_index + 1) % OUTFITS.size()
 	_rebuild_preview_model()
+	_update_outfit_stat()
 	_save_profile(false)
 
 func _on_preview_input(event):
@@ -571,6 +813,9 @@ func _on_preview_input(event):
 	mask.lock()
 	var hit = mask.get_pixelv(Vector2(int(pixel.x), int(pixel.y))).a > 0.5
 	mask.unlock()
+	if _golem_equipped():
+		preview_mask_display.material.set_shader_param("selected", false)
+		return
 	preview_mask_display.material.set_shader_param("selected", hit)
 	if hit and event is InputEventMouseButton and event.button_index == BUTTON_LEFT and event.pressed:
 		_on_outfit_pressed()
@@ -584,11 +829,21 @@ func _on_color_swatch_input(event):
 		if color_controls.visible:
 			color_controls.raise()
 
+func _on_color_swatch_entered():
+	if is_instance_valid(color_swatch_frame):
+		color_swatch_frame.add_stylebox_override("panel", _swatch_outline_style(true))
+
+func _on_color_swatch_exited():
+	if is_instance_valid(color_swatch_frame):
+		color_swatch_frame.add_stylebox_override("panel", _swatch_outline_style(false))
+
 func _on_color_changed(_value):
 	if color_syncing or multiplayer_node == null:
 		return
 	var color = Color(color_sliders.R.value / 255.0, color_sliders.G.value / 255.0, color_sliders.B.value / 255.0)
 	color_swatch.color = color
+	name_edit.add_color_override("font_color", color)
+	name_edit.add_color_override("font_color_selected", color)
 	multiplayer_node.playerInfo.color = color.to_html(false)
 	_save_profile(false)
 
@@ -628,20 +883,35 @@ func _rebuild_preview_model():
 		preview_model.queue_free()
 	if preview_mask_model != null and is_instance_valid(preview_mask_model):
 		preview_mask_model.queue_free()
-	preview_model = PLAYER_MODEL_SCENE.instance()
-	preview_model.translation = Vector3(0, 0.9, 0)
-	preview_model.rotation_degrees = Vector3(0, 180, 0)
-	preview_scene_root.add_child(preview_model)
-	_apply_preview_outfit()
-	var animation_player = preview_model.get_node_or_null("Anim")
-	if animation_player != null and animation_player.has_animation("Idle"):
-		animation_player.play("Idle")
-	var weapons = preview_model.get_node_or_null("Armature/Skeleton/RightHand/Weapons")
-	if weapons != null:
-		weapons.visible = false
-	var indicator = preview_model.get_node_or_null("Armature/Skeleton/Head/PlayerIndicator")
-	if indicator != null:
-		indicator.visible = false
+	preview_exosuit = _golem_equipped()
+	if preview_exosuit and preview_mask_display != null:
+		preview_mask_display.material.set_shader_param("selected", false)
+	if preview_exosuit:
+		preview_model = load("res://Imported_Mesh/orbot.glb").instance()
+		preview_model.translation = Vector3(0, 0.9, 0)
+		preview_model.rotation.y = PI
+		preview_scene_root.add_child(preview_model)
+		var golem_torso = preview_model.get_node_or_null("Armature/Skeleton/Torso_Mesh")
+		if golem_torso != null:
+			golem_torso.material_override = load("res://Materials/rod.tres")
+		var golem_anim = preview_model.get_node_or_null("AnimationPlayer")
+		if golem_anim != null and golem_anim.has_animation("Idle"):
+			golem_anim.play("Idle")
+	else:
+		preview_model = PLAYER_MODEL_SCENE.instance()
+		preview_model.translation = Vector3(0, 0.9, 0)
+		preview_model.rotation_degrees = Vector3(0, 180, 0)
+		preview_scene_root.add_child(preview_model)
+		_apply_preview_outfit()
+		var animation_player = preview_model.get_node_or_null("Anim")
+		if animation_player != null and animation_player.has_animation("Idle"):
+			animation_player.play("Idle")
+		var weapons = preview_model.get_node_or_null("Armature/Skeleton/RightHand/Weapons")
+		if weapons != null:
+			weapons.visible = false
+		var indicator = preview_model.get_node_or_null("Armature/Skeleton/Head/PlayerIndicator")
+		if indicator != null:
+			indicator.visible = false
 	preview_mask_model = preview_model.duplicate()
 	preview_mask_viewport.add_child(preview_mask_model)
 	var mask_material = SpatialMaterial.new()
@@ -707,7 +977,7 @@ func _count_true(values):
 	return total
 
 func _format_time(value):
-	var seconds = int(value)
+	var seconds = int(value) / 1000
 	return "%02d:%02d:%02d" % [int(seconds / 3600), int((seconds % 3600) / 60), seconds % 60]
 
 func _format_armor(armor_mul):

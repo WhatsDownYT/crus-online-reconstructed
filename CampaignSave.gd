@@ -35,16 +35,17 @@ func award_persistent_money(global, amount):
 		return
 	campaign["money"] = int(campaign.get("money", global.money - amount)) + amount
 	var save_file = File.new()
-	if not save_file.file_exists("user://savegame.save"):
+	var save_path = global.slot_path("savegame.save")
+	if not save_file.file_exists(save_path):
 		return
-	if save_file.open("user://savegame.save", File.READ) != OK:
+	if save_file.open(save_path, File.READ) != OK:
 		return
 	var parsed = parse_json(save_file.get_as_text())
 	save_file.close()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 	parsed["money"] = campaign["money"]
-	if save_file.open("user://savegame.save", File.WRITE) != OK:
+	if save_file.open(save_path, File.WRITE) != OK:
 		return
 	save_file.store_line(to_json(parsed))
 	save_file.close()

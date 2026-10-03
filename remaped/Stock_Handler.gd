@@ -1673,7 +1673,24 @@ func _enter_tree():
 	new_stock.starting_trend = new_stock.trend
 	stocks.append(new_stock)
 
+	slot_stock_defaults = stock_save().duplicate(true)
 	load_stocks()
+
+var slot_stock_defaults = {}
+
+func reset_slot_data():
+	var fish = slot_stock_defaults.get("fish_found")
+	var organs = slot_stock_defaults.get("org_found")
+	FISH_FOUND = fish.duplicate(true) if fish is Array else []
+	ORGANS_FOUND = organs.duplicate(true) if organs is Array else []
+	for stock in stocks:
+		var data = slot_stock_defaults.get(stock.ticker, {})
+		stock.price = data.get("price", stock.starting_price)
+		stock.last_price = data.get("l_price", stock.price)
+		stock.trend = data.get("trend", stock.starting_trend)
+		stock.owned = data.get("owned", 0)
+		stock.values.clear()
+	total_assets = 0
 
 func _ready():
 	timer = Timer.new()
@@ -1747,6 +1764,8 @@ func stock_save()->Dictionary:
 func save_stocks(path = "user://stocks.save")->void :
 	if Global.campaign_save.active:
 		return
+	if path in ["user://stocks.save", "user://stock_backup.save"]:
+		path = Global.slot_path(path.get_file())
 	var st = File.new()
 	st.open(path, File.WRITE)
 	st.store_line(to_json(stock_save()))
@@ -1754,7 +1773,9 @@ func save_stocks(path = "user://stocks.save")->void :
 
 func load_stocks()->void :
 	var stocks_save = File.new()
-	if not stocks_save.file_exists("user://stocks.save"):
+	var primary_path = Global.slot_path("stocks.save")
+	var backup_path = Global.slot_path("stock_backup.save")
+	if not stocks_save.file_exists(primary_path):
 		save_stocks("user://stocks.save")
 	
 	
@@ -1766,18 +1787,18 @@ func load_stocks()->void :
 
 	
 	
-	stocks_save.open("user://stocks.save", File.READ)
+	stocks_save.open(primary_path, File.READ)
 	if stocks_save.get_len() < 2:
 		stocks_save.close()
-		if not stocks_save.file_exists("user://stock_backup.save"):
+		if not stocks_save.file_exists(backup_path):
 			save_stocks()
-			stocks_save.open("user://stocks.save", File.READ)
+			stocks_save.open(primary_path, File.READ)
 		else :
-			stocks_save.open("user://stock_backup.save", File.READ)
+			stocks_save.open(backup_path, File.READ)
 			if stocks_save.get_len() < 2:
 				stocks_save.close()
 				save_stocks()
-				stocks_save.open("user://stocks.save", File.READ)
+				stocks_save.open(primary_path, File.READ)
 	
 	var parsedJSON:Dictionary = {}
 	parsedJSON = parse_json(stocks_save.get_line())

@@ -426,7 +426,7 @@ func attach_menu(menu):
 	team_button.get_node("Text").hide()
 	team_button.connect("pressed", self, "_team_pressed")
 	ready_count = Label.new()
-	ready_count.rect_position = Vector2(184, 640)
+	ready_count.rect_position = Vector2(36, 252)
 	ready_count.rect_size = Vector2(320, 40)
 	ready_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ready_count.add_font_override("font", _font(20))
@@ -512,14 +512,11 @@ func _update_overlay():
 		_position_team_button()
 		team_button.modulate = Color(0, 1, 0, 1) if is_operative(NetworkBridge.get_id()) else Color(1, 0, 0, 1)
 	ready_count.visible = host
-	var more_levels_visible = false
-	for button in menu_ref.page_buttons:
-		if is_instance_valid(button) and button.name == "More levels" and button.visible:
-			more_levels_visible = true
-			break
-	ready_count.rect_position.x = 184 if more_levels_visible else 184 - menu_ref.button_size.x
+	if is_instance_valid(menu_ref) and menu_ref.menu.size() > menu_ref.LEVEL_SELECT:
+		var return_button = menu_ref.menu[menu_ref.LEVEL_SELECT].get_child(0)
+		ready_count.rect_position = return_button.rect_position + Vector2(menu_ref.button_size.x, (menu_ref.button_size.y - ready_count.rect_size.y) / 2)
 	var counts = ready_counts()
-	ready_count.text = "Players ready: %d/%d" % [counts[0], counts[1]]
+	ready_count.text = "Ready: %d/%d" % [counts[0], counts[1]]
 
 func _position_team_button():
 	if not is_instance_valid(menu_ref) or menu_ref.menu.size() <= menu_ref.LEVEL_SELECT:

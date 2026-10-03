@@ -12,6 +12,8 @@ parser.add_argument('--godot', type=Path, required=True)
 parser.add_argument('--game-pack', type=Path, required=True)
 parser.add_argument('--reference-project', type=Path, required=True)
 parser.add_argument('--mod-package', type=Path, required=True)
+parser.add_argument('--dependency-dir', type=Path)
+parser.add_argument('--campaign-dir', type=Path)
 parser.add_argument('--test-script', type=Path, default=Path('tests/modes_native_test.gd'))
 parser.add_argument('--result-marker', default='MODE_TEST_RESULT failures=0')
 parser.add_argument('--timeout', type=int, default=120)
@@ -49,6 +51,14 @@ try:
                 target.writestr(name, data)
             target.writestr('MOD_CONTENT/CruS Online/modes_native_test.gd', probe)
         shutil.copy2(args.mod_package.parent / 'mod.json', mod / 'mod.json')
+        if args.dependency_dir:
+            dependency = Path(os.environ['APPDATA']) / user_dir / 'mods' / args.dependency_dir.name
+            dependency.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(args.dependency_dir / 'mod.zip', dependency / 'mod.zip')
+            shutil.copy2(args.dependency_dir / 'mod.json', dependency / 'mod.json')
+        if args.campaign_dir:
+            campaign = Path(os.environ['APPDATA']) / user_dir / 'campaigns' / args.campaign_dir.name
+            shutil.copytree(args.campaign_dir, campaign, dirs_exist_ok=True)
         output = (project / 'output.log').open('w')
         process = subprocess.Popen([str(project / 'probe.exe'), '--path', str(project), '--no-window'], cwd=project, stdout=output, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         processes.append((role, process, output, project))

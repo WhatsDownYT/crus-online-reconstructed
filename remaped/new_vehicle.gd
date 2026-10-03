@@ -103,6 +103,9 @@ func _physics_process(delta):
 		transform.basis = transform.basis.orthonormalized().slerp(align_up(transform.basis, n), 0.05)
 		rotation.y = roty
 		if in_use:
+			if is_instance_valid(Global.player) and Global.player.dead:
+				eject()
+				return
 			host_tick()
 			Global.player.global_rotation.y = global_rotation.y
 			
@@ -210,6 +213,8 @@ remote func set_in_use(id, recived_value):
 		drive_id = null
 
 func player_use():
+	if not is_instance_valid(Global.player) or Global.player.dead:
+		return
 	if not in_use:
 		car_camera.rotation = default_rotation
 		car_camera.current = true

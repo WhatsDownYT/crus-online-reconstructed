@@ -222,7 +222,7 @@ func _desired_phone_transform(phone, camera):
 	var model_front = model_right.cross(model_up).normalized()
 	var model_basis = Basis(model_right, model_up, model_front)
 	var desired_basis = Basis(-cam_right, -cam_up, -cam_forward)
-	var orientation = desired_basis * model_basis.inverse()
+	var orientation = Basis(cam_right, deg2rad(3.0)) * desired_basis * model_basis.inverse()
 	return Transform(orientation.orthonormalized(), phone_position)
 
 func _pose_phone_arm(phone_holder, phone_transform):

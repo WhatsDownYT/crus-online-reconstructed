@@ -127,6 +127,14 @@ var _suspended_nodes = []
 var _presentation_notifier
 var _presentation_animation
 
+func _in_opening_cutscene():
+	var ancestor = self
+	while ancestor != null:
+		if ancestor.filename == "res://Cutscenes/Cutscene1.tscn":
+			return true
+		ancestor = ancestor.get_parent()
+	return false
+
 var blood_particles
 
 remote func _create_drop_weapon(id, parentPath, recivedTransform, recivedVelocity, recivedCurrentWeapon, recivedAmmo, recivdeName):
@@ -311,7 +319,7 @@ func _ready():
 		if not civilian and glob.hope_discarded:
 			if health < 70 and health > 20:
 				health = 70
-		if civilian and not objective and not hell_objective and not chaos_objective and "LINES" in body and body.LINES.empty():
+		if civilian and not _in_opening_cutscene() and not objective and not hell_objective and not chaos_objective and "LINES" in body and body.LINES.empty():
 			if glob.civilian_reduction != 101 and rand_range(0, 100) > glob.civilian_reduction:
 				cleanup(null)
 		if glob.DEAD_CIVS.find(npc_name) != - 1:

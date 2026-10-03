@@ -20,6 +20,9 @@ func _ready():
 	values = store.merge_defaults(DEFAULTS, store.load_data("stats.save"))
 	NetworkBridge.register_rpcs(self, [["credit_kill", NetworkBridge.PERMISSION.SERVER]])
 
+func reload_slot():
+	values = store.merge_defaults(DEFAULTS, store.load_data("stats.save"))
+
 func record_result(mode, won):
 	var prefix = "deathmatch" if mode == "deathmatch" else ("counter_op" if mode in ["operative", "counter_operative"] else "")
 	if prefix.empty():

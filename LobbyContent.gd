@@ -153,11 +153,17 @@ func refresh_manifest():
 			groups.append({"kind": "mods", "folder": folder, "name": str(mod.name), "version": str(mod.version), "files": files})
 	if Multiplayer.Extensions.modbase() != null:
 		for level in Multiplayer.Extensions.custom_levels:
-			if level.get("local_debug", false):
+			if level.get("local_debug", false) or level.has("campaign_id"):
 				continue
 			var files = []
 			collect_files("user://levels/" + level.folder, "", files)
 			groups.append({"kind": "levels", "folder": level.folder, "name": level.name, "version": str(level.get("version", "")), "files": files})
+		for campaign in Multiplayer.Extensions.campaigns:
+			if not campaign.has("folder"):
+				continue
+			var files = []
+			collect_files("user://campaigns/" + campaign.folder, "", files)
+			groups.append({"kind": "campaigns", "folder": campaign.folder, "name": campaign.name, "version": campaign.version, "files": files})
 	groups.sort_custom(self, "group_order")
 	hash_thread = Thread.new()
 	var error = hash_thread.start(self, "hash_manifest", {"protocol": 1, "groups": groups})
@@ -281,7 +287,7 @@ puppet func content_offer(sender, value):
 		status_label.text = "This lobby does not use the active mods listed below.\n\nDisable them, then restart and join automatically?"
 		yes_button.text = "Disable and Join"
 	else:
-		status_label.text = "This lobby uses mods or custom missions.\n\nInstall or update the content below, then restart and join automatically?"
+		status_label.text = "This lobby uses mods, custom missions, or campaigns.\n\nInstall or update the content below, then restart and join automatically?"
 		yes_button.text = "Install and Join"
 	progress.value = 0
 	yes_button.disabled = false

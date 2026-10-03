@@ -3,8 +3,11 @@ extends HBoxContainer
 var EQUIPMENT_BUTTONS:Array
 enum {HEAD, TORSO, LEG, ARM}
 const GRID_SIZE = 64
-const NAVIGATION_SLOT = GRID_SIZE - 1
-const PAGE_SLOT_COUNT = GRID_SIZE - 1
+const PREV_NAVIGATION_SLOT = GRID_SIZE - 2
+const NEXT_NAVIGATION_SLOT = GRID_SIZE - 1
+const PAGE_SLOT_COUNT = GRID_SIZE - 2
+const PAGE_NAMES = ["Original", "Online", "Custom"]
+const ORIGINAL_IMPLANT_COUNT = 49
 const TRANSITION_BATCH = 4
 const ONLINE_IMPLANTS = ["Pneumatic Merit Pump", "Surveillance Eyecam", "Surveillance Eyecam PRO MAX", "Military Camouflage+", "Stealth Suit+", "ZZzzz Special Sedative Grenade+", "First Aid Kit+", "Cursed Torch+", "Augmented Arms+"]
 const ONLINE_EXTENSION_BASES = {
@@ -17,7 +20,8 @@ const ONLINE_EXTENSION_BASES = {
 }
 const EMPTY_TEXTURE = preload("res://Textures/Menu/Empty_Slot.png")
 const MYSTERY_TEXTURE = preload("res://Textures/Menu/mystery.png")
-const NEXT_LEVEL_TEXTURE = preload("res://Textures/Menu/Next_Level.png")
+const MENU_PREV_PATH = "res://MOD_CONTENT/CruS Online/modbase_prev.png"
+const MENU_NEXT_PATH = "res://MOD_CONTENT/CruS Online/modbase_next.png"
 var IMPLANTS
 var confirmed = false
 var cancel = false
@@ -25,10 +29,23 @@ var hover_info
 var current_page = 0
 var page_transitioning = false
 var button_implant_indices:Array = []
-var navigation_button = null
+var prev_navigation_button = null
+var next_navigation_button = null
+var menu_prev_texture = null
+var menu_next_texture = null
+
+func _navigation_texture(path):
+	var image = Image.new()
+	if image.load(path) != OK:
+		return EMPTY_TEXTURE
+	var texture = ImageTexture.new()
+	texture.create_from_image(image, 0)
+	return texture
 
 func _ready():
 	yield (get_tree(), "idle_frame")
+	menu_prev_texture = _navigation_texture(MENU_PREV_PATH)
+	menu_next_texture = _navigation_texture(MENU_NEXT_PATH)
 	$ConfirmationDialog.get_cancel().connect("pressed", self, "_on_Cancel_Pressed")
 	$TextureRect / Money.text = "$" + str(Global.money)
 	$TextureRect / Arm_Button.connect("pressed", self, "_slot_button_pressed", [ARM])
@@ -58,16 +75,36 @@ func _ready():
 		new_button.stretch_mode = TextureButton.STRETCH_SCALE
 		EQUIPMENT_BUTTONS.append(new_button)
 		button_implant_indices.append(-1)
-	navigation_button = EQUIPMENT_BUTTONS[NAVIGATION_SLOT]
+	prev_navigation_button = EQUIPMENT_BUTTONS[PREV_NAVIGATION_SLOT]
+	next_navigation_button = EQUIPMENT_BUTTONS[NEXT_NAVIGATION_SLOT]
 	_populate_page(current_page)
+
+func _implant_page(index):
+	if ONLINE_IMPLANTS.has(IMPLANTS[index].i_name):
+		return 1
+	if index < ORIGINAL_IMPLANT_COUNT:
+		return 0
+	return 2
 
 func _page_implant_indices(page):
 	var indices = []
 	for i in range(IMPLANTS.size()):
-		var online_implant = ONLINE_IMPLANTS.has(IMPLANTS[i].i_name)
-		if (page == 1 and online_implant) or (page == 0 and not online_implant):
+		if _implant_page(i) == page:
 			indices.append(i)
 	return indices
+
+func _available_pages():
+	var pages = [0, 1]
+	if not _page_implant_indices(2).empty():
+		pages.append(2)
+	return pages
+
+func _navigation_destination(slot):
+	var pages = _available_pages()
+	var position = pages.find(current_page)
+	if position < 0:
+		position = 0
+	return pages[(position + pages.size() - 1) % pages.size()] if slot == PREV_NAVIGATION_SLOT else pages[(position + 1) % pages.size()]
 
 func _set_button_empty(slot):
 	button_implant_indices[slot] = -1
@@ -80,28 +117,36 @@ func _set_button_empty(slot):
 	button.disabled = true if page_transitioning else false
 
 func _set_navigation_transition_empty():
-	if not is_instance_valid(navigation_button):
-		return
-	button_implant_indices[NAVIGATION_SLOT] = -1
-	navigation_button.name = "ImplantPageNavigation"
-	navigation_button.texture_normal = EMPTY_TEXTURE
-	navigation_button.texture_disabled = EMPTY_TEXTURE
-	navigation_button.modulate = Color(1, 1, 1, 1)
-	navigation_button.rect_pivot_offset = navigation_button.rect_size * 0.5
-	navigation_button.rect_scale = Vector2(1, 1)
-	navigation_button.disabled = true
+	for slot in [PREV_NAVIGATION_SLOT, NEXT_NAVIGATION_SLOT]:
+		var button = EQUIPMENT_BUTTONS[slot]
+		button_implant_indices[slot] = -1
+		button.name = "ImplantPageNavigation"
+		button.texture_normal = EMPTY_TEXTURE
+		button.texture_disabled = EMPTY_TEXTURE
+		button.modulate = Color(1, 1, 1, 1)
+		button.rect_pivot_offset = button.rect_size * 0.5
+		button.rect_scale = Vector2(1, 1)
+		button.disabled = true
 
-func _set_navigation_button():
-	if not is_instance_valid(navigation_button):
+func _set_navigation_buttons():
+	if not is_instance_valid(prev_navigation_button) or not is_instance_valid(next_navigation_button):
 		return
-	button_implant_indices[NAVIGATION_SLOT] = -1
-	navigation_button.name = "Original Implants" if current_page == 1 else "Online Implants"
-	navigation_button.texture_normal = NEXT_LEVEL_TEXTURE
-	navigation_button.texture_disabled = NEXT_LEVEL_TEXTURE
-	navigation_button.modulate = Color(1, 1, 1, 1)
-	navigation_button.rect_pivot_offset = navigation_button.rect_size * 0.5
-	navigation_button.rect_scale = Vector2(-1, 1) if current_page == 1 else Vector2(1, 1)
-	navigation_button.disabled = page_transitioning
+	var previous_page = _navigation_destination(PREV_NAVIGATION_SLOT)
+	var next_page = _navigation_destination(NEXT_NAVIGATION_SLOT)
+	button_implant_indices[PREV_NAVIGATION_SLOT] = -1
+	button_implant_indices[NEXT_NAVIGATION_SLOT] = -1
+	prev_navigation_button.name = PAGE_NAMES[previous_page]
+	next_navigation_button.name = PAGE_NAMES[next_page]
+	prev_navigation_button.texture_normal = menu_prev_texture
+	prev_navigation_button.texture_disabled = menu_prev_texture
+	next_navigation_button.texture_normal = menu_next_texture
+	next_navigation_button.texture_disabled = menu_next_texture
+	for button in [prev_navigation_button, next_navigation_button]:
+		button.modulate = Color(1, 1, 1, 1)
+		button.rect_pivot_offset = button.rect_size * 0.5
+		button.rect_scale = Vector2.ONE
+		button.flip_h = false
+		button.disabled = page_transitioning
 
 func _extension_base_name(implant):
 	return ONLINE_EXTENSION_BASES.get(implant.i_name, "")
@@ -162,7 +207,7 @@ func _populate_page(page):
 			_set_implant_button(slot, indices[slot])
 		else:
 			_set_button_empty(slot)
-	_set_navigation_button()
+	_set_navigation_buttons()
 
 func _play_page_transition_sound(opening):
 	var root = get_parent().get_parent()
@@ -202,7 +247,7 @@ func _change_page(page):
 			_play_page_transition_sound(true)
 		if slot % TRANSITION_BATCH == TRANSITION_BATCH - 1:
 			yield (get_tree(), "idle_frame")
-	_set_navigation_button()
+	_set_navigation_buttons()
 	page_transitioning = false
 	update_buttons()
 
@@ -269,17 +314,18 @@ func update_buttons():
 			_set_implant_button(slot, implant_index)
 		else:
 			_set_button_empty(slot)
-	_set_navigation_button()
+	_set_navigation_buttons()
 	$TextureRect/Head_Button.texture_normal = Global.implants.head_implant.texture
 	$TextureRect/Torso_Button.texture_normal = Global.implants.torso_implant.texture
 	$TextureRect/Arm_Button.texture_normal = Global.implants.arm_implant.texture
 	$TextureRect/Leg_Button.texture_normal = Global.implants.leg_implant.texture
 
-func _show_navigation_info():
+func _show_navigation_info(slot):
 	hover_info.get_node("Image").hide()
 	hover_info.get_node("Name").show()
 	hover_info.get_parent().raise()
-	hover_info.get_node("Name").text = "Original Implants" if current_page == 1 else "Online Implants"
+	var destination = _navigation_destination(slot)
+	hover_info.get_node("Name").text = PAGE_NAMES[destination]
 	hover_info.get_node("Hint").text = ""
 	hover_info.get_node("Hint").hide()
 	hover_info.get_parent().rect_size = Vector2.ZERO
@@ -331,27 +377,28 @@ func _show_implant_info(i):
 		hover_info.get_node("Hint").text += "Jump bonus: " + str(IMPLANTS[i].jump_bonus) + "\n"
 	hover_info.get_parent().show()
 
-func _on_navigation_mouse_entered():
+func _on_navigation_mouse_entered(slot):
 	if page_transitioning:
 		return
-	_show_navigation_info()
+	_show_navigation_info(slot)
 
 func _on_navigation_mouse_exited():
 	hover_info.get_node("Image").hide()
 	hover_info.get_parent().hide()
 
-func _on_navigation_pressed():
+func _on_navigation_pressed(slot):
 	if page_transitioning:
 		return
-	var transition = _change_page(0 if current_page == 1 else 1)
+	var page = _navigation_destination(slot)
+	var transition = _change_page(page)
 	if transition is GDScriptFunctionState:
 		yield (transition, "completed")
 
 func _on_mouse_entered(slot):
 	if page_transitioning:
 		return
-	if slot == NAVIGATION_SLOT:
-		_show_navigation_info()
+	if slot == PREV_NAVIGATION_SLOT or slot == NEXT_NAVIGATION_SLOT:
+		_show_navigation_info(slot)
 		return
 	var implant_index = button_implant_indices[slot]
 	if implant_index >= 0:
@@ -364,8 +411,8 @@ func _on_mouse_exited(slot):
 func _on_implant_pressed(slot):
 	if page_transitioning:
 		return
-	if slot == NAVIGATION_SLOT:
-		var navigation = _on_navigation_pressed()
+	if slot == PREV_NAVIGATION_SLOT or slot == NEXT_NAVIGATION_SLOT:
+		var navigation = _on_navigation_pressed(slot)
 		if navigation is GDScriptFunctionState:
 			yield (navigation, "completed")
 		return

@@ -16,6 +16,8 @@ func multiplayer_enter():
 		goals_screen.go()
 	if is_instance_valid(statistics_screen):
 		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
 	visible = false
 	in_game = true
 	menu[START].hide()
@@ -26,13 +28,13 @@ func multiplayer_enter():
 
 enum {UP, RIGHT, DOWN, LEFT}
 enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS}
-enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS}
+enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS, NEWS}
 var confirmed = false
 var cancel = false
 enum {B_START, B_SETTINGS, B_QUIT, B_LEVEL, B_MISSION_START, 
 	B_WEAPON_1, B_WEAPON_2, B_CHARACTER, B_STOCKS, B_W_PISTOL, B_W_SMG, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, 
 	B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_TRANQ, B_W_BLACKJACK, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT, B_EX_MENU, B_EX_LEVEL_SELECT, B_RETURN, B_RETRY, B_BONUS,
-	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS, B_GOALS, B_STATS}
+	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS, B_GOALS, B_STATS, B_NEWS}
 const BUTTON_TEXTURES:Array = [preload("res://Textures/Menu/start_normal.png"), 
 									preload("res://Textures/Menu/settings_normal.png"), 
 									preload("res://Textures/Menu/OS_normal.png"), 
@@ -128,7 +130,6 @@ const BUTTON_TEXTURES_D:Array = [preload("res://Textures/Menu/Disabled_Button/1.
 								preload("res://Textures/Menu/Disabled_Button/3.png"), 
 								preload("res://Textures/Menu/Disabled_Button/4.png")]
 const MYSTERY = preload("res://Textures/Menu/mystery.png")
-const GOALS_BUTTON_TEXTURE = preload("res://Textures/Menu/Misery_Achieved.png")
 enum {W_PISTOL, W_SMG, W_TRANQ, W_BLACKJACK, W_SHOTGUN, W_RL, W_SNIPER, W_AR, W_S_SMG, W_NAMBU, W_GAS_LAUNCHER, W_MG3, W_AUTOSHOTGUN, W_MAUSER, W_BORE, W_MKR, W_RADIATOR, W_FLASHLIGHT, W_ZIPPY, W_AN94, W_VAG72, W_STEYR, W_CANCER, W_ROD, W_FLAMETHROWER, W_SKS, W_NAILER, W_SHOCK, W_LIGHT}
 const RESOLUTIONS:Array = [Vector2(1920, 1080), Vector2(1600, 900), Vector2(1366, 768), Vector2(1280, 720), Vector2(3840, 2160), Vector2(2560, 1440), Vector2(3840, 2400), Vector2(2560, 1600), Vector2(1920, 1200), Vector2(1680, 1050), Vector2(1440, 900), Vector2(3440, 1440), Vector2(2880, 1200), Vector2(2560, 1080), Vector2(1920, 800), Vector2(1600, 1200), Vector2(1440, 1080), Vector2(1024, 768), Vector2(800, 600), Vector2(640, 480), Vector2(1080, 1080)]
 const RANK_LETTERS:Array = [preload("res://Textures/rank_letters/C.png"), 
@@ -190,6 +191,10 @@ var all_level_buttons:Array = []
 var level_page_start = 0
 var level_page_history:Array = []
 var page_buttons:Array = []
+var campaign_pages = []
+var campaign_page = 0
+var campaign_label:Label = null
+var level_select_origin = Vector2(100, 100)
 const CUSTOM_LEVEL_PAGE_SIZE = 20
 const CUSTOM_LEVEL_BASE = 19
 var current_menu = 0
@@ -197,12 +202,28 @@ var current_weapon_select = 0
 var weapon_1 = 0
 var weapon_2 = 1
 var weapon_select_buttons:Array = []
+var weapon_menu_panel:Panel = null
+var weapon_menu_slot_buttons:Array = []
+var weapon_menu_slot_outlines:Array = []
+var weapon_menu_name:Label = null
+var weapon_menu_description:Label = null
+var weapon_menu_portrait:TextureRect = null
+var weapon_grid_buttons:Array = []
+var weapon_page_buttons:Array = []
+var weapon_page_label:Label = null
+var weapon_page = 0
+var custom_weapon_buttons:Array = []
+var weapon_stat_labels:Array = []
+var weapon_stat_source = null
+const WEAPON_MENU_COLUMNS = 7
+const WEAPON_MENU_ORIGIN = Vector2(160, 256)
 var previous_menu = 0
 var menu_button:Array = []
 var button_size = Vector2(64, 64)
 var b_position = Vector2(100, 100)
 var dir = 0
 var in_game = false
+var online_pause_settings = false
 
 var resolution_list:ItemList
 var time = 0
@@ -226,12 +247,11 @@ func _physics_process(delta):
 	if Multiplayer.NetworkBridge.check_connection() and Multiplayer.Flow.result_active and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	_update_waiting_menu()
-	if not menu_changing and not active_menus.empty() and active_menus.back() == menu[START]:
+	if not menu_changing and not online_navigation_active and not active_menus.empty() and active_menus.back() == menu[START]:
 		_refresh_start_buttons()
 	_apply_counterop_level_lock()
 	_apply_competitive_start_gate()
 	_apply_online_level_lock()
-	_position_level_online_button()
 	var modloader_version = get_node_or_null("ModLoaderVersion")
 	if modloader_version != null:
 		modloader_version.visible = not in_game and not active_menus.empty() and active_menus.back() == menu[START]
@@ -258,7 +278,7 @@ func _physics_process(delta):
 		for b in level_buttons:
 			if button == b:
 				return 
-		if button.disabled:
+		if button.disabled and button.get_parent() != menu[WEAPON_SELECT] and not (button.has_meta("competitive_start_locked") and button.get_meta("competitive_start_locked")):
 			button.texture_disabled = BUTTON_TEXTURES_D[int(sin(button.get_index() + time * 0.05) * 3) % 3]
 
 func get_key_index(action):
@@ -402,7 +422,7 @@ func _ready():
 	resolution_list = $Settings / GridContainer / PanelContainer5 / Resolution_List
 	for r in RESOLUTIONS:
 		resolution_list.add_item(str(r.x) + "x" + str(r.y))
-	for i in range(10):
+	for i in range(11):
 		var new_menu = Menu.new()
 		add_child(new_menu)
 		menu.append(new_menu)
@@ -410,16 +430,17 @@ func _ready():
 
 
 	
-	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_MULTIPLAYER_MENU, B_GOALS, B_STATS]
+	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_NEWS]
 	menu[SETTINGS].buttons = [B_RETURN]
 	menu[GOALS].buttons = [B_RETURN]
 	menu[STATS].buttons = [B_RETURN]
-	menu[LEVEL_SELECT].buttons = [B_RETURN, B_CHARACTER, B_STOCKS, B_WEAPON_1, B_WEAPON_2, B_MISSION_START]
+	menu[NEWS].buttons = [B_RETURN]
+	menu[LEVEL_SELECT].buttons = [B_RETURN, B_MULTIPLAYER_MENU, B_GOALS, B_STATS, B_WEAPON_1, B_CHARACTER, B_STOCKS, B_MISSION_START]
 	for level in range(min(CUSTOM_LEVEL_BASE, Global.LEVELS.size())):
 		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
 	
 		
-	menu[WEAPON_SELECT].buttons = [B_RETURN, B_W_PISTOL, B_W_SMG, B_W_TRANQ, B_W_BLACKJACK, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT]
+	menu[WEAPON_SELECT].buttons = [B_WEAPON_1, B_WEAPON_2, B_W_PISTOL, B_W_SMG, B_W_TRANQ, B_W_BLACKJACK, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT]
 	menu[CHARACTER].buttons = [B_RETURN]
 	menu[STOCKS].buttons = [B_RETURN]
 	
@@ -427,12 +448,32 @@ func _ready():
 	
 	for m in range(menu.size()):
 		create_buttons(m)
+	weapon_grid_buttons = menu[WEAPON_SELECT].get_children().slice(2, menu[WEAPON_SELECT].get_child_count() - 1)
+	weapon_page_buttons.append(create_button(WEAPON_SELECT, "Previous weapons", "_on_Weapon_Prev_Page_Pressed", B_PREV_LEVELS))
+	weapon_page_buttons.append(create_button(WEAPON_SELECT, "Next weapons", "_on_Weapon_Next_Page_Pressed", B_NEXT_LEVELS))
+	weapon_stat_source = load("res://Scripts/weapon.gd").new()
+	_create_weapon_menu_panel()
+	_refresh_weapon_menu_icons()
+	campaign_label = Label.new()
+	campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campaign_label.align = Label.ALIGN_CENTER
+	campaign_label.valign = Label.VALIGN_CENTER
+	campaign_label.add_color_override("font_color", Color(0, 1, 0))
+	var campaign_font = DynamicFont.new()
+	campaign_font.font_data = load("res://Fonts/MingLiU-ExtB-01.ttf")
+	campaign_font.size = 18
+	campaign_label.add_font_override("font", campaign_font)
+	add_child(campaign_label)
+	campaign_label.hide()
 	goals_screen = load("res://MOD_CONTENT/CruS Online/achievements/GoalsScreen.gd").new()
 	add_child(goals_screen)
 	move_child(goals_screen, menu[START].get_index())
 	statistics_screen = load("res://MOD_CONTENT/CruS Online/StatisticsScreen.gd").new()
 	add_child(statistics_screen)
 	move_child(statistics_screen, menu[START].get_index())
+	news_panel = load("res://MOD_CONTENT/CruS Online/NewsScreen.gd").new()
+	add_child(news_panel)
+	move_child(news_panel, menu[START].get_index())
 	for child in menu[START].get_children():
 		child.show()
 		child.set_position(b_position)
@@ -443,6 +484,15 @@ func _ready():
 	
 
 	set_res(Global.resolution[0], Global.resolution[1])
+	call_deferred("_align_startup_window")
+
+func _align_startup_window():
+	if Global.full_screen:
+		return
+	yield(get_tree(), "idle_frame")
+	yield(get_tree(), "idle_frame")
+	if not Global.full_screen:
+		OS.set_window_position(Vector2.ZERO)
 	
 	
 func _ensure_counterop_overlay():
@@ -518,9 +568,14 @@ func _competitive_start_reason():
 	return ""
 
 func _apply_competitive_start_gate():
-	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT] or menu_changing:
+	if active_menus.empty():
 		return
-	var button = menu[LEVEL_SELECT].get_child(5)
+	var button = menu[LEVEL_SELECT].get_child(7)
+	if active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active:
+		if button.disabled:
+			button.texture_disabled = BUTTON_TEXTURES_D[0]
+			button.modulate = Color.white
+		return
 	if not button.visible or not Multiplayer.NetworkBridge.is_world_authority():
 		return
 	var reason = _competitive_start_reason()
@@ -556,13 +611,20 @@ func show_buttons(m:Menu, a:int, b:int):
 		m.get_child(ab).show()
 
 func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
-	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active:
+	if online_navigation_active:
+		request_close_online_navigation()
+		return
+	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT]:
 		return
 	online_navigation_generation += 1
 	var generation = online_navigation_generation
 	online_navigation_active = true
 	online_navigation_transitioning = true
-	button_id.disabled = true
+	for level_button in menu[LEVEL_SELECT].get_children():
+		level_button.disabled = true
+	button_id.disabled = false
+	button_id.set_meta("display_name", "Return")
+	button_id.texture_normal = BUTTON_TEXTURES[B_RETURN]
 	_apply_online_level_lock()
 	online_sidebar_was_visible = $Level_Info_Grid.visible
 	if online_sidebar_was_visible:
@@ -583,15 +645,214 @@ func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
 func register_custom_levels():
 	while level_buttons.size() < Global.LEVELS.size():
 		var index = level_buttons.size()
-		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
 		var button = create_button(LEVEL_SELECT, LEVEL_NAMES[index], "_on_Level_Pressed", B_LEVEL)
 		button.set_meta("level_index", index)
 		level_buttons.append(button)
 	all_level_buttons = level_buttons.duplicate()
-	while level_select_dir.size() < 26:
-		level_select_dir.append(DOWN)
-	if all_level_buttons.size() > CUSTOM_LEVEL_BASE:
-		show_level_page()
+	if campaign_pages.empty():
+		campaign_pages = [{"name": "Cruelty Squad", "indices": range(min(CUSTOM_LEVEL_BASE, level_buttons.size()))}]
+		if level_buttons.size() > CUSTOM_LEVEL_BASE:
+			campaign_pages.append({"name": "Custom Missions", "indices": range(CUSTOM_LEVEL_BASE, level_buttons.size())})
+	show_level_page()
+
+func register_campaigns(definitions):
+	campaign_pages.clear()
+	var custom_missions = null
+	for definition in definitions:
+		var indices = definition.get("indices", [])
+		if not indices is Array:
+			continue
+		if str(definition.get("id", "")) == "custom_missions":
+			custom_missions = definition
+			continue
+		if indices.empty():
+			continue
+		for start in range(0, indices.size(), 19):
+			campaign_pages.append({"name": str(definition.get("name", "Campaign")), "indices": indices.slice(start, min(start + 18, indices.size() - 1))})
+	if custom_missions != null:
+		var indices = custom_missions.get("indices", [])
+		if not indices.empty():
+			for start in range(0, indices.size(), 19):
+				campaign_pages.append({"name": "Custom Missions", "indices": indices.slice(start, min(start + 18, indices.size() - 1))})
+	campaign_page = clamp(campaign_page, 0, max(0, campaign_pages.size() - 1))
+	show_level_page()
+
+func _level_cell(offset):
+	if offset < 4:
+		return Vector2(1 + offset, 3)
+	var row = 4 + int((offset - 4) / 5)
+	var column = (offset - 4) % 5
+	return Vector2(4 - column if row % 2 == 0 else column, row)
+
+func _level_select_position(button):
+	var kind = button.get_meta("menu_button_type")
+	var cells = {B_RETURN: Vector2(0, 0), B_MULTIPLAYER_MENU: Vector2(0, 1), B_GOALS: Vector2(1, 1), B_STATS: Vector2(2, 1), B_WEAPON_1: Vector2(0, 1), B_CHARACTER: Vector2(1, 1), B_STOCKS: Vector2(2, 1), B_MISSION_START: Vector2(0, 2), B_NEXT_LEVELS: Vector2(4, 7), B_PREV_LEVELS: Vector2(0, 7)}
+	var cell = cells.get(kind, Vector2.ZERO)
+	if kind == B_LEVEL and not campaign_pages.empty():
+		var offset = campaign_pages[campaign_page].indices.find(int(button.get_meta("level_index")))
+		cell = _level_cell(max(0, offset))
+	cell.y += 1
+	if kind in [B_WEAPON_1, B_CHARACTER, B_STOCKS, B_MISSION_START]:
+		cell.y += 1
+	return level_select_origin + Vector2(cell.x * button_size.x, cell.y * button_size.y)
+
+func _weapon_menu_position(button):
+	if button == weapon_page_buttons[0]:
+		return Vector2(160, 576)
+	if button == weapon_page_buttons[1]:
+		return Vector2(544, 576)
+	var index = menu[WEAPON_SELECT].get_children().find(button)
+	if index < 2:
+		return Vector2(160 + index * 205, 140)
+	index -= 2
+	return WEAPON_MENU_ORIGIN + Vector2(index % WEAPON_MENU_COLUMNS, int(index / WEAPON_MENU_COLUMNS)) * button_size
+
+func _weapon_button_for_index(index):
+	if index < 0 or index >= weapon_grid_buttons.size():
+		return null
+	return weapon_grid_buttons[index]
+
+func _refresh_weapon_menu_icons():
+	if weapon_select_buttons.empty():
+		return
+	for slot in range(weapon_menu_slot_buttons.size()):
+		var preview = $Weapon1_Viewport if slot == 0 else $Weapon2_Viewport
+		weapon_menu_slot_buttons[slot].texture_normal = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_hover = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_pressed = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_disabled = preview.get_texture()
+		weapon_menu_slot_buttons[slot].modulate = Color.white
+		if slot < weapon_menu_slot_outlines.size():
+			weapon_menu_slot_outlines[slot].material.set_shader_param("selected", current_weapon_select == slot + 1)
+
+func _weapon_detail_button(button):
+	if not is_instance_valid(weapon_menu_name):
+		return
+	var weapon_index = weapon_grid_buttons.find(button)
+	if weapon_index < 0 or weapon_index >= Global.WEAPONS_UNLOCKED.size() or not Global.WEAPONS_UNLOCKED[weapon_index]:
+		weapon_menu_name.text = "???"
+		weapon_menu_description.text = ""
+		weapon_menu_portrait.texture = MYSTERY
+		for label in weapon_stat_labels:
+			label.text = ""
+			label.rect_scale.x = 1
+		return
+	weapon_menu_name.text = button.name
+	weapon_menu_description.text = button.hint_tooltip
+	weapon_menu_portrait.texture = button.texture_normal
+	var stat_values = _weapon_stats(weapon_index)
+	for stat_index in range(weapon_stat_labels.size()):
+		var label = weapon_stat_labels[stat_index]
+		label.text = stat_values[stat_index]
+		label.rect_scale.x = min(1.0, label.rect_size.x / max(1.0, label.get_font("font").get_string_size(label.text).x))
+
+func _weapon_stats(index):
+	var types = ["Pistol", "Submachine Gun", "Sedative Pistol", "Melee", "Shotgun", "Rocket Launcher", "Sniper Rifle", "Assault Rifle", "Submachine Gun", "Pistol", "Grenade Launcher", "Machine Gun", "Shotgun", "Rifle", "Special", "Carbine", "Special", "Utility", "Pistol", "Assault Rifle", "Rifle", "Rifle", "Special", "Melee", "Flamethrower", "Rifle", "Nail Gun", "Shotgun", "Special"]
+	var weight_names = ["Light", "Medium", "Heavy", "Very Heavy"]
+	var magazine = int(weapon_stat_source.magazine_ammo[index])
+	var reserve = int(weapon_stat_source.ammo[index])
+	var ammunition = weapon_stat_source.W_NAMES[index]
+	var damage = weapon_stat_source.damage[index]
+	var weight = int(weapon_stat_source.weight[index])
+	return [
+		"Type: " + types[index],
+		"Ammo: %d/%d (%d)" % [magazine, reserve, magazine + reserve],
+		"Ammunition: " + (str(ammunition) if ammunition != null and str(ammunition).to_lower() != "null" else "None"),
+		"Damage: " + (str(damage) if damage != null else "N/A"),
+		"Weight: " + weight_names[clamp(weight, 0, weight_names.size() - 1)],
+		"Armor Piercing: " + ("Yes" if index in [W_STEYR, W_SNIPER, W_MAUSER] else "No")
+	]
+
+func _make_weapon_label(text, position, size, font_size, color):
+	var label = Label.new()
+	label.text = text
+	label.rect_position = position
+	label.rect_size = size
+	label.autowrap = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_color_override("font_color", color)
+	var font = DynamicFont.new()
+	font.font_data = load("res://Fonts/MingLiU-ExtB-01.ttf")
+	font.size = font_size
+	label.add_font_override("font", font)
+	weapon_menu_panel.add_child(label)
+	return label
+
+func _create_weapon_menu_panel():
+	weapon_menu_panel = Panel.new()
+	weapon_menu_panel.name = "WeaponMenuBackground"
+	weapon_menu_panel.rect_position = Vector2(128, 128)
+	weapon_menu_panel.rect_size = Vector2(1024, 512)
+	weapon_menu_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	weapon_menu_panel.add_stylebox_override("panel", $Character_Menu.get_stylebox("panel").duplicate())
+	add_child(weapon_menu_panel)
+	move_child(weapon_menu_panel, menu[WEAPON_SELECT].get_index())
+	for slot in range(2):
+		var outline = TextureRect.new()
+		outline.rect_position = Vector2(32 + slot * 205, 12)
+		outline.rect_size = Vector2(185, 79)
+		outline.texture = $Weapon1_Viewport.get_texture() if slot == 0 else $Weapon2_Viewport.get_texture()
+		outline.expand = true
+		outline.stretch_mode = TextureRect.STRETCH_SCALE
+		outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var outline_material = ShaderMaterial.new()
+		outline_material.shader = load("res://MOD_CONTENT/CruS Online/effects/statistics_outline.shader")
+		outline_material.set_shader_param("outline_width", 1.25)
+		outline.material = outline_material
+		weapon_menu_panel.add_child(outline)
+		weapon_menu_slot_outlines.append(outline)
+	weapon_menu_portrait = TextureRect.new()
+	weapon_menu_portrait.rect_position = Vector2(568, 108)
+	weapon_menu_portrait.rect_size = Vector2(152, 152)
+	weapon_menu_portrait.expand = true
+	weapon_menu_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	weapon_menu_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	weapon_menu_panel.add_child(weapon_menu_portrait)
+	weapon_menu_name = _make_weapon_label("", Vector2(568, 266), Vector2(398, 50), 21, Color(0, 1, 0))
+	for stat_index in range(6):
+		var stat_label = _make_weapon_label("", Vector2(728, 108 + stat_index * 24), Vector2(238, 22), 14, Color.white)
+		stat_label.autowrap = false
+		weapon_stat_labels.append(stat_label)
+	weapon_menu_description = _make_weapon_label("", Vector2(568, 320), Vector2(398, 190), 14, Color.white)
+	weapon_page_label = _make_weapon_label("Cruelty Squad", Vector2(96, 448), Vector2(320, 64), 18, Color(0, 1, 0))
+	weapon_page_label.align = Label.ALIGN_CENTER
+	weapon_page_label.valign = Label.VALIGN_CENTER
+	weapon_menu_panel.hide()
+
+func _show_weapon_page():
+	if custom_weapon_buttons.empty():
+		weapon_page = 0
+	weapon_page_label.text = "Cruelty Squad" if weapon_page == 0 else "Custom"
+	weapon_page_label.visible = not custom_weapon_buttons.empty()
+	for button in weapon_page_buttons:
+		button.visible = not custom_weapon_buttons.empty() and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
+	var showing_weapons = weapon_page == 0 and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
+	for button in weapon_grid_buttons:
+		button.visible = showing_weapons
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_1 if current_weapon_select == 1 else weapon_2))
+	else:
+		weapon_menu_name.text = ""
+		weapon_menu_description.text = ""
+		weapon_menu_portrait.texture = null
+		for label in weapon_stat_labels:
+			label.text = ""
+			label.rect_scale.x = 1
+	$Hover_Panel.hide()
+
+func _on_Weapon_Prev_Page_Pressed(_menu_index, _button):
+	if custom_weapon_buttons.empty():
+		return
+	weapon_page = (weapon_page + 1) % 2
+	$SFX / Close.play()
+	_show_weapon_page()
+
+func _on_Weapon_Next_Page_Pressed(_menu_index, _button):
+	if custom_weapon_buttons.empty():
+		return
+	weapon_page = (weapon_page + 1) % 2
+	$SFX / Close.play()
+	_show_weapon_page()
 
 func show_level_page():
 	for button in page_buttons:
@@ -602,55 +863,44 @@ func show_level_page():
 	for button in all_level_buttons:
 		if button.get_parent() == menu[LEVEL_SELECT]:
 			menu[LEVEL_SELECT].remove_child(button)
-	var previous = level_page_start > 0
-	var capacity = CUSTOM_LEVEL_PAGE_SIZE - int(previous)
-	var more = level_page_start + capacity < all_level_buttons.size()
-	if not previous and all_level_buttons.size() > CUSTOM_LEVEL_BASE:
-		capacity = CUSTOM_LEVEL_BASE
-		more = true
-	elif more:
-		capacity -= 1
-	menu[LEVEL_SELECT].buttons = menu[LEVEL_SELECT].buttons.slice(0, 5)
-	if previous:
-		page_buttons.append(create_button(LEVEL_SELECT, "Previous levels", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
+	if campaign_pages.empty():
+		return
+	var page = campaign_pages[campaign_page]
+	menu[LEVEL_SELECT].buttons = menu[LEVEL_SELECT].buttons.slice(0, 7)
+	if campaign_pages.size() > 1:
+		page_buttons.append(create_button(LEVEL_SELECT, "Previous campaign", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
 		menu[LEVEL_SELECT].buttons.append(B_PREV_LEVELS)
-	for index in range(level_page_start, min(level_page_start + capacity, all_level_buttons.size())):
-		menu[LEVEL_SELECT].add_child(all_level_buttons[index])
-		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
-	if more:
-		page_buttons.append(create_button(LEVEL_SELECT, "More levels", "_on_Next_Levels_Button_Pressed", B_NEXT_LEVELS))
+	for index in page.indices:
+		if index >= 0 and index < all_level_buttons.size():
+			menu[LEVEL_SELECT].add_child(all_level_buttons[index])
+			menu[LEVEL_SELECT].buttons.append(B_LEVEL)
+	if campaign_pages.size() > 1:
+		page_buttons.append(create_button(LEVEL_SELECT, "Next campaign", "_on_Next_Levels_Button_Pressed", B_NEXT_LEVELS))
 		menu[LEVEL_SELECT].buttons.append(B_NEXT_LEVELS)
+	if is_instance_valid(campaign_label):
+		campaign_label.text = page.name
+		campaign_label.rect_position = level_select_origin + Vector2(button_size.x, button_size.y * 8)
+		campaign_label.rect_size = Vector2(button_size.x * 3, button_size.y)
+		campaign_label.visible = campaign_pages.size() > 1 and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
 	if not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]:
-		var position = menu[LEVEL_SELECT].get_child(5).rect_position
-		for index in range(6, menu[LEVEL_SELECT].get_child_count()):
-			match level_select_dir[index]:
-				UP:
-					position.y -= button_size.y
-				RIGHT:
-					position.x += button_size.x
-				DOWN:
-					position.y += button_size.y
-				LEFT:
-					position.x -= button_size.x
-			var button = menu[LEVEL_SELECT].get_child(index)
-			button.rect_position = position
+		for button in menu[LEVEL_SELECT].get_children():
+			button.rect_position = _level_select_position(button)
 			button.show()
 		$Hover_Panel.hide()
 		button_state()
 		_apply_online_level_lock()
 
 func _on_Next_Levels_Button_Pressed(_menu_index, _button):
-	if online_navigation_active:
+	if online_navigation_active or campaign_pages.empty():
 		return
-	level_page_history.append(level_page_start)
-	level_page_start += CUSTOM_LEVEL_PAGE_SIZE - int(level_page_start > 0) - 1
+	campaign_page = (campaign_page + 1) % campaign_pages.size()
 	$SFX / Close.play()
 	show_level_page()
 
 func _on_Prev_Levels_Button_Pressed(_menu_index, _button):
-	if online_navigation_active:
+	if online_navigation_active or campaign_pages.empty():
 		return
-	level_page_start = level_page_history.pop_back() if not level_page_history.empty() else 0
+	campaign_page = (campaign_page - 1 + campaign_pages.size()) % campaign_pages.size()
 	$SFX / Close.play()
 	show_level_page()
 
@@ -667,6 +917,8 @@ func create_buttons(m:int):
 				create_button(m, "Goals", "_on_Goals_Button_Pressed", menu[m].buttons[i])
 			B_STATS:
 				create_button(m, "Statistics", "_on_Statistics_Button_Pressed", menu[m].buttons[i])
+			B_NEWS:
+				create_button(m, "News", "_on_News_Button_Pressed", menu[m].buttons[i])
 			B_LEVEL:
 				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
 				level_button.set_meta("level_index", level)
@@ -687,9 +939,12 @@ func create_buttons(m:int):
 			B_RETURN:
 				create_button(m, "Return", "_on_Return_Button_Pressed", menu[m].buttons[i])
 			B_WEAPON_1:
-				weapon_select_buttons.append(create_button(m, "Select Weapon 1", "_on_Weapon_1_Pressed", menu[m].buttons[i]))
+				if m == WEAPON_SELECT:
+					weapon_menu_slot_buttons.append(create_button(m, "Weapon Slot 1", "_on_Weapon_Menu_Slot_1_Pressed", menu[m].buttons[i]))
+				else:
+					weapon_select_buttons.append(create_button(m, "Weapons", "_on_Weapon_1_Pressed", menu[m].buttons[i]))
 			B_WEAPON_2:
-				weapon_select_buttons.append(create_button(m, "Select Weapon 2", "_on_Weapon_2_Pressed", menu[m].buttons[i]))
+				weapon_menu_slot_buttons.append(create_button(m, "Weapon Slot 2", "_on_Weapon_Menu_Slot_2_Pressed", menu[m].buttons[i]))
 			B_CHARACTER:
 				create_button(m, "Equipment & Implants", "_on_Implants_Button_Pressed", menu[m].buttons[i])
 			B_STOCKS:
@@ -786,6 +1041,14 @@ func create_buttons(m:int):
 			_:
 				print("BUTTON ERROR")
 
+func _load_mod_texture(filename):
+	var image = Image.new()
+	if image.load("res://MOD_CONTENT/CruS Online/" + filename) != OK:
+		return null
+	var texture = ImageTexture.new()
+	texture.create_from_image(image, 0)
+	return texture
+
 func create_button(m:int, n:String, connection:String, b:int):
 	var new_button = TextureButton.new()
 	menu[m].add_child(new_button)
@@ -801,9 +1064,11 @@ func create_button(m:int, n:String, connection:String, b:int):
 	elif b == B_MULTIPLAYER_MENU:
 		new_button.texture_normal = BUTTON_TEXTURES.back()
 	elif b == B_GOALS:
-		new_button.texture_normal = GOALS_BUTTON_TEXTURE
+		new_button.texture_normal = _load_mod_texture("goals.png")
 	elif b == B_STATS:
-		new_button.texture_normal = BUTTON_TEXTURES[B_CHARACTER]
+		new_button.texture_normal = _load_mod_texture("stats.png")
+	elif b == B_NEWS:
+		new_button.texture_normal = _load_mod_texture("news.png")
 	else:
 		new_button.texture_normal = BUTTON_TEXTURES[b]
 	new_button.texture_hover = BUTTON_TEXTURES_H[0]
@@ -817,7 +1082,7 @@ func create_button(m:int, n:String, connection:String, b:int):
 			new_button.texture_normal = Global.LEVEL_IMAGES[level_index]
 		new_button.set_meta("default_disabled_texture", new_button.texture_disabled)
 	if b == B_WEAPON_1:
-		new_button.texture_normal = BUTTON_TEXTURES[B_W_PISTOL + weapon_1]
+		new_button.texture_normal = _load_mod_texture("weapons.png") if m == LEVEL_SELECT else BUTTON_TEXTURES[B_W_PISTOL + weapon_1]
 	if b == B_WEAPON_2:
 		new_button.texture_normal = BUTTON_TEXTURES[B_W_PISTOL + weapon_2]
 	
@@ -831,11 +1096,19 @@ func create_button(m:int, n:String, connection:String, b:int):
 	all_buttons.append(new_button)
 	return new_button
 func _on_mouse_entered(m, button):
+	if m == WEAPON_SELECT:
+		if button in weapon_grid_buttons:
+			_weapon_detail_button(button)
+			hover_info.get_parent().hide()
+		return
+	if button.get_meta("menu_button_type") in [B_PREV_LEVELS, B_NEXT_LEVELS]:
+		hover_info.get_parent().hide()
+		return
 	if button.disabled and button.hint_tooltip == "":
 		return 
 	hover_info.get_node("Image").hide()
 	hover_info.get_parent().raise()
-	hover_info.get_node("Name").text = button.name
+	hover_info.get_node("Name").text = button.get_meta("display_name") if button.has_meta("display_name") else button.name
 	hover_info.get_node("Hint").text = ""
 	hover_info.get_parent().rect_size = Vector2(0, 0)
 	if button.hint_tooltip != "":
@@ -908,6 +1181,7 @@ func _on_Goals_Button_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, GOALS, button_id)
 	active_element = goals_screen
 	goals_screen.open()
+	menu[GOALS].raise()
 
 func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
 	if in_game or menu_changing:
@@ -916,6 +1190,16 @@ func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, STATS, button_id)
 	active_element = statistics_screen
 	statistics_screen.open()
+	menu[STATS].raise()
+
+func _on_News_Button_Pressed(m:int, button_id:TextureButton):
+	if in_game or menu_changing:
+		return
+	_close_online_panel()
+	goto_menu(m, NEWS, button_id)
+	active_element = news_panel
+	news_panel.come()
+	menu[NEWS].raise()
 
 func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, SETTINGS, button_id)
@@ -923,8 +1207,11 @@ func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	$Settings.rect_position.x = 320
 	$Settings.raise()
 	$Settings.come()
+	menu[SETTINGS].raise()
 
 func level_end():
+	if is_instance_valid(campaign_label):
+		campaign_label.hide()
 	if Multiplayer.NetworkBridge.check_connection():
 		_hide_online_navigation()
 	active_element = $Level_End_Grid
@@ -938,6 +1225,10 @@ func _on_Quit_Button_Pressed(m:int, button_id:TextureButton):
 
 func _on_Weapon_1_Pressed(m:int, button_id:TextureButton):
 	current_weapon_select = 1
+	_refresh_weapon_menu_icons()
+	_weapon_detail_button(_weapon_button_for_index(weapon_1))
+	weapon_menu_panel.show()
+	weapon_menu_panel.raise()
 	goto_menu(m, WEAPON_SELECT, button_id)
 	button_state()
 
@@ -946,126 +1237,115 @@ func _on_Weapon_2_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, WEAPON_SELECT, button_id)
 	button_state()
 
+func _on_Weapon_Menu_Slot_1_Pressed(_m:int, _button_id:TextureButton):
+	current_weapon_select = 1
+	_refresh_weapon_menu_icons()
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_1))
+
+func _on_Weapon_Menu_Slot_2_Pressed(_m:int, _button_id:TextureButton):
+	current_weapon_select = 2
+	_refresh_weapon_menu_icons()
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_2))
+
+func _on_weapon_equipped(button_id):
+	_refresh_weapon_menu_icons()
+	button_state()
+	_weapon_detail_button(button_id)
+	$Character_Menu / Character_Container / Equip.play()
+
 
 func _on_Rod_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_ROD)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(BUTTON_TEXTURES[B_W_ROD])
+	_on_weapon_equipped(button_id)
 
 func _on_SKS_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_SKS)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(BUTTON_TEXTURES[B_W_SKS])
+	_on_weapon_equipped(button_id)
 
 func _on_Nailer_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_NAILER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(BUTTON_TEXTURES[B_W_NAILER])
+	_on_weapon_equipped(button_id)
 
 func _on_DNA_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_CANCER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(BUTTON_TEXTURES[B_W_CANCER])
+	_on_weapon_equipped(button_id)
 func _on_Pistol_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_PISTOL)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(BUTTON_TEXTURES[B_W_PISTOL])
+	_on_weapon_equipped(button_id)
 func _on_SMG_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_SMG)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_S_SMG_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_S_SMG)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Shotgun_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_SHOTGUN)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Shock_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_SHOCK)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_RL_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_RL)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Sniper_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_SNIPER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Steyr_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_STEYR)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_AR_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_AR)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_AN94_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_AN94)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_MKR_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_MKR)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Nambu_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_NAMBU)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Gas_Launcher_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_GAS_LAUNCHER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_MG3_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_MG3)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Autoshotgun_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_AUTOSHOTGUN)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Mauser_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_MAUSER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Bore_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_BORE)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Radgun_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_RADIATOR)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Tranq_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_TRANQ)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Blackjack_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_BLACKJACK)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Flashlight_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_FLASHLIGHT)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Zippy_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_ZIPPY)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_VAG72_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_VAG72)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_FT_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_FLAMETHROWER)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 func _on_Light_Pressed(m:int, button_id:TextureButton):
 	set_weapon(W_LIGHT)
-	go_back(m, button_id)
-	weapon_select_buttons[current_weapon_select - 1].set_normal_texture(button_id.texture_normal)
+	_on_weapon_equipped(button_id)
 
 func set_weapon(w_index:int):
 	match current_weapon_select:
@@ -1082,6 +1362,7 @@ func set_weapon(w_index:int):
 			Global.CURRENT_WEAPONS[w] = true
 		else :
 			Global.CURRENT_WEAPONS[w] = false
+	_refresh_weapon_menu_icons()
 
 func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 	if menu_changing:
@@ -1130,6 +1411,8 @@ func _on_Level_Pressed(m:int, button_id:TextureButton):
 	if online_navigation_active:
 		return
 	var level_index = button_id.get_meta("level_index") if button_id.has_meta("level_index") else button_id.get_index() - 6
+	if is_instance_valid(Multiplayer.Extensions) and not Multiplayer.Extensions.stage_unlocked(level_index):
+		return
 	if _counterop_level_locked(level_index):
 		return
 	Global.CURRENT_LEVEL = level_index
@@ -1160,15 +1443,17 @@ func _on_Level_Pressed(m:int, button_id:TextureButton):
 
 
 	$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech()
-
+	button_state()
 	
-
+	
+	
 func go_back(m:int, b_id:TextureButton):
 	_navigation_generation += 1
 	var generation = _navigation_generation
 	
 	Global.STOCKS.save_stocks("user://stocks.save")
 	var counter = 0
+	var closing_weapon_menu = active_menus.back() == menu[WEAPON_SELECT]
 	menu_changing = true
 	for child in active_menus[active_menus.size() - 1].get_children():
 		child.disabled = true
@@ -1184,6 +1469,13 @@ func go_back(m:int, b_id:TextureButton):
 			$SFX / Close.pitch_scale = 1 + rand_range( - 0.3, 0.3)
 			$SFX / Close.play()
 		var to_pos = b_position
+		if closing_weapon_menu:
+			active_menus.back().get_child(child).hide()
+			active_menus.back().get_child(child).rect_position = to_pos
+			yield (get_tree(), "idle_frame")
+			if generation != _navigation_generation:
+				return
+			continue
 		
 		while ( not active_menus[active_menus.size() - 1].get_children()[child].rect_position.is_equal_approx(to_pos)):
 			active_menus[active_menus.size() - 1].get_children()[child].set_position(lerp(active_menus[active_menus.size() - 1].get_children()[child].rect_position, to_pos, 1))
@@ -1197,6 +1489,20 @@ func go_back(m:int, b_id:TextureButton):
 		child.disabled = false
 	
 	active_menus.pop_back()
+	if is_instance_valid(weapon_menu_panel):
+		weapon_menu_panel.hide()
+	if active_menus.back() == menu[LEVEL_SELECT] and active_element in [goals_screen, statistics_screen, news_panel]:
+		active_element = $Level_Info_Grid
+	if active_menus.back() == menu[START]:
+		_refresh_start_buttons()
+		menu[START].raise()
+		if online_pause_settings:
+			online_pause_settings = false
+			visible = false
+			menu[START].hide()
+			Global.get_node("Multiplayer/Menu").show_menu()
+	if is_instance_valid(campaign_label):
+		campaign_label.visible = campaign_pages.size() > 1 and active_menus.back() == menu[LEVEL_SELECT]
 	button_state()
 	hover_info.get_parent().hide()
 	menu_changing = false
@@ -1237,8 +1543,23 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 		menu_changing = false
 		return 
 	active_menus.append(menu[to_menu])
+	menu[to_menu].raise()
 	
-	b_position = b.rect_position
+	b_position = menu[START].get_child(0).rect_position if from_menu == START and not in_game else b.rect_position
+	if to_menu == LEVEL_SELECT:
+		level_select_origin = b_position
+		for level_select_button in menu[LEVEL_SELECT].get_children():
+			level_select_button.rect_position = _level_select_position(level_select_button)
+		if is_instance_valid(campaign_label) and campaign_pages.size() > 1:
+			campaign_label.text = campaign_pages[campaign_page].name
+			campaign_label.rect_position = level_select_origin + Vector2(button_size.x, button_size.y * 8)
+			campaign_label.rect_size = Vector2(button_size.x * 3, button_size.y)
+			campaign_label.show()
+	elif is_instance_valid(campaign_label):
+		campaign_label.hide()
+	if to_menu == WEAPON_SELECT:
+		for weapon_button in menu[WEAPON_SELECT].get_children():
+			weapon_button.rect_position = b.rect_position
 	
 	var wep_dir = 1
 	for child in menu[from_menu].get_children():
@@ -1255,7 +1576,7 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 			$SFX / Open.pitch_scale = 0.43 + rand_range( - 0.3, 0.1)
 			$SFX / Open.play()
 		
-		child.rect_size = button_size
+		child.rect_size = Vector2(185, 79) if to_menu == WEAPON_SELECT and menu[to_menu].get_children().find(child) < 2 else button_size
 		dir = menu_dir[from_menu]
 		if menu[to_menu].get_children().find(child) >= 5:
 			
@@ -1264,7 +1585,8 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 			
 				dir = (dir + 2) % 3
 		if to_menu == LEVEL_SELECT:
-			dir = level_select_dir[menu[to_menu].get_children().find(child)]
+			var level_child_index = menu[to_menu].get_children().find(child)
+			dir = level_select_dir[level_child_index] if level_child_index < level_select_dir.size() else 1
 		if to_menu == WEAPON_SELECT:
 			dir = wep_dir
 			if menu[to_menu].get_children().find(child) == 6:
@@ -1296,8 +1618,20 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 			LEFT:
 				b_position.x -= button_size.x
 				
-		child.show()
+		if to_menu != WEAPON_SELECT or (not child in weapon_page_buttons and (weapon_page == 0 or not child in weapon_grid_buttons)):
+			child.show()
+		if to_menu == LEVEL_SELECT and child.get_meta("menu_button_type") == B_MISSION_START:
+			_apply_competitive_start_gate()
 		var to_pos = b_position
+		if to_menu == LEVEL_SELECT:
+			to_pos = _level_select_position(child)
+			b_position = to_pos
+		elif to_menu == WEAPON_SELECT:
+			to_pos = _weapon_menu_position(child)
+			b_position = to_pos
+		elif from_menu in [START, LEVEL_SELECT] and child.get_meta("menu_button_type") == B_RETURN and to_menu in [GOALS, STATS, SETTINGS, NEWS]:
+			to_pos = b.rect_position + Vector2(0, button_size.y) if from_menu == START and to_menu in [SETTINGS, NEWS] else b.rect_position
+			b_position = to_pos
 		if to_menu == SETTINGS and b.get_meta("menu_button_type") == B_MULTIPLAYER_MENU:
 			to_pos = b.rect_position + Vector2(button_size.x, 0)
 			b_position = to_pos
@@ -1311,18 +1645,24 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 				return
 		child.disabled = false
 		button_state()
+		if to_menu == LEVEL_SELECT:
+			_apply_competitive_start_gate()
 		
 		update_level_info()
+	if to_menu == WEAPON_SELECT:
+		_show_weapon_page()
 	menu_changing = false
 
 func _input(event):
 	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.result_active:
 		return
+	if in_game and Multiplayer.NetworkBridge.check_connection() and not online_pause_settings:
+		return
 	var cancel_pressed = event.is_action_pressed("ui_cancel")
 	if cancel_pressed and not menu_changing and active_menus.size() > 1:
 		var top_menu = active_menus.back()
 		if top_menu == menu[CHARACTER] or top_menu == menu[STOCKS] or top_menu == menu[WEAPON_SELECT]:
-			go_back(active_menus.size() - 1, top_menu.get_child(0))
+			go_back(active_menus.size() - 1, weapon_select_buttons[0] if top_menu == menu[WEAPON_SELECT] else top_menu.get_child(0))
 			get_tree().set_input_as_handled()
 			return
 	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
@@ -1382,6 +1722,21 @@ func button_state():
 				level_buttons[button].disabled = true
 			else :
 				level_buttons[button].disabled = false
+			if button >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
+				var stage_locked = not Multiplayer.Extensions.stage_unlocked(button)
+				level_buttons[button].disabled = stage_locked or button == Global.CURRENT_LEVEL
+				if stage_locked:
+					var stage = Multiplayer.Extensions.campaign_stages.get(button, {})
+					if stage.get("secret", false):
+						level_buttons[button].show()
+						level_buttons[button].texture_disabled = MYSTERY
+					else:
+						level_buttons[button].hide()
+					level_buttons[button].hint_tooltip = ""
+				else:
+					level_buttons[button].modulate = Color.white
+					level_buttons[button].hint_tooltip = ""
+					level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
 			if button > Global.L_PUNISHMENT and button < CUSTOM_LEVEL_BASE:
 				if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1 and button != Global.CURRENT_LEVEL:
 					level_buttons[button].show()
@@ -1395,11 +1750,25 @@ func button_state():
 					level_buttons[button].disabled = true
 	if active_menus[active_menus.size() - 1] == menu[WEAPON_SELECT]:
 		for button in range(0, Global.WEAPONS_UNLOCKED.size()):
-			if Global.WEAPONS_UNLOCKED[button] and not Global.CURRENT_WEAPONS[button]:
-				menu[WEAPON_SELECT].get_children()[button + 1].disabled = false
-			else :
-				
-				menu[WEAPON_SELECT].get_children()[button + 1].disabled = true
+			var weapon_button = _weapon_button_for_index(button)
+			if not is_instance_valid(weapon_button):
+				continue
+			if not weapon_button.has_meta("weapon_name"):
+				weapon_button.set_meta("weapon_name", weapon_button.name)
+				weapon_button.set_meta("weapon_description", weapon_button.hint_tooltip)
+			if Global.WEAPONS_UNLOCKED[button]:
+				weapon_button.name = weapon_button.get_meta("weapon_name")
+				weapon_button.hint_tooltip = weapon_button.get_meta("weapon_description")
+				weapon_button.texture_normal = BUTTON_TEXTURES[weapon_button.get_meta("menu_button_type")]
+				weapon_button.texture_disabled = weapon_button.texture_normal
+				weapon_button.modulate = Color(0.55, 0.55, 0.55) if Global.CURRENT_WEAPONS[button] else Color.white
+				weapon_button.disabled = Global.CURRENT_WEAPONS[button]
+			else:
+				weapon_button.hint_tooltip = ""
+				weapon_button.texture_normal = MYSTERY
+				weapon_button.texture_disabled = MYSTERY
+				weapon_button.modulate = Color.white
+				weapon_button.disabled = true
 	
 
 
@@ -1412,7 +1781,7 @@ func _on_Resolution_List_item_activated(index):
 	Global.resolution = [RESOLUTIONS[index].x, RESOLUTIONS[index].y]
 	OS.set_window_position(OS.get_screen_size() * 0.5 - OS.window_size * 0.5)
 	OS.window_position.y = clamp(OS.window_position.y, 0, 30000)
-	OS.window_position.x = clamp(OS.window_position.y, 0, 30000)
+	OS.window_position.x = clamp(OS.window_position.x, 0, 30000)
 	rect_scale.x = Global.resolution[0] / 1280
 	rect_scale.y = Global.resolution[1] / 720
 	if full:
@@ -1437,7 +1806,7 @@ func set_res(x, y):
 	Global.resolution = [x, y]
 	OS.set_window_position(OS.get_screen_size() * 0.5 - OS.window_size * 0.5)
 	OS.window_position.y = clamp(OS.window_position.y, 0, 30000)
-	OS.window_position.x = clamp(OS.window_position.y, 0, 30000)
+	OS.window_position.x = clamp(OS.window_position.x, 0, 30000)
 	rect_scale.x = Global.resolution[0] / 1280
 	rect_scale.y = Global.resolution[1] / 720
 	if full:
@@ -1643,6 +2012,10 @@ func _on_Exit_Level_Select_Pressed(m:int, b:BaseButton):
 
 
 func _on_exls():
+	if $Level_End_Grid/Level_Info_Vbox/Next_Level.visible and Global.CURRENT_LEVEL >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
+		var next_level = Multiplayer.Extensions.next_campaign_level(Global.CURRENT_LEVEL)
+		if next_level >= 0:
+			Global.CURRENT_LEVEL = next_level
 	_on_Exit_Level_Select_Pressed(START, menu[START].get_child(0))
 	$Hover_Panel.hide()
 func _on_exmm():
@@ -1781,6 +2154,8 @@ func _reset_level_progression():
 	if Global.implants.purchased_implants.find("House") != - 1:
 		Global.implants.purchased_implants.remove(Global.implants.purchased_implants.find("House"))
 	Global.BONUS_UNLOCK = []
+	if is_instance_valid(Multiplayer.Extensions):
+		Multiplayer.Extensions.reset_campaign_progress()
 	button_state()
 
 func _on_ClearSave_pressed():
@@ -1859,6 +2234,8 @@ func _on_ClearSave_pressed():
 	var online_stats = Global.get_node_or_null("Multiplayer/OnlineStats")
 	if online_stats != null:
 		online_stats.clear()
+	if is_instance_valid(Multiplayer.Extensions):
+		Multiplayer.Extensions.reset_campaign_progress()
 	Global.save_game()
 
 
@@ -1920,23 +2297,15 @@ func _retry_solo(m:int, b:TextureButton):
 
 func _refresh_start_buttons():
 	var buttons = menu[START].get_children()
-	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 7, 8, 1, 5]
+	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 6, 1, 5]
 	var origin = buttons[0].rect_position
 	buttons[0].name = "Unpause" if in_game else "Start"
 	for index in range(buttons.size()):
 		buttons[index].visible = order.has(index)
 	for index in range(order.size()):
 		var button = buttons[order[index]]
-		button.rect_position = origin + Vector2(button_size.x * index, 0)
-
-func _position_level_online_button():
-	if in_game or menu_changing or not active_menus.has(menu[LEVEL_SELECT]):
-		return
-	var stock_button = menu[LEVEL_SELECT].get_child(2)
-	var online_button = menu[START].get_child(6)
-	online_button.rect_position = stock_button.rect_position + Vector2(stock_button.rect_size.x, 0)
-	online_button.visible = stock_button.visible
-	online_button.disabled = active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active or online_navigation_transitioning
+		var cell = Vector2(index, 0)
+		button.rect_position = origin + Vector2(button_size.x * cell.x, button_size.y * cell.y)
 
 func _apply_online_level_lock():
 	if not online_navigation_active or active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT]:
@@ -1946,9 +2315,11 @@ func _apply_online_level_lock():
 		if button.visible:
 			_restore_level_disabled_visual(index, button)
 			button.disabled = true
-	var start_button = menu[LEVEL_SELECT].get_child(5)
+	var start_button = menu[LEVEL_SELECT].get_child(7)
 	if start_button.visible:
 		start_button.disabled = true
+		start_button.texture_disabled = BUTTON_TEXTURES_D[0]
+		start_button.modulate = Color.white
 	for button in page_buttons:
 		if is_instance_valid(button) and button.visible:
 			if not button.has_meta("online_page_disabled_texture"):
@@ -2020,12 +2391,16 @@ func close_online_navigation():
 	online_navigation_active = false
 	online_navigation_transitioning = false
 	online_sidebar_was_visible = false
-	var online_button = menu[START].get_child(6)
-	if is_instance_valid(online_button):
-		online_button.disabled = false
+	for level_button in menu[LEVEL_SELECT].get_children():
+		level_button.disabled = false
+	var online_button = menu[LEVEL_SELECT].get_child(1)
+	if online_button.has_meta("display_name"):
+		online_button.remove_meta("display_name")
+	online_button.texture_normal = BUTTON_TEXTURES.back()
+	_refresh_start_buttons()
 	button_state()
 	_restore_online_page_buttons()
-	var start_button = menu[LEVEL_SELECT].get_child(5)
+	var start_button = menu[LEVEL_SELECT].get_child(7)
 	if not _client_mission_button(start_button):
 		start_button.disabled = false
 	_apply_counterop_level_lock()
@@ -2036,6 +2411,10 @@ func _reset_online_navigation_state():
 	online_navigation_active = false
 	online_navigation_transitioning = false
 	online_sidebar_was_visible = false
+	var online_button = menu[LEVEL_SELECT].get_child(1)
+	if online_button.has_meta("display_name"):
+		online_button.remove_meta("display_name")
+	online_button.texture_normal = BUTTON_TEXTURES.back()
 	_restore_online_page_buttons()
 	$Level_Info_Grid.rect_scale = Vector2(1, 1)
 
@@ -2045,6 +2424,8 @@ func open_online_destination(level_select):
 		goals_screen.go()
 	if is_instance_valid(statistics_screen):
 		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
 	if level_select:
 		_ensure_counterop_overlay()
 	_close_online_panel()
@@ -2070,6 +2451,7 @@ func open_online_destination(level_select):
 var _waiting_label
 var goals_screen
 var statistics_screen
+var news_panel
 
 func _close_online_panel():
 	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
@@ -2077,6 +2459,8 @@ func _close_online_panel():
 
 func _update_waiting_menu():
 	var waiting = Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and not in_game and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if is_instance_valid(campaign_label):
+		campaign_label.visible = campaign_pages.size() > 1 and not waiting and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
 	if not is_instance_valid(_waiting_label):
 		if not waiting:
 			return
@@ -2122,6 +2506,8 @@ func _hide_online_navigation():
 		goals_screen.go()
 	if is_instance_valid(statistics_screen):
 		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
 	if is_instance_valid(_waiting_label):
 		_waiting_label.hide()
 	active_element = null

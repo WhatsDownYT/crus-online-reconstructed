@@ -1,11 +1,12 @@
 extends Node
 
 const DATA_PATH = "res://MOD_CONTENT/CruS Online/achievements/achievements.json"
-const SAVE_PATH = "user://crus_online_goals.save"
+const SAVE_NAME = "crus_online_goals.save"
 const MASTERY_KEYS = ["s_rank", "hope_eradicated", "punishment", "chaos", "extravagance", "stripped"]
 const STATE_CHECK_INTERVAL = 0.25
 const TRIAGON_MARKERS = ["Raymond Shocktroop Tactical received.", "$1000000 received.", "Golem Exosystem received."]
 const FULLY_PEELED_ID = "fully_peeled"
+const ONLINE_IMPLANTS = ["Pneumatic Merit Pump", "Surveillance Eyecam", "Surveillance Eyecam PRO MAX", "Military Camouflage+", "Stealth Suit+", "ZZzzz Special Sedative Grenade+", "First Aid Kit+", "Cursed Torch+", "Augmented Arms+"]
 
 var entries_by_level = {}
 var entries_by_id = {}
@@ -34,18 +35,7 @@ func _ready():
 				if not entries_by_level.has(level):
 					entries_by_level[level] = []
 				entries_by_level[level].append(entry)
-	if file.open(SAVE_PATH, File.READ) == OK:
-		var saved = JSON.parse(file.get_as_text())
-		file.close()
-		if saved.error == OK and typeof(saved.result) == TYPE_DICTIONARY:
-			for id in saved.result.get("unlocked", []):
-				unlocked[str(id)] = true
-			var saved_mastery = saved.result.get("mastery", {})
-			if typeof(saved_mastery) == TYPE_DICTIONARY:
-				mastery = saved_mastery
-			var saved_discovered = saved.result.get("discovered", {})
-			if typeof(saved_discovered) == TYPE_DICTIONARY:
-				discovered = saved_discovered
+	_load_slot_progress()
 	for level in entries_by_level:
 		for entry in entries_by_level[level]:
 			if entry.get("category", "") != "mastery":
@@ -57,6 +47,31 @@ func _ready():
 				progress["extravagance"] = true
 				mastery[str(level)] = progress
 	call_deferred("evaluate_progress")
+
+func reload_slot():
+	unlocked.clear()
+	mastery.clear()
+	discovered.clear()
+	_load_slot_progress()
+	var preview = Global.get_node_or_null("AchievementPreview")
+	if preview != null:
+		preview.reset_notifications()
+	evaluate_progress()
+
+func _load_slot_progress():
+	var file = File.new()
+	if file.open(Global.slot_path(SAVE_NAME), File.READ) == OK:
+		var saved = JSON.parse(file.get_as_text())
+		file.close()
+		if saved.error == OK and typeof(saved.result) == TYPE_DICTIONARY:
+			for id in saved.result.get("unlocked", []):
+				unlocked[str(id)] = true
+			var saved_mastery = saved.result.get("mastery", {})
+			if typeof(saved_mastery) == TYPE_DICTIONARY:
+				mastery = saved_mastery
+			var saved_discovered = saved.result.get("discovered", {})
+			if typeof(saved_discovered) == TYPE_DICTIONARY:
+				discovered = saved_discovered
 
 func _process(delta):
 	state_check_time += delta
@@ -115,8 +130,8 @@ func clear_progress():
 	mastery.clear()
 	discovered.clear()
 	var directory = Directory.new()
-	if directory.file_exists(SAVE_PATH):
-		directory.remove(SAVE_PATH)
+	if directory.file_exists(Global.slot_path(SAVE_NAME)):
+		directory.remove(Global.slot_path(SAVE_NAME))
 	var preview = Global.get_node_or_null("AchievementPreview")
 	if preview != null:
 		preview.reset_notifications()
@@ -141,7 +156,10 @@ func _award(entry, earned):
 	if id.empty() or unlocked.has(id):
 		return false
 	unlocked[id] = true
-	Global.money += int(entry.get("reward", 0))
+	var reward = int(entry.get("reward", 0))
+	Global.money += reward
+	if reward > 0 and is_instance_valid(Global.UI):
+		Global.UI.notify("$" + str(reward) + " deposited", Color(1, 1, 0))
 	earned.append(id)
 	return true
 
@@ -199,10 +217,13 @@ func _all_purchasable_implants_owned():
 		return false
 	var required = 0
 	for implant in Global.implants.IMPLANTS:
-		if implant == null or str(implant.i_name) == "N/A" or int(implant.price) <= 0:
+		if implant == null:
+			continue
+		var implant_name = str(implant.i_name)
+		if implant_name in ["N/A", "House"] or ONLINE_IMPLANTS.has(implant_name):
 			continue
 		required += 1
-		if Global.implants.purchased_implants.find(implant.i_name) == -1:
+		if Global.implants.purchased_implants.find(implant_name) == -1:
 			return false
 	return required > 0
 
@@ -257,14 +278,48 @@ func _evaluate_global_conditions(earned):
 		changed = _award_id(FULLY_PEELED_ID, earned) or changed
 	return changed
 
+func _backfill_saved_missions(earned):
+	var changed = false
+	for level in entries_by_level:
+		if not level_beaten(level):
+			continue
+		var progress = mastery_for(level)
+		var saved_conditions = {
+			"s_rank": (Global.LEVEL_TIMES_RAW[level] < Global.LEVEL_RANK_S[level]
+				or Global.HELL_TIMES_RAW[level] < Global.HELL_RANK_S[level]
+				or Global.LEVEL_STIMES_RAW[level] < Global.LEVEL_SRANK_S[level]
+				or Global.HELL_STIMES_RAW[level] < Global.HELL_SRANK_S[level]),
+			"hope_eradicated": Global.HELL_TIMES_RAW[level] < 99999999 or Global.HELL_STIMES_RAW[level] < 99999999,
+			"punishment": Global.LEVEL_PUNISHED[level]
+		}
+		for key in saved_conditions:
+			if saved_conditions[key] and not progress[key]:
+				progress[key] = true
+				changed = true
+		mastery[str(level)] = progress
+		for entry in entries_by_level[level]:
+			if entry.get("category", "") == "campaign":
+				changed = _award(entry, earned) or changed
+		var complete = true
+		for key in MASTERY_KEYS:
+			if not progress[key]:
+				complete = false
+				break
+		if complete:
+			for entry in entries_by_level[level]:
+				if entry.get("category", "") == "mastery":
+					changed = _award(entry, earned) or changed
+	return changed
+
 func evaluate_progress():
-	if Global.campaign_save.active:
+	if not Global.save_slot_selected or Global.campaign_save.active:
 		return
 	var earned = []
 	var changed = false
 	if Global.ending_3 and not discovered.get("chaos", false):
 		discovered["chaos"] = true
 		changed = true
+	changed = _backfill_saved_missions(earned) or changed
 	changed = _evaluate_global_conditions(earned) or changed
 	if not changed:
 		return
@@ -323,6 +378,6 @@ func _notify_earned(earned):
 
 func _save_progress():
 	var file = File.new()
-	if file.open(SAVE_PATH, File.WRITE) == OK:
+	if file.open(Global.slot_path(SAVE_NAME), File.WRITE) == OK:
 		file.store_line(to_json({"unlocked": unlocked.keys(), "mastery": mastery, "discovered": discovered}))
 		file.close()

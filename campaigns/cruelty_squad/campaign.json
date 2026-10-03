@@ -1,0 +1,141 @@
+{
+  "id": "cruelty_squad",
+  "name": "Cruelty Squad",
+  "version": 1,
+  "builtin": true,
+  "levels": [
+    {
+      "index": 0,
+      "id": "00",
+      "name": "Cruelty Squad Headquarters",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 1,
+      "id": "01",
+      "name": "Pharmakokinetiks",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 2,
+      "id": "02",
+      "name": "Paradise",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 3,
+      "id": "03",
+      "name": "Sin Space Engineering",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 4,
+      "id": "04",
+      "name": "Androgen Assault",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 5,
+      "id": "05",
+      "name": "Mall Madness",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 6,
+      "id": "06",
+      "name": "Apartment Atrocity",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 7,
+      "id": "07",
+      "name": "Seaside Shock",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 8,
+      "id": "08",
+      "name": "Bog Business",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 9,
+      "id": "09",
+      "name": "Casino Catastrophe",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 10,
+      "id": "10",
+      "name": "Idiot Party",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 11,
+      "id": "11",
+      "name": "Office",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 12,
+      "id": "12",
+      "name": "Archon Grid",
+      "secret": false,
+      "native_unlock": true
+    },
+    {
+      "index": 13,
+      "id": "13",
+      "name": "Darkworld",
+      "secret": true,
+      "native_unlock": true
+    },
+    {
+      "index": 14,
+      "id": "14",
+      "name": "Alpine Hospitality",
+      "secret": true,
+      "native_unlock": true
+    },
+    {
+      "index": 15,
+      "id": "15",
+      "name": "Miner's Miracle",
+      "secret": true,
+      "native_unlock": true
+    },
+    {
+      "index": 16,
+      "id": "16",
+      "name": "Neuron Activator",
+      "secret": true,
+      "native_unlock": true
+    },
+    {
+      "index": 17,
+      "id": "17",
+      "name": "House",
+      "secret": true,
+      "native_unlock": true
+    },
+    {
+      "index": 18,
+      "id": "18",
+      "name": "Trauma Loop",
+      "secret": true,
+      "native_unlock": true
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+CRUELTY SQUAD ONLINE: RECONSTRUCTED
+Cumulative changelog from the original CruS Online mod
+
+SINGLEPLAYER AND ONLINE
+- Separated normal singleplayer play from Online so starting a mission offline no longer quietly creates a local multiplayer server. The game now switches between the normal game flow and the Online lobby depending on whether a multiplayer session is actually active, while keeping multiplayer menus, synchronization screens, voice input, and network-only controls out of ordinary singleplayer play.
+- Kept both LAN and Steam multiplayer and moved them onto the same Online menus, mission rules, and networked gameplay systems. Discord Rich Presence also shows the correct Singleplayer or Online state, and normal menu control is restored when a host ends a session or a client disconnects.
+
+LOBBIES AND JOINING
+- Added a browser for compatible public Steam lobbies. It shows each lobby's name, game mode, player count and capacity, and estimated ping. You can join a listed lobby by double-clicking it or by using Join, and the list can be manually refreshed at any time.
+- Added editable lobby names with a Steam-name-based default, and replaced lobby passwords with six-character alphanumeric lobby codes. Direct Join can use these codes for public, friends-only, and private Steam lobbies, while the hosted lobby code stays hidden until its display is clicked.
+- Added Public, Friends Only, and Private lobby types, including Steam friend joining for Friends Only. Steam and LAN sessions can also set a maximum player count.
+- Added compatibility checks so unrelated CruS Online lobbies and mismatched RECONSTRUCTED builds do not appear as joinable public lobbies. Joining now stays on the connection screen until the connection actually succeeds or fails, with clearer handling for invalid codes, failed connections, cancellation, full lobbies, and hosts closing the session.
+- Reworked the Online flow so hosting and joining remain on the Main Online tab instead of unexpectedly changing tabs. Choosing LAN or Steam opens the appropriate host settings, and host settings can continue being changed and synchronized while a lobby is already running.
+- Expanded host settings with progress saving, revive rules, friendly fire, shared difficulty, voice behavior, banned implants, tick rate, and death weapon drops. The lobby also has a player roster showing host, readiness, voice, and mute information.
+- Added client ready controls in level select. The Ready square occupies the same grid position as the host's Start square, and the host sees a compact Ready: #/# count beside the level-select Return square. Competitive matches cannot start with too few players, and Counter-Opps also requires opposing teams. When a match cannot start or a mission is unavailable for Counter-Opps, the reason is shown through the UI instead of silently blocking it. Start uses the ordinary disabled appearance whenever another menu locks the level-select grid.
+- Kept Return to Level Select and Return to Menu available to non-hosts during a mission. Clients can leave an active mission and wait in the lobby without ending it for everyone else, and competitive matches now handle the last other player leaving without trapping whoever remains.
+
+ONLINE MODES
+- Added Deathmatch alongside the normal Cruelty Squad campaign. Players are spread around valid civilian and fallback spawn positions instead of stacking at the normal player spawn, and the host can choose whether enemies and civilians remain in the level.
+- Deathmatch ends when only one player remains alive and announces that player as the winner. Enemy and civilian result counts are omitted when Deathmatch NPCs are disabled, and Deathmatch wins and losses are tracked separately.
+- Added Counter-Opps with Operative and Counter-Operative teams. Counter-Operatives spawn around mission positions normally used by civilians instead of at the Operative spawn, and the mode has its own team, objective, damage, revival, and victory rules.
+- Counter-Opps has options for enemy friendly fire and whether attacked friendly enemies should turn hostile to Counter-Operatives. Teams can be player-selected, host-assigned, or randomized each round, with randomized assignment balanced so a playable round actually has opposing sides.
+- Random team selection is disabled while host team overrides are active, but manual team assignment remains available even when everyone is temporarily on the same side. Counter-Opps uses team-specific result messages, unavailable mission portraits are shown in red while secret missions remain hidden, and wins and losses are tracked separately from Deathmatch.
+- Competitive result screens immediately return positional voice chat to normal conversation and unlock the cursor so the result screen can actually be navigated after a loss.
+
+MISSION FLOW, OBJECTIVES, AND PROGRESSION
+- Reworked Online mission starts, scene changes, restarts, exits, failures, and results as shared host-directed events. The synchronization screen shows how many players have finished loading and ignores stale loading reports from an old mission or from players who already left.
+- Mission objectives are synchronized between host and clients, including both the original total and the number still remaining. Clients receive the normal target-eliminated and all-objectives-complete announcements, and Discord presence counts the actual live mission targets, including difficulty-specific cases such as Cruelty Squad HQ. Deathmatch presence shows remaining players instead.
+- Online results use the game's normal level-end presentation and send the same mission time, enemy and civilian counts, difficulty, rewards, and ending result to everyone. Normal campaign progression applies to Online wins as well, including money, weapon and level unlocks, Punishment rewards, endings, and any failure penalties or difficulty changes the game normally requires.
+- Mission exits only wait for living players who are actually participating in the mission, so dead players and players waiting outside the mission do not block completion. The exit is checked again before a transition is committed to make sure the living players are still inside.
+- Competitive wipes no longer leave the final revive message hanging over the result screen, and missions can be restarted directly through the shared results flow.
+- Immortal enemies no longer inflate the enemies-killed total. The same killable-enemy definition is used by the Controlled Depopulation goal.
+- Added a host option to make dead players drop their currently carried weapons so other players can collect them.
+
+DIFFICULTY AND SHARED WORLD STATE
+- Added Share Difficulty so a lobby can use the host's Life or Death state, Hope Eradicated, Punishment, and Chaos conditions. Each client gets their own difficulty state restored when the shared-difficulty session ends.
+- Difficulty is shown using readable names such as Flesh Automaton, Divine Light, Power in Misery, and Hope Eradicated. When Share Difficulty is disabled, the host's state is still kept as session information without overwriting anyone else's save.
+- Change Mode on Death now goes through the same synchronized mission-failure flow as the rest of Online.
+- Mission weather, time of day, relevant ending state, rain, storms, and special sky behavior are synchronized across players. Players entering an already active session are sent the current world and difficulty state, while identical difficulty state is not repeatedly retransmitted for no reason.
+- Soul and orb use is validated through the host so the same orb cannot be consumed twice.
+
+REVIVES, DEATH, AND PLAYER INTERACTION
+- Reworked dead and alive player tracking across missions, loading, spectating, and results so the session always agrees on who is actually active.
+- Added teammate revival with host-validated range, player state, and revive availability. Both client-to-host and host-to-client revival paths work in Cruelty mode, with configurable revive delay and either limited or unlimited revives per player.
+- Self-revival remains a separate host option where the selected mode allows it. Counter-Opps restricts teammate revives by team, while Deathmatch disables revives entirely.
+- The final active player's death is handled as a proper team wipe instead of waiting on players who already left the mission. Client departures are also kept separate from active deaths so they do not continue blocking mission completion.
+- Reworked Augmented Arms+ player carrying and throwing so non-hosts can interact with both players and physics objects correctly.
+
+PLAYER MOVEMENT, APPEARANCE, AND SOUNDS
+- Reworked remote movement around replaceable snapshots so an older position update cannot drag a player backward after a newer one arrives. Remote aim, crouching, gravity, sitting, flashlight use, weapons, death, grappling, and long-frame interpolation were all improved, while grapple rendering work was reduced.
+- Added collision bodies for remote players that follow crouching and death state. Knockback is synchronized, and remote players now reproduce more footsteps, jumps, pain, healing, armor, death, and explosion sounds. Footsteps use each remote player's own equipment state, so the Golem Exosystem sound is heard only from its wearer.
+- Player nickname and color changes can refresh while connected. Nameplates are centered more reliably, hidden beyond 12 world units, and use the game's normal compact drop shadow instead of the larger distant outline.
+- Fixed remote outfit UV mapping so text and patterns are not mirrored across the torso.
+- Level VI Golem Exosystem users now use a golem player model with Triagon-style material and animations. Its ground placement and nameplate height were adjusted separately so the model sits correctly without lowering the nameplate.
+
+ENEMIES AND MISSION SYSTEMS
+- Expanded enemy targeting so enemies consider every valid living player instead of only the host's local player. Civilians can flee from nearby multiplayer players, dead players are ignored as targets, and gameplay decisions remain authoritative to the host while visible results are replicated.
+- Enemy and civilian population, objective registration, deaths, removals, and weapon drops are synchronized. Late joiners no longer see defeated enemies come back alive simply because they loaded the mission later.
+- Enemy muzzle flashes are synchronized, and sight or psychosis effects are sent to the player actually being watched instead of assuming the host is the target.
+- Enemy movement update frequency is reduced according to distance from nearby players to cut unnecessary work.
+- Added networked handling for special bosses, flesh rats, cancer conversion, Hell and Chaos objectives, mission-specific interactions, visible gunk, and similar projectiles or effects.
+- NPC animation handling is more tolerant of models that do not contain every expected animation name.
+
+COMBAT AND WEAPONS
+- Added a Friendly Fire host option while preserving self-damage and environmental damage. The same player-damage rules now apply consistently to direct hits, explosions, fire, radiation, grenades, missiles, vehicles, and thrown objects.
+- Chained damage effects preserve the real attacker's identity for kill attribution and team rules, and player-damage claims are validated against the sender and the action's actual source.
+- Grenade and missile damage remains authoritative while their visible effects are synchronized.
+- Improved multiplayer handling for the baton, Snoozefest, sedatives, and other weapons with status effects. The dark, distorted, slowing gas effect is restricted to Special Sedative Grenade+ rather than the normal implant, lasts ten seconds, and ignores the thrower plus Level V and VI suits.
+- Reworked shared weapon pickups so the host approves a pickup or swap before it takes effect. Two players cannot consume the same pickup at once, and ammunition-only pickups, replacement weapons, consumed pickups, and rejected pickups are all synchronized.
+- Networked weapon pickups validate weapon IDs, ammunition values, interaction range, and weapon audio.
+
+PHYSICS OBJECTS AND INTERACTIVE LEVEL ELEMENTS
+- Reworked multiplayer props around host-approved holding, releasing, throwing, and settled states. Prop movement is rejected from players who do not currently own the held object, and stale transforms can no longer snap a dropped or removed prop back into someone's hands.
+- Held objects are released when their holder disconnects, collisions against the carrier are reduced, and thrown-object damage keeps its correct attacker attribution. Special radio throws and remote physics impacts are synchronized as well.
+- Multiplayer blood decals are limited and distant or inactive props update less frequently.
+- Reworked doors and elevators so movement and final open or closed state are host-owned. Delayed updates no longer restore an old door position after movement has already finished.
+- Switch use and spiritual-door interactions are validated against player position and state. Terror door destruction, destructibles, pushblocks, rotating objects, paintings, slot machines, and other interactive props are synchronized through the session.
+- Added synchronized cancer growth and destruction with limits on how much spread and damage processing can happen in one frame.
+
+ONLINE EQUIPMENT AND IMPLANTS
+- Added Online extension implants with their own inventory art and tooltips.
+- Military Camouflage+ makes a player fade with a regular Bayer dither starting at nine units and become hidden by twelve. Stealth Suit+ uses the shitman-style optical material with a half-transparent dithered appearance. Both effects apply to the full visible player model, including glasses.
+- First Aid Kit+ heals a nearby player for 50 health through interaction instead of healing the wearer.
+- Special Sedative Grenade+ applies a synchronized dark, distorted, slowing gas effect to other players.
+- Cursed Torch+ restores health after killing another player.
+- Augmented Arms+ can carry and throw other players in addition to physical objects.
+- Cortical Scaledown+ has its own higher-pitched voice effect.
+- Reworked implant banning into a scrollable icon grid with clear allowed and banned states plus hover details. Ban presets can be selected, saved, and deleted, and the implant grid keeps a stable width while adjacent controls are used.
+
+SURVEILLANCE EYECAMS
+- Added Surveillance Eyecam for scanning visible players within 15 units. It draws an expanding one-pixel tracking rectangle around the visible player model, contracts when the target leaves view, and reveals money, health, Life or Death matrix, equipped implants, and carried weapons after a three-second analysis.
+- A scan is forgotten once the target leaves view, so reacquiring them requires another analysis. Scan acquisition audio is synchronized, and the equipment and weapon readouts animate as the information is revealed.
+- Added Surveillance Eyecam PRO MAX, which locks the user's camera and body onto the nearest player within ten units. It uses a three-second lock-on, a ten-second initial delay, and a 45-second cooldown.
+- Once PRO MAX acquires a player, that target remains locked for the full sequence even if they move out of range. The hijack sound plays at acquisition, the target gets a red flickering hijack warning, and one of their weapons or implants is disabled for 15 seconds. A jammed firearm can still reload.
+
+PNEUMATIC MERIT PUMP
+- Added the Pneumatic Merit Pump arm implant, which turns held-up personal funds into a throwable money pickup. Holding the tertiary-weapon input raises the amount exponentially with audible cash ticks, and releasing throws the cash forward for another player or NPC to collect. The owner cannot reclaim their own drop.
+- The pump can be overdrawn into a negative balance, but the actual dropped amount is limited to the money the player really possessed. Holding it all the way to twice the available balance causes an audible overload and an IED-style death without dropping the money.
+- Hostile NPCs can take thrown cash as a bribe and become passive once their asking price is met. Ordinary human enemies use randomized asking prices from $50 to $500, necromechs ask for more, and Abraxas or the HQ Life boss ask for more again.
+- Human NPCs immediately tell the payer whether the bribe was accepted or how much more money they still want.
+
+VOICE CHAT AND COMMUNICATION
+- Added built-in LAN and Steam voice chat with Push-To-Talk, voice activation, microphone selection, and volume control. Push-To-Talk defaults to V and can be rebound to a keyboard key or mouse button, while voice activation automatically stops while typing into a text field.
+- During missions, voice is positional and comes from the speaker's character. Hosts can switch to non-positional voice and decide whether living players can hear dead players.
+- Dead players use reverb, underwater speech is muffled, and dead players can still talk to each other normally without positional treatment. Results screens restore ordinary lobby-style voice instead of leaving the last death's spatial effects active.
+- Added talking indicators, local per-player mute controls, and host-enforced global voice muting through chat commands.
+- Added equipment-specific voice effects for helmets, biosuits, speed enhancers, golem armor, Bouncy Suit, Abominator, Goo Overdrive, Cortical Scaledown+, Hazmat Suit, Holy Scope, and Stealth Suit+. These effects can combine with underwater and death processing without leaking the wrong treatment into menus or results.
+- Added microphone device fallback, missing-microphone warnings, and voice diagnostics. Delayed audio queues are capped, stale or duplicate voice packets are rejected, oversized and wrong-session packets are ignored, and voice volume remains independent from the game's normal master volume.
+- Improved chat window dragging, text scaling, and screen-edge containment.
+
+GOALS AND MASTERY
+- Added an in-game Goals menu containing achievement portraits, names, descriptions, and rewards. Goals can be browsed through Campaign, Online, Extras, and Mastery categories, each with its own completion count.
+- Secret goal names and portraits remain hidden until their relevant level has actually been completed.
+- Added rotating phone goal notifications with the goal portrait, title, reward sound, and a sequential queue. Goals and their money rewards are awarded immediately even when several notifications are still waiting to play.
+- Added per-mission mastery objectives for S rank, Hope Eradicated, Punishment, Chaos, Extravagant Suit, and no implants. Every campaign mission has its own mastery goal and progress display.
+- Undiscovered mastery conditions remain hidden until the relevant systems have been found, including Hope Eradicated, Chaos, and the Extravagant Suit.
+- Existing saves can backfill goals using mission completion, times, difficulty records, and other saved progression. Goal and mastery progress is stored separately per save slot and clears with that slot's save data.
+
+STATISTICS, PROFILES, AND SAVE SLOTS
+- Added a Statistics screen with an animated full-quality player preview and an in-scene background that follows time of day and special difficulty skies without applying rain or other weather. Player-name editing, name color, and outfit selection were moved out of the Online profile tab and into Statistics.
+- Clicking the previewed body cycles outfits and gives the body a visible hover outline so the interaction is obvious.
+- Statistics shows completion, money, kills, deaths, playtime, weapons, equipment, fish, body parts, and goals in one profile. Collection statistics show unique finds out of the actual game total instead of counting repeated pickups, and playtime is displayed as hours, minutes, and seconds. Wearing the Level VI suit is shown simply as Golem Exosystem in the outfit field.
+- Player kills, Online Equipment, and Total, Deathmatch, or Counter-Opps wins and losses are shown separately from the normal campaign statistics.
+- Added a completion percentage that can extend beyond the base game's 100% through mastery and Online goals.
+- Added four save slots after the opening sequence, with existing saves assigned to Slot 1. Hovering a slot with data shows a read-only player preview and detailed progress for that save.
+- Each slot has its own campaign, stock, goal, profile, custom-campaign, and online-stat records. Skip Intro users are sent directly to save-slot selection, while the opening cutscene's final camera view is held at a 60-degree field of view while the slot screen is active.
+
+MENUS AND PRESENTATION
+- Reorganized the main menu into Start, News, Settings, and Quit grid buttons, while Online, Goals, and Statistics live on level select. The main grid stays visible when another menu is opened, and Return controls occupy their corresponding tiles.
+- Repositioned the level-select Equipment, Stock Market, Weapons, Start, campaign controls, and ready information around the new grid. Campaign names appear between previous and next controls that wrap in both directions when another campaign or custom-mission page contains levels. When Cruelty Squad is the only page, both its label and the arrows are hidden.
+- Reworked the Online host, player, chat, voice, implant, and lobby panels to fit the game's visual style more consistently. Several plain option controls were replaced with matching styled dropdowns, Save, Ban All, and Allow All remain aligned with the bottoms of their panels, and menu sizes no longer stretch unexpectedly while values change. The in-game Online pause menu has a Settings square that opens the game's settings and returns to the Online pause menu, while its Stats panel uses the same dark red backdrop as the lobby status area.
+- Disabled starts and unavailable missions now explain themselves through hover text instead of simply looking broken.
+- Updated the credits with separate RECONSTRUCTED and original CruS Online sections.
+- Removed the unused bundled multiplayer test maps so custom missions can be installed separately.
+- Removed the Elsa Holmes outfit from the player outfit selection.
+
+CUSTOM MISSIONS, CAMPAIGNS, AND MOD COMPATIBILITY
+- Added direct integration with CruS Mod Loader and CruS Mod Base. Mod Base's own custom-mission navigation and menu additions are preserved instead of being replaced with a separate imitation.
+- Custom mission portraits, descriptions, handlers, targets, and results load through the same level-select flow as regular missions.
+- Added a campaign format with ordered stages, unlock requirements, secret missions, and save-slot-specific progress. The built-in campaign is shown as Cruelty Squad, while loose Mod Base levels appear under Custom Missions.
+- Unrevealed campaign stages stay hidden until their prerequisites are met. A sample multi-stage Placeholder campaign is included to demonstrate the custom campaign system.
+- Before a client joins, the game detects the host's active mods, missions, and campaigns. A styled content list shows names and versions, missing or changed host content can be downloaded and verified, and the game can install it, restart, and automatically rejoin the lobby.
+- Client mods that the host is not using can be disabled without deleting them. Mismatched content is rejected, and declined, failed, or interrupted downloads do not allow the client to enter an incompatible mission.
+- CruS Mod Base's built-in cheats are blocked during Online play while remaining available in ordinary singleplayer.
+
+DISCORD RICH PRESENCE
+- Added Discord Rich Presence showing Singleplayer or Online state, current mission, difficulty, and the relevant target or survivor count.
+- Presence includes mission-specific images and Online party size, plus links to the game and CruS Online download page.
+- Steam lobbies can be joined through Discord invites and presence when that lobby is joinable, with the request routed through the normal Steam lobby connection path.
+
+HOST COMMANDS AND DEBUG TOOLS
+- Added /kick and session-only /ban for removing disruptive players, plus /mute and /unmute for host-enforced voice control.
+- Added /players with short player IDs, teams, pings, and living state so command targets are easier to identify.
+- Added /announce, /restart, /end, /tp, and /help for lobby and match management.
+- Added /op and /deop so the host can delegate or revoke command access.
+- Debug builds also have commands for invulnerability, noclip, map selection, healing, revival, killing, money, weapons, implants, NPC spawning, mass NPC removal, and AI freezing.
+- The F8 hide-UI capture shortcut, including the difficulty border, is restricted to debug builds.
+
+NETWORKING, RELIABILITY, AND PERFORMANCE
+- Reworked the original Steam transport while keeping its underlying Steam P2P and LAN support. Protocol and build compatibility are checked before incompatible clients can enter gameplay.
+- Reliable gameplay events are separated from disposable movement and state snapshots. Rapidly changing snapshots are batched, obsolete updates are replaced by newer ones, and stale movement, prop, and scene packets are rejected so old state cannot overwrite new state.
+- Network messages are tied to the current mission generation, which prevents packets from an old scene from affecting the current one.
+- Packet shape, sender identity, object ownership, interaction distance, and impossible numbers or transforms are validated before use. Client requests for mission-critical actions are routed through the host while preserving the original sender's identity.
+- Reworked dynamic network-object registration and path caching so renamed or removed objects do not leave the session in a broken state. Registrations, queued state, ownership, and voice data are released when the objects or players that created them disappear.
+- Reduced unnecessary updates for distant enemies, inactive physics objects, unchanged difficulty, and players outside the mission. Per-frame packet and loading work is limited so large backlogs do not stall the game.
+- Multiplayer performance is substantially improved compared with the original CruS Online, including on lower-end computers.
+- Added performance and network diagnostics for traffic, processing time, object counts, voice, and scene state.
+- Improved startup, mission loading, disconnect, and return-to-menu cleanup across both LAN and Steam.
+
+VANILLA GAME FIXES
+- Vehicles stop accepting driving input after their driver dies while still preserving control during the zero-health death countdown.
+- Removed the out-of-bounds handler dialogue trigger from missions other than Pharmakokinetics and Paradise.
+- Restored the Paradise pizza-place block's normal collision by removing its unintended elevator behavior.
+- Made grid-crab stepping and movement independent of frame rate.
+- Corrected startup window positioning and fixed resolution changes assigning the vertical window position to the horizontal axis.
+- Hope Eradicated music slowdown now applies on the first title screen and to both mission music and ambient tracks.
+- The level-entry visual effect can finish while paused, restores movement access when it ends, and clears itself when returning to the menu.
+- Opening cutscene music stays at its original speed even when the initial save already has Hope Eradicated.
+- The final cutscene actor is restored correctly when the opening is skipped while it is playing.
+
+ADDITIONAL INTERFACE AND SAVE FIXES
+- Replaced the two level-select weapon squares with one Weapons entry before Equipment and Implants. It opens a grid with the implant menu's background and frame, plus two live weapon previews side by side for choosing the loadout slot. The active preview has a thin green outline. Undiscovered weapons show untinted mystery art and plain ??? text, and the menu closes through Escape with the normal grid animation. The old weapon hover popups, cash balance, page header, and slot labels are gone.
+- Selecting a discovered weapon shows a larger portrait beside its type, ammo, ammunition, damage, weight, and armor piercing values. Its name and description sit directly below. Page arrows and category names appear only when custom weapons are actually available; the Cruelty Squad label is hidden when it is the only category.
+- Equipment and Implants uses campaign-style arrows to switch between Original and Online implants. A Custom page appears only if it contains implants, and the Original page's arrow orientation is restored correctly after leaving and reopening the menu.
+- Moved the level-select grid down and placed Online, Goals, and Statistics above Weapons, Equipment and Implants, Stock Market, and Start.
+- Added dedicated Weapons, Goals, Statistics, and News portraits for their menu squares. The Online square shows a plain Return label while its panel is open.
+- The voice waveform is only shown during connected Online play. A larger local microphone level display is anchored to the bottom-right of the gameplay viewport, writes peaks from left to right, and shifts from green to red as volume rises.
+- Quit sits next to Settings on the main menu, while the News and Settings Return buttons were moved down one square.
+- Level portraits are positioned before the level-select grid is revealed. A competitively locked Start stays red while level select is active and uses ordinary disabled art when another menu takes control of the grid.
+- Campaign titles are hidden when clients cannot select missions in the Online level screen, and campaign page labels stay off the mission results screen.
+- Locked secret campaign stages keep their mystery portrait until they are actually unlocked.
+- Save-slot goal and Online Equipment counts match the in-game Statistics screen.
+- Statistics places Playtime below Money and above Kills and Deaths.
+- Goal cash rewards are labeled as deposited.
+- Goal evaluation waits until a save slot has actually been selected instead of awarding against an unselected or temporary state.

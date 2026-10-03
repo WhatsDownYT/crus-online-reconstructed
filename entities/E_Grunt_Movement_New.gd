@@ -97,6 +97,13 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 
 func get_near_player(object) -> Dictionary:
+	# The opening's Office MG uses Global.player as its scripted target. It is
+	# outside the multiplayer Player group, so the normal actor query is empty.
+	if is_instance_valid(Global.current_scene) and Global.current_scene.filename == "res://Cutscenes/Cutscene1.tscn" and is_instance_valid(Global.player):
+		return {
+			"player": Global.player,
+			"distance": object.global_transform.origin.distance_to(Global.player.global_transform.origin)
+		}
 	var oldDistance = INF
 	var checkPlayer = null
 	

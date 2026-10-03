@@ -85,6 +85,7 @@ with zipfile.ZipFile(temporary) as output:
 temporary.replace(args.output / 'mod.zip')
 version = re.search(r'var version = "([^"]+)"', (root / 'multiplayer.gd').read_text()).group(1)
 metadata = {'author': 'TriggeredP', 'description': 'multiplayer',
-            'init': 'res://' + prefix + 'multiplayer_init.gd', 'name': 'CruS Online', 'version': version + ('-debug' if args.debug else ''), 'build': 'debug' if args.debug else 'release'}
+            'init': 'res://' + prefix + 'multiplayer_init.gd', 'name': 'CruS Online', 'version': version + ('-debug' if args.debug else ''), 'build': 'debug' if args.debug else 'release',
+            'dependencies': ['CruS Mod Base']}
 (args.output / 'mod.json').write_text(json.dumps(metadata), encoding='utf-8')
 print(f'BUILD_RESULT files={len(entries)} output={args.output.resolve()}')

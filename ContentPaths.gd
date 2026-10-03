@@ -44,7 +44,7 @@ static func validate(manifest):
 	var total = 0
 	var count = 0
 	for group in manifest.groups:
-		if typeof(group) != TYPE_DICTIONARY or not group.get("kind", "") in ["mods", "levels"] or not safe_relative(group.get("folder", "")) or "/" in group.folder:
+		if typeof(group) != TYPE_DICTIONARY or not group.get("kind", "") in ["mods", "levels", "campaigns"] or not safe_relative(group.get("folder", "")) or "/" in group.folder:
 			return "Invalid content folder."
 		if typeof(group.get("name")) != TYPE_STRING or group.name.empty() or group.name.length() > 128 or typeof(group.get("version")) != TYPE_STRING or group.version.length() > 128:
 			return "Invalid content metadata."
@@ -62,7 +62,7 @@ static func validate(manifest):
 			if paths.has(path.to_lower()):
 				return "Duplicate content file."
 			paths[path.to_lower()] = true
-			metadata_found = metadata_found or entry.path == ("mod.json" if group.kind == "mods" else "level.json")
+			metadata_found = metadata_found or entry.path == ("mod.json" if group.kind == "mods" else "campaign.json" if group.kind == "campaigns" else "level.json")
 			total += entry.size
 			count += 1
 			if count > MAX_FILES or total > MAX_TOTAL_BYTES:

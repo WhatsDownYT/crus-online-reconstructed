@@ -86,7 +86,7 @@ func _animate_achievement(generation):
 		if progress >= 1.0: break
 		yield(get_tree(), "idle_frame")
 	if generation != animation_generation: return
-	yield(get_tree().create_timer(8.0), "timeout")
+	yield(get_tree().create_timer(5.0), "timeout")
 	started = OS.get_ticks_msec()
 	while true:
 		if generation != animation_generation: return

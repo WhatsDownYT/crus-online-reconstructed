@@ -6,7 +6,7 @@ enum {FORWARD, RIGHT, BACK, LEFT}
 const DIR = [Vector3.FORWARD * 2, Vector3.RIGHT * 2, Vector3.BACK * 2, Vector3.LEFT * 2]
 var current_dir = DIR[FORWARD]
 var player_dir
-var step_count = 59
+var step_elapsed = 1.0
 var step_length = 100
 var last_pos
 var next_pos
@@ -61,8 +61,8 @@ func _physics_process(delta):
 		
 		NetworkBridge.n_rset_unreliable(self, "global_transform", global_transform)
 		
-		step_count += 1
-		if step_count == 60:
+		step_elapsed += delta
+		if step_elapsed >= 1.0:
 			space_state = get_world().direct_space_state
 			result_forward = space_state.intersect_ray(global_transform.origin, global_transform.origin + Vector3.FORWARD * 1)
 			result_back = space_state.intersect_ray(global_transform.origin, global_transform.origin + Vector3.BACK * 1)
@@ -83,8 +83,8 @@ func _physics_process(delta):
 					current_dir = player_dir
 				else :
 					player_dir = null
-		if step_count == 60:
-			step_count = 0
+		if step_elapsed >= 1.0:
+			step_elapsed = fmod(step_elapsed, 1.0)
 			last_pos = global_transform.origin
 			next_pos = global_transform.origin + current_dir
 			mesh.look_at(global_transform.origin - current_dir, Vector3.UP)
@@ -92,7 +92,7 @@ func _physics_process(delta):
 		else :
 			if result_back and result_forward and result_left and result_right:
 				return 
-			global_transform.origin = lerp(global_transform.origin, next_pos, 0.3)
+			global_transform.origin = lerp(global_transform.origin, next_pos, 1.0 - pow(0.7, delta * 60.0))
 
 func look():
 	var space_state = get_world().direct_space_state

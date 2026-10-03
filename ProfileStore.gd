@@ -4,10 +4,15 @@ extends Reference
 var directory_path = "user://mod_config/crus_online"
 var last_error = ""
 
+func _directory_for(filename):
+	if filename in ["player.save", "stats.save"] and Global.slot_index > 1:
+		return Global.slot_path("profile")
+	return directory_path
+
 func load_data(filename):
 	if not filename in ["player.save", "config.save", "voice.save", "stats.save"]:
 		return null
-	var path = directory_path.plus_file(filename)
+	var path = _directory_for(filename).plus_file(filename)
 	var data = _read_dictionary(path)
 	if data == null:
 		data = _read_dictionary(path + ".bak")
@@ -29,11 +34,12 @@ func save_data(filename, data):
 		last_error = "Invalid mod settings file or data"
 		return false
 	var directory = Directory.new()
-	var error = directory.make_dir_recursive(directory_path)
+	var target_directory = _directory_for(filename)
+	var error = directory.make_dir_recursive(target_directory)
 	if error != OK and error != ERR_ALREADY_EXISTS:
 		last_error = "Cannot create mod settings directory: " + str(error)
 		return false
-	var path = directory_path.plus_file(filename)
+	var path = target_directory.plus_file(filename)
 	var temporary = path + ".tmp"
 	var backup = path + ".bak"
 	var file = File.new()

@@ -1,6 +1,7 @@
 extends Node
 
 const Codec = preload("res://MOD_CONTENT/CruS Online/VoiceCodec.gd")
+const VoiceMeter = preload("res://MOD_CONTENT/CruS Online/VoiceMeter.gd")
 const Effects = preload("res://MOD_CONTENT/CruS Online/VoiceEffects.gd")
 enum BusEffect {PITCH, FILTER, DISTORTION, DELAY, REVERB, WATER}
 const CHANNEL = 2
@@ -36,6 +37,7 @@ var played_frames = 0
 var rate_limits = {}
 var capture_retry = 0
 var input_peak = 0.0
+var meter_layer = null
 var peak_process_usec = 0
 var capture_started = 0
 var capture_initial_frames = 0
@@ -53,6 +55,12 @@ var local_effect_mask = 0
 
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
+	meter_layer = CanvasLayer.new()
+	meter_layer.layer = 25
+	add_child(meter_layer)
+	var meter = VoiceMeter.new()
+	meter.voice = self
+	meter_layer.add_child(meter)
 	settings = store.merge_defaults(settings, store.load_data("voice.save"))
 	settings.volume = clamp(float(settings.volume), 0, 200)
 	_apply_binding()
