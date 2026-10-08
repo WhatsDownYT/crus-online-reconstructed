@@ -334,10 +334,10 @@ animation = "Move_Crouch_Forward"
 animation = "Sitting"
 
 [sub_resource type="AnimationNodeAnimation" id=47]
-animation = "Run_Left_Forward"
+animation = "Run_Forward"
 
 [sub_resource type="AnimationNodeAnimation" id=48]
-animation = "Run_Right_Forward"
+animation = "Run_Forward"
 
 [sub_resource type="AnimationNodeAnimation" id=50]
 animation = "Run_Left_Backward"

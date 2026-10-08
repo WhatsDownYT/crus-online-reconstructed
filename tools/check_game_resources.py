@@ -53,6 +53,15 @@ func _ready():
 		"res://MOD_CONTENT/CruS Online/death_screen.tscn",
 		"res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn",
 		"res://MOD_CONTENT/CruS Online/maps_stuff/respawn_point.tscn",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500.tres",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500World.tscn",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500View.tscn",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Remote.tscn",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Grenade.tscn",
+		"res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500SWAT.tscn",
+		"res://MOD_CONTENT/CruS Online/implants/examples/PracticeReflex.tres",
+		"res://MOD_CONTENT/CruS Online/implants/examples/PracticeReflexPickup.tscn",
+		"res://MOD_CONTENT/CruS Online/implants/examples/PracticeReflexPointClass.tres",
 		"res://Player_Manager.gd", "res://Scripts/E_Grunt_Movement_New.gd",
 		"res://Scripts/material_randomizer.gd", "res://Scripts/Enemy_Melee_Weapon.gd",
 		"res://Scripts/Grenade.gd", "res://Scripts/weapon.gd", "res://Scripts/new_vehicle.gd",
@@ -93,7 +102,7 @@ func _ready():
     root = Path(__file__).resolve().parents[1]
     extra_scripts = ['res://MOD_CONTENT/CruS Online/' + path.relative_to(root).as_posix()
                      for folder in ('remaped', 'entities') for path in sorted((root / folder).glob('*.gd'))]
-    extra_scripts.extend('res://MOD_CONTENT/CruS Online/' + name for name in ('ImplantSettings.gd', 'ModeSettings.gd', 'DebugCapture.gd'))
+    extra_scripts.extend('res://MOD_CONTENT/CruS Online/' + name for name in ('ImplantSettings.gd', 'ModeSettings.gd', 'DebugCapture.gd', 'ImplantDefinition.gd', 'ImplantRegistry.gd'))
     script = script.replace('EXTRA_SCRIPTS', json.dumps(extra_scripts))
     (project / 'resource_check.gd').write_text(script, encoding='utf-8')
     result = subprocess.run([str(engine), '--no-window', '--path', str(project)],
@@ -101,5 +110,8 @@ func _ready():
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     output = result.stdout + result.stderr
     print(output)
-    if result.returncode or 'RESOURCE_TEST_RESULT failures=0' not in output or 'ERROR:' in output:
+    unexpected_errors = [line for line in output.splitlines() if 'ERROR:' in line
+                         and 'Failed to open user://logs/' not in line
+                         and 'Could not create directory: user://logs' not in line]
+    if result.returncode or 'RESOURCE_TEST_RESULT failures=0' not in output or unexpected_errors:
         raise SystemExit(1)

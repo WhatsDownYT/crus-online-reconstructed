@@ -1,0 +1,6 @@
+[gd_resource type="SpatialMaterial" load_steps=2 format=2]
+
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_texture.png" type="Texture" id=1]
+
+[resource]
+albedo_texture = ExtResource( 1 )

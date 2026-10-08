@@ -17,7 +17,8 @@ static func resolve(catalog, names):
 		"sedative_immune": false,
 		"golem_exosystem": false,
 		"eyecam_pro": false,
-		"merit_pump": false
+		"merit_pump": false,
+		"custom_implants": []
 	}
 	for index in range(4):
 		if typeof(names[index]) != TYPE_STRING:
@@ -28,6 +29,8 @@ static func resolve(catalog, names):
 		for implant in catalog:
 			if implant.i_name == names[index] and implant.get(slots[index]):
 				found = true
+				if not implant.custom_id.empty():
+					result.custom_implants.append(implant.custom_id)
 				if index == 0:
 					result.eyecam_pro = implant.i_name == "Surveillance Eyecam PRO MAX"
 				if index == 1:

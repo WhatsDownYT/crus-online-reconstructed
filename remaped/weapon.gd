@@ -44,7 +44,7 @@ var grenade_ammo = 2
 var flashlight
 var glob
 var magazine_ammo:Array = [12, 30, 1, 1, 5, 1, 4, 45, 25, 5, 5, 150, 10, 3, 1, 50, 1, 1, 10, 30, 24, 24, 6, 1, 250, 10, 100, 5, 30]
-const SHELLS = [preload("res://Entities/Physics_Objects/Generic_Shell.tscn"), 
+var SHELLS = [preload("res://Entities/Physics_Objects/Generic_Shell.tscn"), 
 				preload("res://Entities/Physics_Objects/Generic_Shell.tscn"), 
 				null, 
 				null, 
@@ -73,9 +73,9 @@ const SHELLS = [preload("res://Entities/Physics_Objects/Generic_Shell.tscn"),
 				null, 
 				preload("res://Entities/Physics_Objects/Shell.tscn"), 
 				null]
-const IDLE_ANIM:Array = ["Pistol_Idle", "SMG_Idle", "Pistol_Idle", "Baton_Idle", "Shotgun_Idle", "Rocket_Launcher_Idle", "Sniper_Idle", "AR_Idle", "S_SMG_idle", "Nambu_Idle", "Gas_Idle", "MG3_Idle", "Autoshotgun_Idle", "Mauser_Idle", "Bore_Idle", "AR_Idle", "AR_Idle", "Flashlight_Idle", "Pistol_Idle", "AR_Idle", "Pistol_Idle", "AR_Idle", "Pistol_Idle", "Baton_Idle", "AR_Idle", "Shotgun_Idle", "Pistol_Idle", "Pistol_Idle", "Nogun"]
-const FIRE_ANIM:Array = ["Pistol_Fire", "SMG_Fire", "Pistol_Fire", "Baton_Fire", "Shotgun_Fire", "Rocket_Launcher_Fire", "Sniper_Fire", "AR_Fire", "S_SMG_fire", "Nambu_Fire", "Gas_Fire", "MG3_Fire", "Autoshotgun_Fire", "Mauser_Fire", "Bore_Idle", "AR_Fire", "AR_Idle", "Flashlight_Idle", "Pistol_Fire", "AR_Fire", "Pistol_Fire", "AR_Fire", "Pistol_Fire", "Baton_Fire", "AR_Idle", "Shotgun_Fire", "Pistol_Fire", "Pistol_Fire", "Nogun"]
-const DECALS:Array = [preload("res://Entities/Decals/Decal.tscn"), 
+var IDLE_ANIM:Array = ["Pistol_Idle", "SMG_Idle", "Pistol_Idle", "Baton_Idle", "Shotgun_Idle", "Rocket_Launcher_Idle", "Sniper_Idle", "AR_Idle", "S_SMG_idle", "Nambu_Idle", "Gas_Idle", "MG3_Idle", "Autoshotgun_Idle", "Mauser_Idle", "Bore_Idle", "AR_Idle", "AR_Idle", "Flashlight_Idle", "Pistol_Idle", "AR_Idle", "Pistol_Idle", "AR_Idle", "Pistol_Idle", "Baton_Idle", "AR_Idle", "Shotgun_Idle", "Pistol_Idle", "Pistol_Idle", "Nogun"]
+var FIRE_ANIM:Array = ["Pistol_Fire", "SMG_Fire", "Pistol_Fire", "Baton_Fire", "Shotgun_Fire", "Rocket_Launcher_Fire", "Sniper_Fire", "AR_Fire", "S_SMG_fire", "Nambu_Fire", "Gas_Fire", "MG3_Fire", "Autoshotgun_Fire", "Mauser_Fire", "Bore_Idle", "AR_Fire", "AR_Idle", "Flashlight_Idle", "Pistol_Fire", "AR_Fire", "Pistol_Fire", "AR_Fire", "Pistol_Fire", "Baton_Fire", "AR_Idle", "Shotgun_Fire", "Pistol_Fire", "Pistol_Fire", "Nogun"]
+var DECALS:Array = [preload("res://Entities/Decals/Decal.tscn"), 
 				preload("res://Entities/Decals/Decal.tscn"), 
 				null, 
 				null, 
@@ -126,6 +126,82 @@ var initpos:Vector3
 var initrot:Vector3
 var t:float = 1
 var player_weapon
+var custom_behaviors = {}
+var custom_launcher_loaded = 0
+var custom_launcher_reserve = 0
+var custom_launcher_timer:Timer
+var custom_launcher_audio = {}
+var original_ar_mesh
+var original_ar_material
+var active_custom_view = ""
+
+func _custom_registry():
+	return Global.get_node_or_null("WeaponRegistry")
+
+func _custom_definition():
+	var registry = _custom_registry()
+	return registry.definition_for(current_weapon) if registry != null and current_weapon != null else null
+
+func _refresh_custom_view_model():
+	if not player or not is_instance_valid(AR_mesh):
+		return
+	var definition = _custom_definition()
+	var next_id = definition.weapon_id if definition != null and definition.view_model != null else ""
+	if next_id == active_custom_view:
+		return
+	active_custom_view = next_id
+	if next_id.empty():
+		AR_mesh.mesh = original_ar_mesh
+		AR_mesh.material_override = original_ar_material
+		return
+	var sample = definition.view_model.instance()
+	if sample is MeshInstance:
+		AR_mesh.mesh = sample.mesh
+		AR_mesh.material_override = sample.material_override
+	sample.free()
+
+func _setup_custom_weapons():
+	var registry = _custom_registry()
+	if registry == null:
+		return
+	registry.finalize()
+	for index in range(registry.VANILLA_COUNT, registry.VANILLA_COUNT + registry.indices.size()):
+		var definition = registry.definition_for(index)
+		if definition == null:
+			continue
+		accuracy.append(definition.accuracy)
+		damage.append(definition.damage)
+		weight.append(1)
+		RELOAD_TIME.append(definition.reload_time)
+		MAX_MAG_AMMO.append(definition.magazine_size)
+		MAX_AMMO.append(definition.maximum_total_rounds - definition.magazine_size)
+		magazine_ammo.append(definition.magazine_size)
+		ammo.append(definition.starting_reserve)
+		var source_index = definition.borrowed_model_index
+		SHELLS.append(definition.shell_scene if definition.shell_scene != null else SHELLS[source_index] if source_index >= 0 and source_index < SHELLS.size() else null)
+		DECALS.append(definition.decal_scene if definition.decal_scene != null else DECALS[source_index] if source_index >= 0 and source_index < DECALS.size() else null)
+		IDLE_ANIM.append(definition.idle_animation if not definition.idle_animation.empty() else IDLE_ANIM[source_index] if source_index >= 0 and source_index < IDLE_ANIM.size() else "Nogun")
+		FIRE_ANIM.append(definition.fire_animation if not definition.fire_animation.empty() else FIRE_ANIM[source_index] if source_index >= 0 and source_index < FIRE_ANIM.size() else "Nogun")
+		if definition.behavior != null:
+			custom_behaviors[index] = definition.behavior.new()
+	var definition = registry.definition_for(current_weapon) if not player else registry.definition_for(Global.menu.weapon_1)
+	if player:
+		if definition == null:
+			definition = registry.definition_for(Global.menu.weapon_2)
+	if definition != null:
+		custom_launcher_loaded = definition.launcher_magazine_size
+		custom_launcher_reserve = definition.launcher_vest_reserve if player and Global.implants.torso_implant.ammo_bonus > 0 else definition.launcher_starting_reserve
+	custom_launcher_timer = Timer.new()
+	custom_launcher_timer.one_shot = true
+	custom_launcher_timer.name = "CustomLauncherReload"
+	add_child(custom_launcher_timer)
+	custom_launcher_timer.connect("timeout", self, "_reload_custom_launcher")
+
+func _reload_custom_launcher():
+	if custom_launcher_reserve > 0 and custom_launcher_loaded == 0:
+		custom_launcher_reserve -= 1
+		custom_launcher_loaded = 1
+		set_UI_ammo()
 var held_object
 
 var IM2
@@ -291,6 +367,11 @@ func update_implants():
 
 var _npc_flash_timer
 
+puppet func custom_launcher_sound(_id, weapon_index):
+	var sound = custom_launcher_audio.get(weapon_index)
+	if is_instance_valid(sound):
+		sound.play()
+
 func clear_npc_muzzleflash():
 	if is_instance_valid(_npc_flash_timer):
 		_npc_flash_timer.stop()
@@ -331,6 +412,7 @@ puppet func npc_muzzleflash(id, recivedWeapon, recivedPitch = null):
 func _ready() -> void :
 	NetworkBridge.register_rpcs(self, [
 		["npc_muzzleflash", NetworkBridge.PERMISSION.SERVER],
+		["custom_launcher_sound", NetworkBridge.PERMISSION.SERVER],
 		["_client_spawn_object", NetworkBridge.PERMISSION.SERVER],
 		["_client_create_drop_weapon", NetworkBridge.PERMISSION.SERVER],
 		["_client_play_sound", NetworkBridge.PERMISSION.SERVER],
@@ -347,8 +429,9 @@ func _ready() -> void :
 		
 		set_physics_process(false)
 		translation.z = 0
-		if current_weapon >= W_BLACKJACK:
+		if current_weapon >= W_BLACKJACK and current_weapon < 29:
 			current_weapon += 1
+	_setup_custom_weapons()
 	leaning = Input.is_action_pressed("Lean_Left") or Input.is_action_pressed("Lean_Right")
 	muzzle_light = get_node_or_null("OmniLight")
 	if player:
@@ -377,6 +460,8 @@ func _ready() -> void :
 		orb_anim = $orbarms / AnimationPlayer
 		
 		AR_mesh = get_node_or_null("Player_Weapon/Player_Weapon/Skeleton/BoneAttachment 9/AR")
+		original_ar_mesh = AR_mesh.mesh
+		original_ar_material = AR_mesh.material_override
 		AR_dot = get_node_or_null("Player_Weapon/AR_dot")
 		left_arm_mesh = get_node_or_null("Player_Weapon/Player_Weapon/Skeleton/Left_Arm")
 		right_arm_mesh = get_node_or_null("Player_Weapon/Player_Weapon/Skeleton/Right_Arm")
@@ -434,6 +519,11 @@ func _ready() -> void :
 		weapon2 = glob.menu.weapon_2
 		ammo[weapon1] += MAX_MAG_AMMO[weapon1] * glob.implants.torso_implant.ammo_bonus
 		ammo[weapon2] += MAX_MAG_AMMO[weapon2] * glob.implants.torso_implant.ammo_bonus
+		for equipped in [weapon1, weapon2]:
+			var custom_definition = _custom_registry().definition_for(equipped) if _custom_registry() != null else null
+			if custom_definition != null and glob.implants.torso_implant.ammo_bonus > 0:
+				ammo[equipped] = 180
+				MAX_AMMO[equipped] = 180
 		current_weapon = weapon1
 		var transition_loadout = glob.consume_level_transition_loadout()
 		if transition_loadout != null and transition_loadout.size() >= 3:
@@ -475,6 +565,33 @@ func _ready() -> void :
 	get_node_or_null("Shotgun_Sound"), get_node_or_null("RL_Sound"), get_node_or_null("Sniper_Sound"), 
 		get_node_or_null("AR_Sound"), get_node_or_null("S_SMG_Sound"), get_node_or_null("Nambu_Sound"), get_node_or_null("RL_Sound"), 
 	[get_node_or_null("MG3_Sound"), get_node_or_null("MG3_Sound2")], get_node_or_null("Shotgun_Sound"), get_node_or_null("Pistol_Sound"), get_node_or_null("Shotgun_Sound"), get_node_or_null("Nambu_Sound"), get_node_or_null("Rad_Sound"), null, get_node_or_null("Nambu_Sound"), get_node_or_null("AN94_Sound"), get_node_or_null("VAG72_Sound"), get_node_or_null("Steyr_Sound"), get_node_or_null("FT_Sound"), get_node_or_null("FT_Sound"), get_node_or_null("FT_Sound"), get_node_or_null("Pistol_Sound"), get_node_or_null("Nailer_Sound"), get_node_or_null("Shotgun_Sound"), get_node_or_null("Light_Sound"), ]
+	var registry = _custom_registry()
+	if registry != null:
+		for index in range(registry.VANILLA_COUNT, registry.VANILLA_COUNT + registry.indices.size()):
+			var definition = registry.definition_for(index)
+			if definition != null and definition.fire_sound != null:
+				var custom_sound = AudioStreamPlayer.new() if player else AudioStreamPlayer3D.new()
+				custom_sound.name = "CustomFireSound_" + str(index)
+				custom_sound.stream = definition.fire_sound
+				custom_sound.bus = "SFX"
+				custom_sound.pitch_scale = 1.45
+				if player:
+					custom_sound.volume_db = 5.117
+				else:
+					custom_sound.unit_size = 5.0
+				add_child(custom_sound)
+				audio.append(custom_sound)
+			else:
+				audio.append(audio[definition.borrowed_model_index] if definition != null and definition.borrowed_model_index >= 0 and definition.borrowed_model_index < audio.size() else null)
+			if definition != null and definition.launcher_sound != null:
+				var launcher_sound = AudioStreamPlayer.new() if player else AudioStreamPlayer3D.new()
+				launcher_sound.name = "CustomLauncherSound_" + str(index)
+				launcher_sound.stream = definition.launcher_sound
+				launcher_sound.bus = "SFX"
+				if not player:
+					launcher_sound.unit_size = 5.0
+				add_child(launcher_sound)
+				custom_launcher_audio[index] = launcher_sound
 
 func alert_body_entered(b):
 	nearby.append(b)
@@ -603,6 +720,7 @@ func _process(delta)->void :
 		return
 	if disabled:
 		return 
+	_refresh_custom_view_model()
 	t += 1
 	if not player:
 		raycast_init_rot.x = rand_range( - enemy_accuracy, enemy_accuracy)
@@ -668,7 +786,7 @@ func _process(delta)->void :
 			LIGHT_mesh.show()
 		else :
 			LIGHT_mesh.hide()
-		if current_weapon == W_AR:
+		if current_weapon == W_AR or _custom_definition() != null and (_custom_definition().view_slot == "AR" or _custom_definition().borrowed_model_index == W_AR):
 			FT_mesh.hide()
 			STEYR_mesh.hide()
 			AR_mesh.show()
@@ -911,7 +1029,7 @@ func _process(delta)->void :
 				
 				glob.player.set_scope(true)
 				player_weapon.hide()
-			elif zoom_flag and current_weapon == W_AR:
+			elif zoom_flag and (current_weapon == W_AR or _custom_definition() != null and (_custom_definition().view_slot == "AR" or _custom_definition().borrowed_model_index == W_AR)):
 				glob.player.set_scope(true)
 				
 				player_weapon.hide()
@@ -1026,6 +1144,9 @@ func _process(delta)->void :
 						if collider.has_method("add_velocity"):
 							NetworkBridge.apply_damage(self, collider, "add_velocity", [40, col_n])
 			kickflag = false
+		if Input.is_action_just_pressed("Shoot_Secondary") and not item_consumed and custom_behaviors.has(current_weapon):
+			if custom_behaviors[current_weapon].has_method("fire_secondary"):
+				custom_behaviors[current_weapon].fire_secondary(self)
 		if Input.is_action_just_pressed("Tertiary_Weapon") and not item_consumed:
 			if glob.implants.arm_implant.grapple:
 				if raycast.is_colliding() and not grapple_flag:
@@ -2726,6 +2847,12 @@ func zoom():
 
 func shoot()->void :
 	if player and _eyecam_weapon_jammed(): return
+	if custom_behaviors.has(current_weapon):
+		if not player and custom_launcher_loaded > 0 and custom_launcher_timer.is_stopped() and randi() % 12 == 0:
+			custom_behaviors[current_weapon].fire_secondary(self)
+		else:
+			custom_behaviors[current_weapon].fire_primary(self)
+		return
 	rotation.x = initrot.x
 	if magazine_ammo[current_weapon] > 0 and player and current_weapon != W_TRANQ and current_weapon != W_BLACKJACK and current_weapon != W_PISTOL and timer.is_stopped() and current_weapon != W_SILENCED_SMG and current_weapon != W_MAUSER and current_weapon != W_NAMBU and current_weapon != W_RADIATOR and current_weapon != W_FLASHLIGHT and current_weapon != W_CANCER and current_weapon != W_ROD and current_weapon != W_NAILER:
 		
@@ -2881,6 +3008,7 @@ func flechette(collider:Spatial)->void :
 		decal_new.look_at((global_transform.origin), Vector3.UP)
 		if current_weapon == W_SNIPER:
 			decal_new.scale = Vector3(3, 3, 3)
+		_sync_visual_fx("flechette", raycast.get_collision_point(), global_transform.origin, 1)
 
 func decal(collider:Spatial, c_point, c_normal)->void :
 	if not is_instance_valid(collider):
@@ -2894,10 +3022,22 @@ func decal(collider:Spatial, c_point, c_normal)->void :
 		collider.add_child(decal_new)
 		decal_new.global_transform.basis = align_up(decal_new.global_transform.basis, c_normal)
 		decal_new.global_transform.origin = c_point + c_normal * 1e-08
+		_sync_visual_fx("decal", c_point, c_normal, 1)
+
+func _sync_visual_fx(kind:String, position:Vector3, direction:Vector3, count:int):
+	if not NetworkBridge.check_connection() or not player and not NetworkBridge.is_world_authority():
+		return
+	var multiplayer = Global.get_node("Multiplayer")
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.n_rpc(multiplayer, "show_weapon_fx", [NetworkBridge.get_id(), kind, current_weapon, position, direction, count])
+	else:
+		NetworkBridge.n_rpc(multiplayer, "request_weapon_fx", [kind, current_weapon, position, direction, count])
 		
 func spawn_shell(shell:PackedScene, count:int, speed:float, collision_n:Vector3, collision_p:Vector3):
 	if Global.fps < 30:
 		return 
+	if shell != null:
+		_sync_visual_fx("shell", collision_p, collision_n, min(count, 5))
 	for i_shell in range(count):
 		if shell != null:
 			var new_shell = shell.instance()
@@ -2909,6 +3049,8 @@ func spawn_shell(shell:PackedScene, count:int, speed:float, collision_n:Vector3,
 func set_UI_ammo():
 	if player and current_weapon != null:
 		UI.set_ammo(ammo[current_weapon], magazine_ammo[current_weapon], MAX_MAG_AMMO[current_weapon], MAX_AMMO[current_weapon])
+		var definition = _custom_definition()
+		UI.set_secondary_ammo(custom_launcher_loaded + custom_launcher_reserve, definition != null and definition.launcher_magazine_size > 0)
 
 func set_weapon(weapon_index):
 	if player and not orb:
@@ -2925,12 +3067,18 @@ func set_weapon(weapon_index):
 		anim.stop()
 		anim.play("Nogun", - 1, 100)
 		glob.player.set_move_speed()
-		UI.set_ammo(ammo[current_weapon], magazine_ammo[current_weapon], MAX_MAG_AMMO[current_weapon], MAX_AMMO[current_weapon])
+		set_UI_ammo()
 
 func add_ammo(amount:int, type:int, ammobox:Spatial):
-	ammo[type] += amount
+	var definition = _custom_registry().definition_for(type) if _custom_registry() != null else null
+	if definition != null:
+		ammo[type] = min(ammo[type] + amount, MAX_AMMO[type] + MAX_MAG_AMMO[type] - magazine_ammo[type])
+		if is_instance_valid(ammobox) and ammobox.get("current_weapon") == type and definition.launcher_magazine_size > 0:
+			custom_launcher_reserve = min(custom_launcher_reserve + 1, definition.launcher_maximum_total - custom_launcher_loaded)
+	else:
+		ammo[type] += amount
 	if amount > 0:
-		UI.notify("(" + str(amount) + ") " + W_NAMES[type] + " ammo received", Color(0, 1, 1))
+		UI.notify("(" + str(amount) + ") " + (definition.ammunition_name if definition != null else W_NAMES[type]) + " ammo received", Color(0, 1, 1))
 	if current_weapon != null:
 		UI.set_ammo(ammo[current_weapon], magazine_ammo[current_weapon], MAX_MAG_AMMO[current_weapon], MAX_AMMO[current_weapon])
 

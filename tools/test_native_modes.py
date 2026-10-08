@@ -13,10 +13,13 @@ parser.add_argument('--game-pack', type=Path, required=True)
 parser.add_argument('--reference-project', type=Path, required=True)
 parser.add_argument('--mod-package', type=Path, required=True)
 parser.add_argument('--dependency-dir', type=Path)
+parser.add_argument('--extra-mod-dir', type=Path)
 parser.add_argument('--campaign-dir', type=Path)
+parser.add_argument('--level-dir', type=Path)
 parser.add_argument('--test-script', type=Path, default=Path('tests/modes_native_test.gd'))
 parser.add_argument('--result-marker', default='MODE_TEST_RESULT failures=0')
 parser.add_argument('--timeout', type=int, default=120)
+parser.add_argument('--profile-prefix', default='CruS Modes Test')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reservation:
@@ -32,7 +35,7 @@ try:
         for library in args.godot.parent.glob('*.dll'):
             shutil.copy2(library, project / library.name)
         config = args.reference_project.read_text().replace('addons/qodot/game_definitions/', 'addons/qodot/game-definitions/')
-        user_dir = 'CruS Modes Test ' + role
+        user_dir = args.profile_prefix + ' ' + role
         config = config.replace('config/name="Cruelty Squad"', 'config/name="' + user_dir + '"\nconfig/use_custom_user_dir=true\nconfig/custom_user_dir_name="' + user_dir + '"')
         config = config.replace('[autoload]', '[autoload]\nBoot="*res://mode_boot.gd"')
         config = '\n'.join(line for line in config.splitlines() if not any(line.startswith(key) for key in ('boot_splash/image=', 'config/icon=', 'mouse_cursor/custom_image=', 'environment/default_environment=')))
@@ -56,9 +59,17 @@ try:
             dependency.mkdir(parents=True, exist_ok=True)
             shutil.copy2(args.dependency_dir / 'mod.zip', dependency / 'mod.zip')
             shutil.copy2(args.dependency_dir / 'mod.json', dependency / 'mod.json')
+        if args.extra_mod_dir:
+            extra = Path(os.environ['APPDATA']) / user_dir / 'mods' / args.extra_mod_dir.name
+            extra.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(args.extra_mod_dir / 'mod.zip', extra / 'mod.zip')
+            shutil.copy2(args.extra_mod_dir / 'mod.json', extra / 'mod.json')
         if args.campaign_dir:
             campaign = Path(os.environ['APPDATA']) / user_dir / 'campaigns' / args.campaign_dir.name
             shutil.copytree(args.campaign_dir, campaign, dirs_exist_ok=True)
+        if args.level_dir:
+            level = Path(os.environ['APPDATA']) / user_dir / 'levels' / args.level_dir.name
+            shutil.copytree(args.level_dir, level, dirs_exist_ok=True)
         output = (project / 'output.log').open('w')
         process = subprocess.Popen([str(project / 'probe.exe'), '--path', str(project), '--no-window'], cwd=project, stdout=output, stderr=subprocess.STDOUT, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         processes.append((role, process, output, project))

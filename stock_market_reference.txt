@@ -1,0 +1,300 @@
+CRUELTY SQUAD STOCK MARKET — IMPLEMENTATION REFERENCE
+CruS Online: RECONSTRUCTED, 8 October 2026
+
+Scope and source
+----------------
+This describes the stock market as implemented in the current project. Market
+data and price simulation are in remaped/Stock_Handler.gd. The trading screen
+uses the base game's Stocks.gd (there is no Stocks.gd override in this mod).
+Physical body-part pickups use remaped/Asset_Pickup.gd; fishing uses the base
+game's Scripts/Fishing_Hook.gd. Save-slot routing is in remaped/Game_Manager.gd.
+The catalogue at the end is generated from the current Stock_Handler.gd data.
+
+What is traded
+--------------
+There are 103 assets: 12 company equities, 18 body parts, and 73 fish. Every
+asset has a unique four-character ticker (some include a trailing space), a
+name, description, current price, amount owned, trend, volatility, nominal
+minimum/maximum prices, and an issued-share count. All three tabs use the same
+price simulation and the same buy/sell actions. Body parts and fish are not a
+separate currency: their market holdings are valued and sold like shares.
+
+The Stocks, Parts, and Fish tabs list their assets by ticker. Each row shows
+the owned quantity, price change since the last market tick, and, if any are
+owned, the rounded current value of that holding. An upward or unchanged tick
+is tinted pale green; a downward tick is tinted pale red. The panel also shows
+cash and the sum of current price times owned quantity for every asset as
+"Total holdings". That figure does not include cash.
+
+Selecting an asset shows its description, name, owned amount, current price,
+percentage change from its fixed starting price, and "MKC" (current price
+times issued shares). The graph plots the most recent 100 simulated prices;
+its segments are green when rising and red when falling. That graph history is
+not saved. The market panel refreshes its text every fifth physics frame while
+visible, whereas prices tick on their own timer even when the panel is closed.
+
+Trading
+-------
+Buy and Sell each have buttons for 1, 2, 5, 10, and 100 units. A buy succeeds
+only when cash is STRICTLY GREATER than current price times quantity, and the
+unit price is greater than $0.90. Consequently, having exactly the displayed
+cost is insufficient. A successful buy subtracts that cost from cash and adds
+the quantity to the holding. A sale requires at least that many units, removes
+them, and adds current price times quantity to cash. There is no transaction
+fee, spread, slippage, short selling, or share-availability check in this code.
+Cash and stock data are saved after successful trades.
+
+Undiscovered body parts and fish display a not-found icon, and their name and
+description appear as "???" in the detail panel. Their tickers, prices, and
+trading buttons remain available. Buying one does not count as finding it.
+Discovery is recorded separately when a body-part pickup is used or a hooked
+fish is actually returned to the player. Found parts use their name in the
+discovery save list; found fish use their ticker. The corresponding model can
+then appear in the market preview. Picking up a body part also adds one owned
+unit; catching a fish adds one owned unit.
+
+Price updates
+-------------
+The stock handler starts a repeating 1-second Timer. With Eyes of Corporate
+Insight equipped in the head slot, _physics_process changes that timer's
+wait_time to 0.1 seconds; without it, wait_time is 1 second. Each timeout
+updates EVERY asset once. The market does not need to be open. The simulation
+uses its own RandomNumberGenerator and a normally distributed randfn() value.
+
+For each asset, on each tick:
+
+  1. last_price = price
+  2. effective_trend = stored trend
+  3. If LEVELS_UNLOCKED is exactly 6, add 0.1 to effective_trend
+  4. If LEVELS_UNLOCKED is at least price_action_day AND price is strictly
+     between its nominal minimum and maximum, add price_action
+  5. If LEVELS_UNLOCKED is exactly extreme_action, add 1
+  6. price += sqrt(0.03333 * 0.5) * randfn() * volatility + effective_trend
+  7. If bankrupt is zero, clamp price to nominal min_price..max_price.
+     Otherwise clamp price to $0.87..$10,000,000
+  8. If bankrupt < LEVELS_UNLOCKED, subtract 0.01 from the STORED trend.
+     Otherwise, when price is within $5 of a nominal limit and the stored
+     trend points outwards, reverse the stored trend's sign
+  9. If min_price equals max_price, force price to that value
+ 10. Append price to graph history and discard its oldest sample above 100
+
+"bankrupt", "min_price", and "max_price" are variable names, not a separate
+bankruptcy event or guaranteed price bounds. In this catalogue bankrupt is a
+nonzero threshold for every asset, so the broad $0.87..$10,000,000 clamp is
+the one normally used. Nominal limits mainly cause trend reversals. For an
+asset whose bankruptcy threshold has been passed, its stored trend instead
+falls by 0.01 every tick. The temporary bonuses in steps 3–5 affect that
+tick's price calculation; they do not themselves rewrite the stored trend.
+
+The default values for fields not overridden by an asset are: price $100,
+nominal minimum $20, nominal maximum $200, volatility 1, trend 0,
+price_action_day 600, price_action 0.1, extreme_action 200, bankrupt 600,
+issued shares 1,238,299, and owned 0. LEVELS_UNLOCKED is the campaign's
+progression variable, not elapsed market days. The equality conditions for
+level 6 and extreme_action apply on EVERY tick while progression stays at
+that exact value, not just once when the level is unlocked.
+
+Notable equity schedules
+------------------------
+G-Tech (GTC ) has bankruptcy threshold 3. Its stored trend loses 0.01 per
+tick once LEVELS_UNLOCKED exceeds 3. GamesGames (GAGA) does likewise after
+threshold 7 and gets the temporary +1 extreme action on every tick while
+LEVELS_UNLOCKED equals 6. Advanced Orbital Instruments (AOI ) gets an extra
++0.01 per eligible tick from progression 4; Veggo's Meatoids (VEME) gets
++0.02 from progression 3. Other assets retain the default thresholds unless
+their catalogue data says otherwise.
+
+Finding fish and parts
+----------------------
+Each level has a POSSIBLE_FISH ticker pool in Stock_Handler.gd; toilets use a
+separate BNBO-only pool. Once a fishing hook is in water or has collided, it
+attempts to produce a fish every second while none is caught. Each attempt
+first passes a 50% random gate, then picks uniformly from that level's pool.
+For the selected fish, another 0–100 roll must be no greater than fish_chance
+plus 0.1 times the hook's capped distance from the player (0–50), plus 5 in
+rain and 3.5 if the fishing-bonus head implant is worn. Some fish also require
+night (the computer's local clock before 06:00 or after 21:00), rain, or Hope
+Eradicated. A bite remains
+available for fish_speed + distance * 0.002 seconds before timing out. Reeling
+the caught fish back records its ticker as found and adds it to the holding.
+
+These are code-level rolls, not a guaranteed per-second catch probability:
+the selected level pool can repeat a ticker, the first gate can fail, and
+conditions can reject the selected fish. Body-part pickups use their part
+name, add one unit to that asset, mark it found, and hide the pickup for the
+session. The corresponding fish/part discovery counts in Statistics and Goals
+read these found lists rather than how many units are currently owned.
+
+Saving, slots, and online sessions
+----------------------------------
+Market data is stored separately from campaign cash. Slot 1 uses
+user://stocks.save; slots 2–4 use
+user://crus_online_slots/slotN/stocks.save. Each stock entry saves its ticker,
+owned quantity, current price, previous price, and stored trend; the file also
+contains fish_found and org_found. On load, price, owned, and trend are
+restored. Previous price is written to disk but is not currently restored by
+load_stocks(), and the last-100-point graph is not stored. A missing or empty
+stock save is initialized from catalogue defaults or the stock backup.
+
+Trades save stock data and campaign cash immediately. Other menu transitions
+and mission starts save stock data, and the game's two-minute backup saves a
+stock_backup.save alongside its campaign backup. Switching save slots resets
+the market to initial values before loading that slot's own data. Clearing
+save data resets stock prices, trends, holdings, and discovery lists. During a
+temporary non-Cruelty mode, CampaignSave snapshots market state, suppresses
+normal stock writes, and restores the campaign state on return. Stock_Handler
+contains no network price or transaction synchronization; the market is local
+to each player's save rather than a shared lobby order book.
+
+Current persistence detail: the base fishing hook calls save_stocks() after
+marking a fish found but BEFORE increasing its owned quantity. The discovery
+therefore persists immediately, while that newly caught unit requires a later
+stock save to persist. Body-part pickups save after adding their unit.
+
+Catalogue
+---------
+The following lines give ticker, name, starting price, nominal min/max,
+volatility, stored trend, and fish conditions. A dash in the conditions column
+means no additional night/rain/Hope requirement. Trailing spaces in tickers
+are shown as [space]. All values are initial authored values, not live prices.
+
+EQUITIES (12)
+Ticker       Name                              Start       Min        Max    Vol   Trend   Shares
+----------------------------------------------------------------------------------------------------------------------
+CRUS         Cruelty Squad                          1237       500       1999      1    0.01   2912812
+GDHD         Godhead Heavy Industries                732        12        820    1.5   -0.01   1238299
+GTC[space]   G-Tech                                   89        20        600      7     0.1   1238299
+PIHO         Pizza House                             123        20        510      7    0.05   1238299
+AOI[space]   Advanced Orbital Instruments            530        20        774      5    0.02   1238299
+GAGA         GamesGames                              165        20        700     10   -0.05   1238299
+PWR[space]   Power Monger Shipping Company           205        20       1500      7   -0.05   1238299
+VEME         Veggo's Meatoids                         20        20       1521     15    0.02   1238299
+FBCA         Fatberg Casino                          405        20        643      7    0.05   1238299
+SCRD         Security Redefined                      153        20        320      7   -0.05   1238299
+PURE         Pure Optics                             630        20       1200      4       0   1238299
+CSFT         Consumer Softproducts                   413        20       1200      3    0.05   1238299
+
+BODY PARTS (18)
+Ticker       Name                              Start       Min        Max    Vol   Trend
+----------------------------------------------------------------------------------------------------------------------
+BRN[space]   Brain                                    40         2         99      3    0.01
+AUGB         Augmented Brain                         130       120        200    0.1    0.01
+PSYB         Psycho Brain                           2000      1500       3000    0.1       0
+WRMB         Worm Brain                             2000      1500       3000    0.1       0
+LIVR         Liver                                    20         2         52      2   -0.01
+TLVR         Tactical Liver                          150       100        200      1   -0.01
+KDNY         Kidney                                   10         2         20    0.5   -0.01
+HERT         Heart                                   200       150        300      1    0.01
+BHRT         Black Heart                            1500      1000       2000      1    0.01
+INTS         Intestine                               300       200        400      1    0.01
+PINT         Putrid Intestine                        400       300        500      1    0.01
+APNX         Appendix                               1500      1000       2000      1    0.01
+SPNE         Spine                                   800       600       1200      1    0.01
+RSPN         Rotten Spine                           3000       600       5200      1    0.01
+GUT[space]   Stomach                                 101        84        127    0.5    0.01
+NGUT         Nuclear Stomach                        1010       840       1270    0.5    0.01
+PNCR         Pancreas                                  1         1          1      1       0
+ADVP         Advanced Pancreas                       603       500       1000      1       0
+
+FISH (73)
+Ticker       Name                              Start       Min        Max    Vol   Trend   Base chance  Bite window  Conditions
+----------------------------------------------------------------------------------------------------------------------
+FLSH         Fleshrat                                  5         2         10    0.5       0          30          0.7  -
+CIV[space]   Civilian                                2.5         1          5   0.05       0           5          0.7  -
+BRNY         Brainy                                  200       170        400      1       0          30            1  night
+POOL         Poolsucker                               32         3         56      2       0         100            1  -
+BRST         Brimstone                               400       300        500      1       0          30          0.5  -
+DRMP         Drimp                                   120        25        200      3       0          50          0.6  -
+GLOM         Gloomoid                                200        40        300      3       0          40          0.4  -
+SMLL         Smallman                                765       310       1000      3       0          15         0.35  -
+BIG[space]   Bigman                                 1420       620       2000      1       0          15         0.45  Hope
+FISH         Fish                                     25         2         52      2       0         100            1  -
+NGHT         Nightfreak                              111        15        200      2       0          50            1  night
+ZOOP         Zooper                                   52         5        100      3       0          80          0.8  -
+CARB         Carabino                                400       300        600      1       0          80         0.32  -
+MOON         Moonfish                               8000      3000      10000      6       0           2          0.5  night
+EEL[space]   Eel                                     400       300        500      1       0          80          0.5  rain
+FLND         Flounder                                522       400        700      1       0          60          0.6  rain
+GFLD         Gigaflounder                          10000     15000      20000      1       0          10          0.6  night,rain
+BLRP         Blurpo                                  101        10        200      3       0          50          0.7  -
+HDRA         Hydra                               1000000    990000    1100000      3       0           1         0.25  night,Hope
+PSYK         Psychofish                              320       120        620      3       0          35          0.5  -
+BNCY         Bouncy Castle                          1000      1200       2000      1       0          35          0.5  rain
+UNI[space]   Unidor                                 3000      1400       5000      3       0           5          0.6  -
+NOCT         Nocter                                 7500      5000      10000      3       0           5          0.5  night
+HUMN         Human                                     5        10          1    0.1       0           5          0.5  -
+BUBL         Bubblefish                              160       100        300      3       0          60          1.0  -
+FRAG         Fragfish                               1600      1000       2000      3       0          60          1.0  Hope
+FLIP         Flippy                                   99        50        200      3       0          90          0.6  -
+SKIP         Skippy                                  360       300        500      1       0          60          0.4  -
+GRAB         Grabshark                              4200      3100       5000      1       0          15          0.4  Hope
+DLPH         Dolphin                                 800       650       1200      1       0          15          0.4  -
+OCTO         Octosaur                                450       300        600      1       0          60          0.8  rain
+HEXA         Hexasaur                              20000     19000      23000      1       0           4          0.3  rain
+SLRP         Slurper                                   4         1         10    0.5       0         100          1.0  -
+PIPE         Piper                                    15         8         20    0.5       0         100          1.0  Hope
+BOG[space]   Bogdo                                   350       100        450      3       0          70          0.6  -
+SBOG         Super Bogdo                           18000     20000      22000      3       0           3          0.3  night
+SWMP         Swampsucker                             620       400        700      3       0          30          0.4  -
+SPKE         Spiker                                  400       250        500      1       0          50          0.5  -
+GEEL         Gunk Eel                                800       600       1000      1       0          80          0.5  rain
+LUCK         Lucksucker                            10000     15000      20000      3       0           3          0.3  -
+BNBO         Bonbo                                  1500      1000       2000      3       0          10          0.6  -
+WLTH         Fish of Wealth                          300       200        600      3       0          80          0.7  -
+COIN         Coiny                                     1         1          1      3       0          95          0.7  -
+WOF[space]   Wheel of Fortune                    1000000   1000000    1000000      0       0         0.5          0.4  -
+PAIN         Wheel of Pain                       2000000   2000000    2000000      0       0         0.5          0.4  night,Hope
+ZIPP         Zippy 3000 (Broken)                       1         1          1      0       0         0.5         10.0  -
+AGON         Agon                                   1000       500       1500      0       0          40          2.0  -
+BRRN         Bororion                               2000      1000       3000      1       0          20          1.0  -
+CREP         Creep                                  4000      3000       5000      1       0           5          0.5  -
+DLTA         Deltaforce                           100000     90000     110000      1       0         2.5          0.3  -
+ETRN         Eternity Slurper                       4000      3000       5000      1       0           5          0.5  -
+DOS[space]   DOSfish                             3000000   2500000    3500000      1       0           1          0.2  -
+MSTK         Mistake                                 350       300        600     10       0          30          1.0  -
+SCCS         Success                              100000     90000     120000      1       0           2          0.2  -
+SUN[space]   Sunfish                               10000      4000      12000     10       0           2          2.0  -
+CUBE         Cubert                                  500       250        700      2       0          70          1.0  -
+GLRM         Glurm                                  1000       800       1200      2       0          50          0.5  -
+DFSH         Darkfish                                600       500        700      1       0          50          0.6  -
+DSLR         Darkslurper                           95000     90000     100000      1       0           3          0.3  -
+DSCK         Darksucker                              152       100        200    0.5       0          90          2.0  -
+ICE[space]   Icefish                                 150       132        300      1       0         100            1  -
+ICBE         Ice Cubert                              632       300        800      1       0          50          1.0  -
+BLSM         Blossom                                1500      1000       2000    0.5       0          60          0.6  -
+CHTH         Chthonner                              1620      1100       2100    0.5       0          40          0.5  -
+HEAD         Head                                   1800      1300       2300    0.5       0          30          0.4  -
+POND         Pondman                                3700      3200       4000    0.5       0           6          0.4  -
+HELI         Helipod                                1200      1000       2000    0.5       0          50         0.35  night
+ENGN         Engine of Chaos                       10000      7000      12000    0.5       0          10          0.5  Hope
+DEAD         Dead Fish                                50        25        104      0       0         100            1  Hope
+TRNC         Trancer                                2500      2000       3000      1       0          10          0.5  -
+FUZZ         Fuzzoid                               25000     20000      30000      3       0          10          0.4  -
+SOUL         Soul                                5000000   4500000    6500000      1       0         0.5          0.2  -
+BLLS         Ballsfish                               200        40        450      1       0         0.5          0.4  -
+
+Level fishing pools (CURRENT_LEVEL is a zero-based index):
+   0: SLRP, FLSH, CIV[space], BRNY
+   1: POOL, DRMP, BRNY, BLLS
+   2: POOL, GLOM, SMLL, BIG[space], NGHT, HUMN, BRST
+   3: FISH, ZOOP, BLRP, MOON, NGHT, CARB, EEL[space], FLND, GFLD, DEAD, HDRA
+   4: PSYK, GLOM, NGHT, HUMN, DEAD, BNCY
+   5: FISH, DEAD
+   6: FISH, DEAD
+   7: UNI[space], BUBL, DRMP, FISH, FLIP, NGHT, NOCT, OCTO, HEXA, DLPH, GRAB, FRAG, SKIP, DEAD
+   8: SLRP, BOG[space], SWMP, SBOG, HUMN, SPKE, GEEL, PIPE
+   9: LUCK, BNBO, WLTH, COIN, WOF[space], ZIPP, PAIN
+  10: BRRN, AGON, CREP, DLTA, ETRN
+  11: DOS[space], POOL, DEAD, DRMP, BRNY
+  12: MSTK, FISH, CUBE, SLRP, DEAD, SCCS, SUN[space]
+  13: GLRM, DSLR, DFSH, DSCK
+  14: ICE[space], ICBE
+  15: BLSM, CHTH, ENGN, HEAD, POND, HELI
+  16: SLRP, FLSH, CIV[space], PSYK, TRNC
+  17: HELI, FUZZ, SCCS, BLLS
+  18: HEAD, DLTA, MSTK, PSYK, PAIN, SOUL, GLOM, HDRA, DEAD, HUMN
+  Toilet pool: BNBO
+
+There are 19 authored level pools (indices 0?18); the base hook indexes
+this array directly by CURRENT_LEVEL. It does not define a generic pool for
+custom mission indices outside that range.

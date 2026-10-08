@@ -535,7 +535,7 @@ func _position_ready_button():
 	var level_menu = menu_ref.menu[menu_ref.LEVEL_SELECT]
 	for button in level_menu.get_children():
 		if button is TextureButton and button.has_meta("menu_button_type") and button.get_meta("menu_button_type") == menu_ref.B_MISSION_START:
-			ready_button.rect_position = button.rect_position
+			ready_button.rect_position = menu_ref._level_select_position(button)
 			return
 
 func _ready_pressed():

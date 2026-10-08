@@ -1,0 +1,9 @@
+[
+  {
+    "definition": "res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500.tres",
+    "point_classes": [
+      "res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500PointClass.tres",
+      "res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500SWATPointClass.tres"
+    ]
+  }
+]

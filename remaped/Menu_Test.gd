@@ -27,7 +27,7 @@ func multiplayer_enter():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 enum {UP, RIGHT, DOWN, LEFT}
-enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS}
+enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY}
 enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS, NEWS}
 var confirmed = false
 var cancel = false
@@ -287,6 +287,7 @@ func get_key_index(action):
 	elif action is InputEventMouseButton:
 		return [action.button_index, "MOUSE"]
 func get_scancodes():
+	ensure_secondary_weapon_action()
 	var key_scancodes:Array = [get_key_index(InputMap.get_action_list("movement_forward")[0]), 
 	get_key_index(InputMap.get_action_list("movement_left")[0]), 
 	get_key_index(InputMap.get_action_list("movement_right")[0]), 
@@ -306,10 +307,20 @@ func get_scancodes():
 	get_key_index(InputMap.get_action_list("Tertiary_Weapon")[0]), 
 	get_key_index(InputMap.get_action_list("drop")[0]), 
 	get_key_index(InputMap.get_action_list("Suicide")[0]), 
-	get_key_index(InputMap.get_action_list("Stocks")[0])]
+	get_key_index(InputMap.get_action_list("Stocks")[0]),
+	get_key_index(InputMap.get_action_list("Shoot_Secondary")[0])]
 	return key_scancodes
 
+func ensure_secondary_weapon_action():
+	if not InputMap.has_action("Shoot_Secondary"):
+		InputMap.add_action("Shoot_Secondary")
+	if InputMap.get_action_list("Shoot_Secondary").empty():
+		var middle_mouse = InputEventMouseButton.new()
+		middle_mouse.button_index = BUTTON_MIDDLE
+		InputMap.action_add_event("Shoot_Secondary", middle_mouse)
+
 func _ready():
+	ensure_secondary_weapon_action()
 	if Global.ending_3:
 		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.show()
 	else :
@@ -351,6 +362,7 @@ func _ready():
 	keylist.add_item("Right: " + InputMap.get_action_list("movement_right")[0].as_text())
 	keylist.add_item("Back: " + InputMap.get_action_list("movement_backward")[0].as_text())
 	keylist.add_item("Shoot: " + InputMap.get_action_list("mouse_1")[0].as_text())
+	keylist.add_item("Shoot Secondary: " + InputMap.get_action_list("Shoot_Secondary")[0].as_text())
 	keylist.add_item("Jump: " + InputMap.get_action_list("movement_jump")[0].as_text())
 	keylist.add_item("Crouch: " + InputMap.get_action_list("crouch")[0].as_text())
 	keylist.add_item("Reload: " + InputMap.get_action_list("reload")[0].as_text())
@@ -454,6 +466,10 @@ func _ready():
 	weapon_stat_source = load("res://Scripts/weapon.gd").new()
 	_create_weapon_menu_panel()
 	_refresh_weapon_menu_icons()
+	var custom_registry = Global.get_node_or_null("WeaponRegistry")
+	if custom_registry != null:
+		custom_registry.connect("catalog_changed", self, "_register_custom_weapon_buttons")
+		_register_custom_weapon_buttons()
 	campaign_label = Label.new()
 	campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	campaign_label.align = Label.ALIGN_CENTER
@@ -701,6 +717,9 @@ func _weapon_menu_position(button):
 		return Vector2(160, 576)
 	if button == weapon_page_buttons[1]:
 		return Vector2(544, 576)
+	if button in custom_weapon_buttons:
+		var custom_index = custom_weapon_buttons.find(button)
+		return WEAPON_MENU_ORIGIN + Vector2(custom_index % WEAPON_MENU_COLUMNS, int(custom_index / WEAPON_MENU_COLUMNS)) * button_size
 	var index = menu[WEAPON_SELECT].get_children().find(button)
 	if index < 2:
 		return Vector2(160 + index * 205, 140)
@@ -708,9 +727,49 @@ func _weapon_menu_position(button):
 	return WEAPON_MENU_ORIGIN + Vector2(index % WEAPON_MENU_COLUMNS, int(index / WEAPON_MENU_COLUMNS)) * button_size
 
 func _weapon_button_for_index(index):
-	if index < 0 or index >= weapon_grid_buttons.size():
+	if index < 0:
 		return null
-	return weapon_grid_buttons[index]
+	if index < weapon_grid_buttons.size():
+		return weapon_grid_buttons[index]
+	var custom_index = index - weapon_grid_buttons.size()
+	return custom_weapon_buttons[custom_index] if custom_index < custom_weapon_buttons.size() else null
+
+func _register_custom_weapon_buttons():
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	if registry == null or weapon_menu_panel == null:
+		return
+	for index in range(registry.VANILLA_COUNT + custom_weapon_buttons.size(), registry.VANILLA_COUNT + registry.indices.size()):
+		var definition = registry.definition_for(index)
+		if definition == null:
+			continue
+		var button = create_button(WEAPON_SELECT, definition.display_name, "_on_Custom_Weapon_Pressed", B_W_AR)
+		button.set_meta("custom_weapon_index", index)
+		button.hint_tooltip = definition.description
+		if definition.icon != null:
+			button.texture_normal = definition.icon
+			button.set_meta("custom_icon", definition.icon)
+		elif not definition.icon_path.empty():
+			var image = Image.new()
+			if image.load(definition.icon_path) == OK:
+				var texture = ImageTexture.new()
+				texture.create_from_image(image)
+				button.texture_normal = texture
+				button.set_meta("custom_icon", texture)
+		custom_weapon_buttons.append(button)
+		button.rect_position = _weapon_menu_position(button)
+		button.hide()
+	for preview in [$Weapon1_Viewport/Weapon, $Weapon2_Viewport/Weapon]:
+		if preview.has_method("ensure_custom_models"):
+			preview.ensure_custom_models()
+
+func _on_Custom_Weapon_Pressed(_menu_index, button):
+	if not button.has_meta("custom_weapon_index"):
+		return
+	var index = int(button.get_meta("custom_weapon_index"))
+	if index >= Global.WEAPONS_UNLOCKED.size() or not Global.WEAPONS_UNLOCKED[index]:
+		return
+	set_weapon(index)
+	_on_weapon_equipped(button)
 
 func _refresh_weapon_menu_icons():
 	if weapon_select_buttons.empty():
@@ -729,6 +788,8 @@ func _weapon_detail_button(button):
 	if not is_instance_valid(weapon_menu_name):
 		return
 	var weapon_index = weapon_grid_buttons.find(button)
+	if weapon_index < 0 and button in custom_weapon_buttons:
+		weapon_index = weapon_grid_buttons.size() + custom_weapon_buttons.find(button)
 	if weapon_index < 0 or weapon_index >= Global.WEAPONS_UNLOCKED.size() or not Global.WEAPONS_UNLOCKED[weapon_index]:
 		weapon_menu_name.text = "???"
 		weapon_menu_description.text = ""
@@ -747,6 +808,13 @@ func _weapon_detail_button(button):
 		label.rect_scale.x = min(1.0, label.rect_size.x / max(1.0, label.get_font("font").get_string_size(label.text).x))
 
 func _weapon_stats(index):
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	var custom_definition = registry.definition_for(index) if registry != null else null
+	if custom_definition != null:
+		var launcher_ammo = ""
+		if custom_definition.launcher_magazine_size > 0:
+			launcher_ammo = "Ammo Secondary: %d/%d (%d total)" % [custom_definition.launcher_magazine_size, custom_definition.launcher_starting_reserve, custom_definition.launcher_maximum_total]
+		return ["Type: " + custom_definition.weapon_type, "Ammo: %d/%d (%d total)" % [custom_definition.magazine_size, custom_definition.starting_reserve, custom_definition.maximum_total_rounds], launcher_ammo, "Ammunition: " + custom_definition.ammunition_name, "Damage: " + str(custom_definition.damage), "Weight: " + custom_definition.weight_name, "Armor Piercing: " + ("Yes" if custom_definition.armor_piercing else "No")]
 	var types = ["Pistol", "Submachine Gun", "Sedative Pistol", "Melee", "Shotgun", "Rocket Launcher", "Sniper Rifle", "Assault Rifle", "Submachine Gun", "Pistol", "Grenade Launcher", "Machine Gun", "Shotgun", "Rifle", "Special", "Carbine", "Special", "Utility", "Pistol", "Assault Rifle", "Rifle", "Rifle", "Special", "Melee", "Flamethrower", "Rifle", "Nail Gun", "Shotgun", "Special"]
 	var weight_names = ["Light", "Medium", "Heavy", "Very Heavy"]
 	var magazine = int(weapon_stat_source.magazine_ammo[index])
@@ -757,6 +825,7 @@ func _weapon_stats(index):
 	return [
 		"Type: " + types[index],
 		"Ammo: %d/%d (%d)" % [magazine, reserve, magazine + reserve],
+		"",
 		"Ammunition: " + (str(ammunition) if ammunition != null and str(ammunition).to_lower() != "null" else "None"),
 		"Damage: " + (str(damage) if damage != null else "N/A"),
 		"Weight: " + weight_names[clamp(weight, 0, weight_names.size() - 1)],
@@ -809,8 +878,8 @@ func _create_weapon_menu_panel():
 	weapon_menu_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	weapon_menu_panel.add_child(weapon_menu_portrait)
 	weapon_menu_name = _make_weapon_label("", Vector2(568, 266), Vector2(398, 50), 21, Color(0, 1, 0))
-	for stat_index in range(6):
-		var stat_label = _make_weapon_label("", Vector2(728, 108 + stat_index * 24), Vector2(238, 22), 14, Color.white)
+	for stat_index in range(7):
+		var stat_label = _make_weapon_label("", Vector2(728, 104 + stat_index * 22), Vector2(238, 21), 14, Color.white)
 		stat_label.autowrap = false
 		weapon_stat_labels.append(stat_label)
 	weapon_menu_description = _make_weapon_label("", Vector2(568, 320), Vector2(398, 190), 14, Color.white)
@@ -829,6 +898,8 @@ func _show_weapon_page():
 	var showing_weapons = weapon_page == 0 and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
 	for button in weapon_grid_buttons:
 		button.visible = showing_weapons
+	for button in custom_weapon_buttons:
+		button.visible = weapon_page == 1 and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
 	if weapon_page == 0:
 		_weapon_detail_button(_weapon_button_for_index(weapon_1 if current_weapon_select == 1 else weapon_2))
 	else:
@@ -1097,7 +1168,7 @@ func create_button(m:int, n:String, connection:String, b:int):
 	return new_button
 func _on_mouse_entered(m, button):
 	if m == WEAPON_SELECT:
-		if button in weapon_grid_buttons:
+		if button in weapon_grid_buttons or button in custom_weapon_buttons:
 			_weapon_detail_button(button)
 			hover_info.get_parent().hide()
 		return
@@ -1254,6 +1325,7 @@ func _on_weapon_equipped(button_id):
 	button_state()
 	_weapon_detail_button(button_id)
 	$Character_Menu / Character_Container / Equip.play()
+	Global.save_game()
 
 
 func _on_Rod_Pressed(m:int, button_id:TextureButton):
@@ -1759,7 +1831,9 @@ func button_state():
 			if Global.WEAPONS_UNLOCKED[button]:
 				weapon_button.name = weapon_button.get_meta("weapon_name")
 				weapon_button.hint_tooltip = weapon_button.get_meta("weapon_description")
-				weapon_button.texture_normal = BUTTON_TEXTURES[weapon_button.get_meta("menu_button_type")]
+				var registry = Global.get_node_or_null("WeaponRegistry")
+				var definition = registry.definition_for(button) if registry != null else null
+				weapon_button.texture_normal = weapon_button.get_meta("custom_icon") if definition != null and weapon_button.has_meta("custom_icon") else BUTTON_TEXTURES[weapon_button.get_meta("menu_button_type")]
 				weapon_button.texture_disabled = weapon_button.texture_normal
 				weapon_button.modulate = Color(0.55, 0.55, 0.55) if Global.CURRENT_WEAPONS[button] else Color.white
 				weapon_button.disabled = Global.CURRENT_WEAPONS[button]
@@ -2034,6 +2108,11 @@ func _on_Retry_Button_Pressed(m:int, b:TextureButton):
 		Multiplayer.Flow.restart_mission()
 
 func _on_Key_List_item_activated(index):
+	var list_index = index
+	if index == KEY_SHOOT + 1:
+		index = KEY_SECONDARY
+	elif index > KEY_SHOOT + 1:
+		index -= 1
 	wait_for_key = true
 	while wait_for_key:
 		$Key_Popup / PanelContainer.rect_size.x = 240
@@ -2044,64 +2123,67 @@ func _on_Key_List_item_activated(index):
 	match index:
 		KEY_LEFT:
 			set_inputs("movement_left")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Left: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Left: " + key_pressed.as_text())
 		KEY_RIGHT:
 			set_inputs("movement_right")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Right: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Right: " + key_pressed.as_text())
 		KEY_FORWARD:
 			set_inputs("movement_forward")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Forward: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Forward: " + key_pressed.as_text())
 		KEY_BACK:
 			set_inputs("movement_backward")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Back: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Back: " + key_pressed.as_text())
 		KEY_JUMP:
 			set_inputs("movement_jump")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Jump: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Jump: " + key_pressed.as_text())
 		KEY_SHOOT:
 			set_inputs("mouse_1")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Shoot: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot: " + key_pressed.as_text())
 		KEY_USE:
 			set_inputs("Use")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Use: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Use: " + key_pressed.as_text())
 		KEY_KICK:
 			set_inputs("kick")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Kick: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Kick: " + key_pressed.as_text())
 		KEY_RELOAD:
 			set_inputs("reload")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Reload: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Reload: " + key_pressed.as_text())
 		KEY_LEAN_LEFT:
 			set_inputs("Lean_Left")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Lean Left: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Lean Left: " + key_pressed.as_text())
 		KEY_LEAN_RIGHT:
 			set_inputs("Lean_Right")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Lean Right: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Lean Right: " + key_pressed.as_text())
 		KEY_ZOOM:
 			set_inputs("zoom")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Zoom: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Zoom: " + key_pressed.as_text())
 		KEY_WEAPON1:
 			set_inputs("weapon1")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Weapon 1: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Weapon 1: " + key_pressed.as_text())
 		KEY_WEAPON2:
 			set_inputs("weapon2")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Weapon 2: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Weapon 2: " + key_pressed.as_text())
 		KEY_LAST_WEAPON:
 			set_inputs("switch_weapon")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Last Weapon: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Last Weapon: " + key_pressed.as_text())
 		KEY_CROUCH:
 			set_inputs("crouch")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Crouch: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Crouch: " + key_pressed.as_text())
 		KEY_TERTIARY:
 			set_inputs("Tertiary_Weapon")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Tertiary Weapon: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Tertiary Weapon: " + key_pressed.as_text())
 		KEY_THROW_WEAPON:
 			set_inputs("drop")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Throw Weapon: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Throw Weapon: " + key_pressed.as_text())
 		KEY_SUICIDE:
 			set_inputs("Suicide")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Suicide: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Suicide: " + key_pressed.as_text())
 		KEY_STOCKS:
 			set_inputs("Stocks")
-			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(index, "Stock Market: " + key_pressed.as_text())
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Stock Market: " + key_pressed.as_text())
+		KEY_SECONDARY:
+			set_inputs("Shoot_Secondary")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot Secondary: " + key_pressed.as_text())
 func set_inputs(action):
 	InputMap.action_erase_events(action)
 	InputMap.action_add_event(action, key_pressed)

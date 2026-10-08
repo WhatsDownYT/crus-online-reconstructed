@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle.mesh" type="ArrayMesh" id=1]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Material.tres" type="Material" id=2]
+
+[node name="F2500World" type="MeshInstance"]
+transform = Transform( -1.62921e-07, -1, 0, 1, -1.62921e-07, 0, 0, 0, 1, 0, 0, 0 )
+material_override = ExtResource( 2 )
+mesh = ExtResource( 1 )
+

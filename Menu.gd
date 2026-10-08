@@ -12,6 +12,7 @@ func _ready():
 
 func hide_menu(type = null):
 	hide()
+	set_process_input(true)
 	get_parent().Hint.hide()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	
@@ -25,6 +26,7 @@ func show_menu(type = null):
 		return
 	_layout_menu()
 	show()
+	set_process_input(true)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	
 	Global.player.set_process(true)
@@ -33,7 +35,11 @@ func show_menu(type = null):
 	Global.player.set_process_unhandled_key_input(false)
 
 func open_settings(_type = null):
-	hide_menu()
+	hide()
+	set_process_input(false)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Global.player.set_process_input(false)
+	Global.player.set_process_unhandled_key_input(false)
 	var game_menu = Global.menu
 	game_menu.online_pause_settings = true
 	game_menu.visible = true

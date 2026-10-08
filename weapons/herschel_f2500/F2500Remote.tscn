@@ -1,0 +1,29 @@
+[gd_scene load_steps=6 format=2]
+
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle.mesh" type="ArrayMesh" id=1]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Material.tres" type="Material" id=2]
+[ext_resource path="res://Entities/Particles/muzzleflash.tscn" type="PackedScene" id=3]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_fire.sample" type="AudioStream" id=4]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/launcher_fire.sample" type="AudioStream" id=5]
+
+[node name="F2500Remote" type="MeshInstance"]
+transform = Transform( -1.62921e-07, -1, 3.55271e-14, 1, -1.62921e-07, 0, 7.10543e-14, 7.10543e-14, 1, 0.00964653, -0.00763553, 0 )
+material_override = ExtResource( 2 )
+mesh = ExtResource( 1 )
+
+[node name="Muzzleflash" parent="." instance=ExtResource( 3 )]
+transform = Transform( -0.00524261, 0.0231084, -0.399298, 0.010111, 0.399212, 0.0229707, 0.399837, -0.00979212, -0.00581649, 0.00422111, 0.0242242, -0.325512 )
+
+[node name="FireSound" type="AudioStreamPlayer3D" parent="."]
+stream = ExtResource( 4 )
+unit_db = 7.0
+unit_size = 5.0
+pitch_scale = 1.45
+bus = "SFX"
+
+[node name="LauncherSound" type="AudioStreamPlayer3D" parent="."]
+stream = ExtResource( 5 )
+unit_db = 7.0
+unit_size = 5.0
+bus = "SFX"
+

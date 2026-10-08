@@ -152,6 +152,9 @@ remote func _create_drop_weapon(id, parentPath, recivedTransform, recivedVelocit
 
 puppet func _die_client(id):
 	if not dead:
+		var boneattachment = skeleton.get_node_or_null("Armature/Skeleton/BoneAttachment")
+		if boneattachment:
+			boneattachment.hide()
 		for particle in all_particles:
 			particle.queue_free()
 		body.set_dead()
@@ -178,6 +181,9 @@ puppet func _die_client(id):
 			glob.player.local_money += 10
 
 puppet func _hide_npc_client(id):
+	var boneattachment = skeleton.get_node_or_null("Armature/Skeleton/BoneAttachment")
+	if boneattachment:
+		boneattachment.hide()
 	body.set_dead()
 	dead = true
 	colliders.get_node("Head/CollisionShape").disabled = true
@@ -194,6 +200,9 @@ puppet func _hide_npc_client(id):
 
 puppet func respawn(id, host_objective = null):
 	call_deferred("_update_simulation")
+	var boneattachment = skeleton.get_node_or_null("Armature/Skeleton/BoneAttachment")
+	if boneattachment and is_instance_valid(weapon) and not weapon.disabled:
+		boneattachment.show()
 	if host_objective != null:
 		objective = host_objective
 		$Body/Objective_Indicator.visible = objective

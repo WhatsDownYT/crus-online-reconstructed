@@ -13,6 +13,7 @@ var arm_implant:Implant
 var empty_implant:Implant
 
 class Implant:
+	var custom_id:String = ""
 	var jammed = false
 	var head:bool = false
 	var torso:bool = false
@@ -72,6 +73,10 @@ class Implant:
 	var explanation:String = ""
 	var texture = load("res://Textures/Menu/Empty_Slot.png")
 	
+
+func create_custom_implant():
+	return Implant.new()
+
 
 func _load_mod_texture(path):
 	var image = Image.new()

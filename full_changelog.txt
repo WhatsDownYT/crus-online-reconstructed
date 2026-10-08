@@ -13,6 +13,7 @@ LOBBIES AND JOINING
 - Reworked the Online flow so hosting and joining remain on the Main Online tab instead of unexpectedly changing tabs. Choosing LAN or Steam opens the appropriate host settings, and host settings can continue being changed and synchronized while a lobby is already running.
 - Expanded host settings with progress saving, revive rules, friendly fire, shared difficulty, voice behavior, banned implants, tick rate, and death weapon drops. The lobby also has a player roster showing host, readiness, voice, and mute information.
 - Added client ready controls in level select. The Ready square occupies the same grid position as the host's Start square, and the host sees a compact Ready: #/# count beside the level-select Return square. Competitive matches cannot start with too few players, and Counter-Opps also requires opposing teams. When a match cannot start or a mission is unavailable for Counter-Opps, the reason is shown through the UI instead of silently blocking it. Start uses the ordinary disabled appearance whenever another menu locks the level-select grid.
+- Kept the Ready square anchored to Start's grid position when returning from a mission, and placed multiplayer pause Settings beside Stats. Opening Settings from pause keeps the cursor and player controls in their paused state until the player returns to the pause menu
 - Kept Return to Level Select and Return to Menu available to non-hosts during a mission. Clients can leave an active mission and wait in the lobby without ending it for everyone else, and competitive matches now handle the last other player leaving without trapping whoever remains.
 
 ONLINE MODES
@@ -48,6 +49,7 @@ REVIVES, DEATH, AND PLAYER INTERACTION
 
 PLAYER MOVEMENT, APPEARANCE, AND SOUNDS
 - Reworked remote movement around replaceable snapshots so an older position update cannot drag a player backward after a newer one arrives. Remote aim, crouching, gravity, sitting, flashlight use, weapons, death, grappling, and long-frame interpolation were all improved, while grapple rendering work was reduced.
+- Dead enemies now put away their hand-held weapon on non-host screens as well as on the host
 - Added collision bodies for remote players that follow crouching and death state. Knockback is synchronized, and remote players now reproduce more footsteps, jumps, pain, healing, armor, death, and explosion sounds. Footsteps use each remote player's own equipment state, so the Golem Exosystem sound is heard only from its wearer.
 - Player nickname and color changes can refresh while connected. Nameplates are centered more reliably, hidden beyond 12 world units, and use the game's normal compact drop shadow instead of the larger distant outline.
 - Fixed remote outfit UV mapping so text and patterns are not mirrored across the torso.
@@ -62,6 +64,9 @@ ENEMIES AND MISSION SYSTEMS
 - NPC animation handling is more tolerant of models that do not contain every expected animation name.
 
 COMBAT AND WEAPONS
+- Added a weapons catalog within CruS Online for new weapons with their own descriptions, ammunition settings, firing behavior, art, sounds, pickups, and map entities. The Herschel Firearms F2500 is the first self-contained example, with its weapon visuals and audio bundled in its own folder for the menu, first-person view, pickups, other players, and grenades. Its menu icon also serves as its large detail portrait. It is a 30-round assault rifle with an integrated optic and an impact grenade launcher that follows the rifle's aim and produces a lethal blast and damaging shrapnel. Shoot Secondary is a separate, rebindable control for custom weapons, set to middle mouse by default; the original tertiary control remains available for implants. The F2500 starts with 135 spare rifle rounds and three spare grenades, while the Load Bearing Vest raises those reserves to 180 rounds and four grenades. It can be collected from a custom mission pickup or carried by a Cult of Order SWAT variant
+- Weapons with secondary ammunition show the remaining secondary rounds as a row of small ammo icons above the ordinary ammo display. The F2500's secondary fire now creates its projectile through the multiplayer host so both host and clients can use the launcher, and its SWAT carrier visibly holds the F2500 model
+- Bullet casings and weapon impact marks are shared with other players during Online missions
 - Added a Friendly Fire host option while preserving self-damage and environmental damage. The same player-damage rules now apply consistently to direct hits, explosions, fire, radiation, grenades, missiles, vehicles, and thrown objects.
 - Chained damage effects preserve the real attacker's identity for kill attribution and team rules, and player-damage claims are validated against the sender and the action's actual source.
 - Grenade and missile damage remains authoritative while their visible effects are synchronized.
@@ -78,6 +83,7 @@ PHYSICS OBJECTS AND INTERACTIVE LEVEL ELEMENTS
 - Added synchronized cancer growth and destruction with limits on how much spread and damage processing can happen in one frame.
 
 ONLINE EQUIPMENT AND IMPLANTS
+- Added a custom implant API with namespaced definitions for the existing head, torso, arm, and leg slots. Custom implants appear in the equipment menu's Custom page, can be purchased or hidden until discovered in a mission, and persist by stable ID. Discoverable implants use placeable TrenchBroom map entities that grant the implant when collected, and require a matching source mission declaration so the implant and mission cannot be used independently. Modders can define supported stat modifiers and optional equip, unequip, per-frame, and input-use behavior, while equipped custom IDs are available in multiplayer implant state. A flat test mission pairs the example implant with an F2500-armed hostile
 - Added Online extension implants with their own inventory art and tooltips.
 - Military Camouflage+ makes a player fade with a regular Bayer dither starting at nine units and become hidden by twelve. Stealth Suit+ uses the shitman-style optical material with a half-transparent dithered appearance. Both effects apply to the full visible player model, including glasses.
 - First Aid Kit+ heals a nearby player for 50 health through interaction instead of healing the wearer.
@@ -177,10 +183,12 @@ VANILLA GAME FIXES
 - The level-entry visual effect can finish while paused, restores movement access when it ends, and clears itself when returning to the menu.
 - Opening cutscene music stays at its original speed even when the initial save already has Hope Eradicated.
 - The final cutscene actor is restored correctly when the opening is skipped while it is playing.
+- Opening cutscene civilians stay active around the scripted shooter instead of idling against the menu player, and the save-slot screen stops the cutscene's television static without removing it from the opening itself.
 
 ADDITIONAL INTERFACE AND SAVE FIXES
 - Replaced the two level-select weapon squares with one Weapons entry before Equipment and Implants. It opens a grid with the implant menu's background and frame, plus two live weapon previews side by side for choosing the loadout slot. The active preview has a thin green outline. Undiscovered weapons show untinted mystery art and plain ??? text, and the menu closes through Escape with the normal grid animation. The old weapon hover popups, cash balance, page header, and slot labels are gone.
 - Selecting a discovered weapon shows a larger portrait beside its type, ammo, ammunition, damage, weight, and armor piercing values. Its name and description sit directly below. Page arrows and category names appear only when custom weapons are actually available; the Cruelty Squad label is hidden when it is the only category.
+- Weapons with an alternate firing mode label their extra ammunition as Ammo Secondary. The rotating AMMO2 HUD symbol keeps its angle between updates instead of snapping back, and remote players use forward run and crouch movement animations while strafing sideways.
 - Equipment and Implants uses campaign-style arrows to switch between Original and Online implants. A Custom page appears only if it contains implants, and the Original page's arrow orientation is restored correctly after leaving and reopening the menu.
 - Moved the level-select grid down and placed Online, Goals, and Statistics above Weapons, Equipment and Implants, Stock Market, and Start.
 - Added dedicated Weapons, Goals, Statistics, and News portraits for their menu squares. The Online square shows a plain Return label while its panel is open.
@@ -190,6 +198,8 @@ ADDITIONAL INTERFACE AND SAVE FIXES
 - Campaign titles are hidden when clients cannot select missions in the Online level screen, and campaign page labels stay off the mission results screen.
 - Locked secret campaign stages keep their mystery portrait until they are actually unlocked.
 - Save-slot goal and Online Equipment counts match the in-game Statistics screen.
+- Each save slot remembers its selected primary and secondary weapons and all four equipped implants. The slot preview stacks implant icons on the left of the character and weapon icons on the right, and loading the slot restores the same loadout.
+- The rotating AMMO2 HUD icon no longer briefly snaps back when its surrounding ammo layout updates.
 - Statistics places Playtime below Money and above Kills and Deaths.
 - Goal cash rewards are labeled as deposited.
 - Goal evaluation waits until a save slot has actually been selected instead of awarding against an unselected or temporary state.

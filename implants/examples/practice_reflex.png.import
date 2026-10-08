@@ -1,0 +1,10 @@
+[remap]
+importer="texture"
+type="StreamTexture"
+path="res://MOD_CONTENT/CruS Online/implants/examples/practice_reflex.stex"
+
+[deps]
+source_file="res://MOD_CONTENT/CruS Online/implants/examples/practice_reflex.png"
+dest_files=[ "res://MOD_CONTENT/CruS Online/implants/examples/practice_reflex.stex" ]
+
+[params]

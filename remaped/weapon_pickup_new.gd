@@ -19,6 +19,25 @@ var applied_revision = -1
 func _valid_weapon(value):
 	return typeof(value) == TYPE_INT and value >= 0 and value < MESH.size()
 
+func ensure_custom_models():
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	if registry == null:
+		return
+	registry.finalize()
+	while MESH.size() < registry.VANILLA_COUNT + registry.indices.size():
+		var definition = registry.definition_for(MESH.size())
+		if definition == null:
+			break
+		var model = definition.world_model.instance() if definition.world_model != null else null
+		if model == null:
+			if definition.borrowed_model_index < 0 or definition.borrowed_model_index >= MESH.size():
+				break
+			model = MESH[definition.borrowed_model_index].duplicate()
+		model.name = "CustomWeapon_" + str(MESH.size())
+		add_child(model)
+		model.hide()
+		MESH.append(model)
+
 func syncUpdate(_id = null):
 	for mesh in MESH:
 		mesh.hide()
@@ -26,6 +45,7 @@ func syncUpdate(_id = null):
 		MESH[current_weapon].show()
 
 func _ready():
+	ensure_custom_models()
 	NetworkBridge.register_rpcs(self, [
 		["request_pickup", NetworkBridge.PERMISSION.ALL],
 		["request_state", NetworkBridge.PERMISSION.ALL],

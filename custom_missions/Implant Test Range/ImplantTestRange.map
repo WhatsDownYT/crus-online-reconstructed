@@ -1,0 +1,24 @@
+// Bare test range source for TrenchBroom. The shipped .tscn is the playable scene.
+{
+"classname" "worldspawn"
+{
+( -320 -320 0 ) ( -320 320 0 ) ( 320 320 0 ) base/non_slip_tile 0 0 0 1 1
+( -320 -320 -16 ) ( 320 -320 -16 ) ( 320 320 -16 ) base/non_slip_tile 0 0 0 1 1
+( -320 -320 -16 ) ( -320 320 -16 ) ( -320 320 0 ) base/non_slip_tile 0 0 0 1 1
+( 320 -320 -16 ) ( 320 -320 0 ) ( 320 320 0 ) base/non_slip_tile 0 0 0 1 1
+( -320 -320 -16 ) ( -320 -320 0 ) ( 320 -320 0 ) base/non_slip_tile 0 0 0 1 1
+( -320 320 -16 ) ( 320 320 -16 ) ( 320 320 0 ) base/non_slip_tile 0 0 0 1 1
+}
+}
+{
+"classname" "Player"
+"origin" "-112 0 24"
+}
+{
+"classname" "Practice_Reflex_Implant"
+"origin" "0 -32 16"
+}
+{
+"classname" "Herschel_F2500_SWAT"
+"origin" "128 0 16"
+}

@@ -143,6 +143,22 @@ func _ready():
 	])
 	
 	weaponsMesh = $Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons.get_children()
+	var custom_registry = Global.get_node_or_null("WeaponRegistry")
+	if custom_registry != null:
+		custom_registry.finalize()
+		while weaponsMesh.size() < custom_registry.VANILLA_COUNT + custom_registry.indices.size():
+			var definition = custom_registry.definition_for(weaponsMesh.size())
+			if definition == null:
+				break
+			var model = definition.remote_model.instance() if definition.remote_model != null else null
+			if model == null:
+				if definition.borrowed_model_index < 0 or definition.borrowed_model_index >= weaponsMesh.size():
+					break
+				model = weaponsMesh[definition.borrowed_model_index].duplicate()
+			model.name = "CustomWeapon_" + str(weaponsMesh.size())
+			$Puppet/PlayerModel/Armature/Skeleton/RightHand/Weapons.add_child(model)
+			model.hide()
+			weaponsMesh.append(model)
 	var skinMaterial = SpatialMaterial.new()
 	skinMaterial.albedo_texture = load(skinPath)
 	_apply_outfit_mesh()
@@ -253,8 +269,11 @@ func _process(delta):
 	playerAimBlend = lerp(playerAimBlend,playerAim,0.1)
 	
 	animTree.set("parameters/LEGS_BLEND/blend_amount", clamp(jumpBlend - sit_blend, -1, 1))
-	animTree.set("parameters/STANDMOVE_AMOUNT/blend_amount", movementBlend[0] * -1)
-	animTree.set("parameters/CROUCHMOVE_AMOUNT/blend_amount", movementBlend[0] * -1)
+	var movement_amount = movementBlend[0] * -1
+	if abs(movementBlend[0]) < 0.05 and abs(movementBlend[1]) > 0.05:
+		movement_amount = abs(movementBlend[1])
+	animTree.set("parameters/STANDMOVE_AMOUNT/blend_amount", movement_amount)
+	animTree.set("parameters/CROUCHMOVE_AMOUNT/blend_amount", movement_amount)
 	animTree.set("parameters/RUN_FORWARD_DIRECTION/blend_amount", movementBlend[1])
 	animTree.set("parameters/RUN_BACKWARD_DIRECTION/blend_amount", movementBlend[1] * -1)
 	animTree.set("parameters/MOVE_BLEND/blend_amount",crouchBlend)

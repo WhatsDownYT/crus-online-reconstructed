@@ -58,6 +58,9 @@ func _ready():
 	$TextureRect / Torso_Button.connect("mouse_entered", self, "_slot_button_entered", [TORSO])
 	hover_info = get_parent().get_parent().get_node("Hover_Panel/Hover_Info")
 	IMPLANTS = Global.implants.IMPLANTS
+	var implant_registry = Global.get_node_or_null("ImplantRegistry")
+	if implant_registry != null:
+		implant_registry.connect("catalog_changed", self, "_on_custom_implants_changed")
 	for b in range(GRID_SIZE):
 		var new_button = TextureButton.new()
 		$Equip_Grid.add_child(new_button)
@@ -80,6 +83,8 @@ func _ready():
 	_populate_page(current_page)
 
 func _implant_page(index):
+	if not IMPLANTS[index].custom_id.empty():
+		return 2
 	if ONLINE_IMPLANTS.has(IMPLANTS[index].i_name):
 		return 1
 	if index < ORIGINAL_IMPLANT_COUNT:
@@ -89,15 +94,27 @@ func _implant_page(index):
 func _page_implant_indices(page):
 	var indices = []
 	for i in range(IMPLANTS.size()):
-		if _implant_page(i) == page:
+		if _implant_page(i) == page or page >= 2 and _implant_page(i) == 2:
 			indices.append(i)
+	if page >= 2:
+		var start = (page - 2) * PAGE_SLOT_COUNT
+		if start >= indices.size():
+			return []
+		return indices.slice(start, min(start + PAGE_SLOT_COUNT, indices.size()) - 1)
 	return indices
 
 func _available_pages():
 	var pages = [0, 1]
-	if not _page_implant_indices(2).empty():
-		pages.append(2)
+	var custom_count = 0
+	for i in range(IMPLANTS.size()):
+		if _implant_page(i) == 2:
+			custom_count += 1
+	for custom_page in range(int(ceil(float(custom_count) / float(PAGE_SLOT_COUNT)))):
+		pages.append(custom_page + 2)
 	return pages
+
+func _page_name(page):
+	return PAGE_NAMES[page] if page < PAGE_NAMES.size() else "Custom " + str(page - 1)
 
 func _navigation_destination(slot):
 	var pages = _available_pages()
@@ -135,8 +152,8 @@ func _set_navigation_buttons():
 	var next_page = _navigation_destination(NEXT_NAVIGATION_SLOT)
 	button_implant_indices[PREV_NAVIGATION_SLOT] = -1
 	button_implant_indices[NEXT_NAVIGATION_SLOT] = -1
-	prev_navigation_button.name = PAGE_NAMES[previous_page]
-	next_navigation_button.name = PAGE_NAMES[next_page]
+	prev_navigation_button.name = _page_name(previous_page)
+	next_navigation_button.name = _page_name(next_page)
 	prev_navigation_button.texture_normal = menu_prev_texture
 	prev_navigation_button.texture_disabled = menu_prev_texture
 	next_navigation_button.texture_normal = menu_next_texture
@@ -157,6 +174,17 @@ func _find_implant_by_name(implant_name):
 			return implant
 	return null
 
+func _purchase_key(implant):
+	return implant.custom_id if not implant.custom_id.empty() else implant.i_name
+
+func _owns_implant(implant):
+	return Global.implants.purchased_implants.has(_purchase_key(implant))
+
+func _on_custom_implants_changed():
+	if is_instance_valid(hover_info):
+		_populate_page(current_page)
+		update_buttons()
+
 func _extension_base_is_discovered(implant):
 	var base_name = _extension_base_name(implant)
 	if base_name == "":
@@ -171,7 +199,7 @@ func _extension_base_is_owned(implant):
 	return base_name == "" or Global.implants.purchased_implants.find(base_name) != -1
 
 func _implant_is_undiscovered(implant):
-	if implant.hidden and Global.implants.purchased_implants.find(implant.i_name) == -1:
+	if implant.hidden and not _owns_implant(implant):
 		return true
 	return not _extension_base_is_discovered(implant)
 
@@ -189,7 +217,7 @@ func _set_implant_button(slot, implant_index):
 		button.texture_normal = MYSTERY_TEXTURE
 		button.texture_disabled = MYSTERY_TEXTURE
 		button.modulate = Color(1, 0, 0)
-	elif not _extension_base_is_owned(implant) or Global.implants.purchased_implants.find(implant.i_name) == -1:
+	elif not _extension_base_is_owned(implant) or not _owns_implant(implant):
 		button.modulate = Color(1, 0, 0)
 	if _implant_is_equipped(implant) and _extension_base_is_owned(implant):
 		button.modulate = Color(0.5, 0.5, 0.5)
@@ -261,6 +289,7 @@ func clear_equips():
 	$TextureRect / Leg_Button.texture_normal = EMPTY_TEXTURE
 	$TextureRect / Arm_Button.texture_normal = EMPTY_TEXTURE
 	update_buttons()
+	Global.save_game()
 
 func _slot_button_pressed(type):
 	match type:
@@ -290,6 +319,7 @@ func _slot_button_pressed(type):
 			Global.implants.arm_implant = Global.implants.empty_implant
 			$TextureRect / Arm_Button.texture_normal = EMPTY_TEXTURE
 	update_buttons()
+	Global.save_game()
 
 func _slot_button_entered(type):
 	var implant = null
@@ -325,7 +355,7 @@ func _show_navigation_info(slot):
 	hover_info.get_node("Name").show()
 	hover_info.get_parent().raise()
 	var destination = _navigation_destination(slot)
-	hover_info.get_node("Name").text = PAGE_NAMES[destination]
+	hover_info.get_node("Name").text = _page_name(destination)
 	hover_info.get_node("Hint").text = ""
 	hover_info.get_node("Hint").hide()
 	hover_info.get_parent().rect_size = Vector2.ZERO
@@ -365,7 +395,7 @@ func _show_implant_info(i):
 		hover_info.get_node("Hint").text += "Slot: Legs\n"
 	if IMPLANTS[i].arms:
 		hover_info.get_node("Hint").text += "Slot: Arms\n"
-	if Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == -1:
+	if not _owns_implant(IMPLANTS[i]):
 		hover_info.get_node("Hint").text += "$" + str(IMPLANTS[i].price) + "\n"
 	hover_info.get_node("Hint").show()
 	hover_info.get_node("Hint").text += infotext + "\n"
@@ -435,7 +465,7 @@ func _on_implant_pressed(slot):
 		confirmed = false
 		cancel = false
 		return
-	if Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == -1:
+	if not _owns_implant(IMPLANTS[i]):
 		cancel = false
 		if Global.money >= IMPLANTS[i].price:
 			$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
@@ -455,7 +485,7 @@ func _on_implant_pressed(slot):
 			if IMPLANTS[i].i_name == "House":
 				Global.BONUS_UNLOCK.append("House")
 			$TextureRect / Money.text = str("$", Global.money)
-			Global.implants.purchased_implants.append(IMPLANTS[i].i_name)
+			Global.implants.purchased_implants.append(_purchase_key(IMPLANTS[i]))
 			Global.save_game()
 			update_buttons()
 		return
@@ -481,6 +511,7 @@ func _on_implant_pressed(slot):
 		Global.implants.arm_implant = IMPLANTS[i]
 		$TextureRect / Arm_Button.texture_normal = IMPLANTS[i].texture
 	update_buttons()
+	Global.save_game()
 
 func _process(delta):
 	if Input.is_action_just_pressed("ui_cancel"):

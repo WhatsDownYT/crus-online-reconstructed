@@ -219,6 +219,8 @@ func _all_purchasable_implants_owned():
 	for implant in Global.implants.IMPLANTS:
 		if implant == null:
 			continue
+		if not implant.custom_id.empty():
+			continue
 		var implant_name = str(implant.i_name)
 		if implant_name in ["N/A", "House"] or ONLINE_IMPLANTS.has(implant_name):
 			continue

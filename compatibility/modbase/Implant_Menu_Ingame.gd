@@ -11,6 +11,10 @@ var prev_footstep = null
 var orbarms: PackedScene
 var orig_env = {}
 
+func _purchase_key(index):
+	var implant = IMPLANTS[index]
+	return implant.custom_id if not implant.custom_id.empty() else implant.i_name
+
 func update_implant_slots():
 	if _online_blocked():
 		return
@@ -202,7 +206,7 @@ func _ready():
 		if b < IMPLANTS.size():
 			new_button.name = IMPLANTS[b].i_name
 			new_button.texture_normal = IMPLANTS[b].texture
-			if !debug and Global.implants.purchased_implants.find(IMPLANTS[b].i_name) == - 1:
+			if !debug and Global.implants.purchased_implants.find(_purchase_key(b)) == - 1:
 				new_button.modulate = Color(1, 0, 0)
 				if IMPLANTS[b].hidden:
 					new_button.modulate = Color(1, 1, 1)
@@ -286,19 +290,19 @@ func _slot_button_entered(type):
 func update_buttons():
 	if _online_blocked():
 		return
-	for i in range(IMPLANTS.size()):
-		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(IMPLANTS[i].i_name) != - 1:
+	for i in range(min(IMPLANTS.size(), EQUIPMENT_BUTTONS.size())):
+		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(_purchase_key(i)) != - 1:
 			EQUIPMENT_BUTTONS[i].texture_normal = IMPLANTS[i].texture
-		elif Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == - 1:
+		elif Global.implants.purchased_implants.find(_purchase_key(i)) == - 1:
 			EQUIPMENT_BUTTONS[i].modulate = Color(1, 0, 0)
-		if Global.implants.purchased_implants.find(IMPLANTS[i].i_name) != - 1 and EQUIPMENT_BUTTONS[i].modulate != Color(0.5, 0.5, 0.5):
+		if Global.implants.purchased_implants.find(_purchase_key(i)) != - 1 and EQUIPMENT_BUTTONS[i].modulate != Color(0.5, 0.5, 0.5):
 			EQUIPMENT_BUTTONS[i].modulate = Color(1, 1, 1)
 
 func _on_mouse_entered(i):
 	if _online_blocked():
 		return
 	if i < IMPLANTS.size():
-		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == - 1:
+		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(_purchase_key(i)) == - 1:
 			hover_info.get_node("Image").show()
 			hover_info.get_parent().raise()
 			hover_info.get_node("Name").text = "???"
@@ -320,7 +324,7 @@ func _on_mouse_entered(i):
 			hover_info.get_node("Hint").text += "Slot: Legs\n"
 		if IMPLANTS[i].arms:
 			hover_info.get_node("Hint").text += "Slot: Arms\n"
-		if !debug and Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == - 1:
+		if !debug and Global.implants.purchased_implants.find(_purchase_key(i)) == - 1:
 			hover_info.get_node("Hint").text += "$" + str(IMPLANTS[i].price) + "\n"
 		hover_info.get_node("Hint").show()
 		hover_info.get_node("Hint").text += infotext + "\n"
@@ -342,9 +346,9 @@ func _on_implant_pressed(i):
 	if _online_blocked():
 		return
 	if i < IMPLANTS.size():
-		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == - 1:
+		if !debug and IMPLANTS[i].hidden and Global.implants.purchased_implants.find(_purchase_key(i)) == - 1:
 			return
-		if !debug and Global.implants.purchased_implants.find(IMPLANTS[i].i_name) == - 1:
+		if !debug and Global.implants.purchased_implants.find(_purchase_key(i)) == - 1:
 			cancel = false
 			if Global.money >= IMPLANTS[i].price:
 				$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
@@ -365,7 +369,7 @@ func _on_implant_pressed(i):
 					Global.BONUS_UNLOCK.append("House")
 				EQUIPMENT_BUTTONS[i].modulate = Color(1, 1, 1)
 				$TextureRect / Money.text = str("$", Global.money)
-				Global.implants.purchased_implants.append(IMPLANTS[i].i_name)
+				Global.implants.purchased_implants.append(_purchase_key(i))
 				Global.save_game()
 			return
 

@@ -60,9 +60,12 @@ onready var Multiplayer = Global.get_node("Multiplayer")
 
 
 func get_near_player() -> Dictionary:
-	# Cutscene1 uses a scripted actor rather than a multiplayer player node.
-	if is_instance_valid(Global.current_scene) and Global.current_scene.filename == "res://Cutscenes/Cutscene1.tscn" and is_instance_valid(Global.player):
-		return {"player": Global.player, "distance": global_transform.origin.distance_to(Global.player.global_transform.origin)}
+	# The opening's civilians share a street with the scripted shooter. The
+	# regular player is outside that set, so using it can idle the whole crowd.
+	if is_instance_valid(Global.current_scene) and Global.current_scene.filename == "res://Cutscenes/Cutscene1.tscn":
+		var shooter = Global.current_scene.get_node_or_null("Activator/Office_MG/Body")
+		if is_instance_valid(shooter):
+			return {"player": shooter, "distance": global_transform.origin.distance_to(shooter.global_transform.origin)}
 	var oldDistance = INF
 	var player = null
 	

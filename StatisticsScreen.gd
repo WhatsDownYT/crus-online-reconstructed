@@ -775,6 +775,8 @@ func _equipment_progress(online):
 	for implant in Global.implants.IMPLANTS:
 		if implant == null:
 			continue
+		if not implant.custom_id.empty():
+			continue
 		var implant_name = str(implant.i_name)
 		var is_online = ONLINE_IMPLANTS.has(implant_name)
 		if online:

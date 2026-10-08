@@ -6,6 +6,14 @@ func _init():
 		for pack in loader.get_node("CruS Online").packs:
 			ProjectSettings.load_resource_pack(pack)
 	ProjectSettings.set_setting("debug/gdscript/warnings/enable", true)
+	var weapon_registry = preload("res://MOD_CONTENT/CruS Online/WeaponRegistry.gd").new()
+	weapon_registry.name = "WeaponRegistry"
+	Global.add_child(weapon_registry)
+	weapon_registry.load_bundled_weapons()
+	var implant_registry = preload("res://MOD_CONTENT/CruS Online/ImplantRegistry.gd").new()
+	implant_registry.name = "ImplantRegistry"
+	Global.add_child(implant_registry)
+	implant_registry.load_bundled_implants()
 	
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/multiplayer.tscn").instance())
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/death_screen.tscn").instance())

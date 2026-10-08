@@ -1,0 +1,19 @@
+{
+  "name": "Implant Test Range",
+  "author": "PurgaTeam",
+  "version": "1.0.0",
+  "description": "A flat test range for the Practice Reflex implant and Herschel Firearms F2500",
+  "objectives": ["Inspect the implant pickup", "Fight the F2500-armed SWAT officer"],
+  "level_scene": "ImplantTestRange.tscn",
+  "required_implants": ["example:practice_reflex"],
+  "required_weapons": ["herschel:f2500"],
+  "dialogue": [""],
+  "reward": 0,
+  "fish": ["FISH", "DEAD"],
+  "ranks": {
+    "normal": [0, 0, 0],
+    "normal_stock_s": 0,
+    "hell": [0, 0, 0],
+    "hell_stock_s": 0
+  }
+}

@@ -52,6 +52,10 @@ func _show_save_selector():
 	if save_selector_active:
 		return
 	save_selector_active = true
+	for static_node_name in ["AudioStreamPlayer3D", "AudioStreamPlayer3D2"]:
+		var static_player = get_node_or_null(static_node_name)
+		if static_player != null:
+			static_player.stop()
 	current_scene = LINES.size()
 	TIMER.stop()
 	SUBTITLE.hide()

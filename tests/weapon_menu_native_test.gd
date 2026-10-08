@@ -41,25 +41,21 @@ func run():
 	check(game_menu.weapon_menu_panel.get_index() > level_menu.get_index() and game_menu.menu[game_menu.WEAPON_SELECT].get_index() > game_menu.weapon_menu_panel.get_index(), "weapon background covers level squares")
 	check(game_menu.menu[game_menu.WEAPON_SELECT].get_child_count() == Global.WEAPONS_UNLOCKED.size() + 4, "two slots, all weapons, and two page arrows present")
 	check(game_menu.weapon_page_buttons[0].rect_position == Vector2(160, 576) and game_menu.weapon_page_buttons[1].rect_position == Vector2(544, 576), "page arrows sit beneath the weapon grid")
-	check(not game_menu.weapon_page_buttons[0].visible and not game_menu.weapon_page_buttons[1].visible, "page arrows stay hidden without custom weapons")
+	check(game_menu.weapon_page_buttons[0].visible and game_menu.weapon_page_buttons[1].visible, "page arrows show for the integrated F2500")
 	check(game_menu.weapon_page_label.text == "Cruelty Squad", "base weapon page is labeled Cruelty Squad")
-	check(not game_menu.weapon_page_label.visible, "sole weapon page title stays hidden")
-	game_menu.custom_weapon_buttons.append(1)
-	game_menu._show_weapon_page()
-	check(game_menu.weapon_page_label.visible and game_menu.weapon_page_label.text == "Cruelty Squad", "base weapon title appears when another page exists")
-	game_menu.custom_weapon_buttons.clear()
-	game_menu._show_weapon_page()
+	check(game_menu.weapon_page_label.visible, "weapon page title shows with another page")
 	check(game_menu.weapon_menu_portrait.rect_size == Vector2(152, 152) and game_menu.weapon_menu_description.rect_position.y == game_menu.weapon_menu_name.rect_position.y + game_menu.weapon_menu_name.rect_size.y + 4, "weapon portrait and description use the tighter layout")
 	var x20_stats = game_menu._weapon_stats(game_menu.W_AR)
-	check(x20_stats[0] == "Type: Assault Rifle" and x20_stats[1] == "Ammo: 45/90 (135)" and x20_stats[3] == "Damage: 20" and x20_stats[4] == "Weight: Medium" and x20_stats[5] == "Armor Piercing: No", "K&H X20 stats match weapon data")
-	check(x20_stats[2].begins_with("Ammunition: 4.73") and x20_stats[2].ends_with("33mm Caseless"), "K&H X20 uses correct caseless ammunition")
+	check(x20_stats[0] == "Type: Assault Rifle" and x20_stats[1] == "Ammo: 45/90 (135)" and x20_stats[4] == "Damage: 20" and x20_stats[5] == "Weight: Medium" and x20_stats[6] == "Armor Piercing: No", "K&H X20 stats match weapon data")
+	check(x20_stats[3].begins_with("Ammunition: 4.73") and x20_stats[3].ends_with("33mm Caseless"), "K&H X20 uses correct caseless ammunition")
 	var all_stats_present = true
-	for weapon_index in range(Global.WEAPONS_UNLOCKED.size()):
-		if game_menu._weapon_stats(weapon_index).size() != 6:
+	for weapon_index in range(29):
+		if game_menu._weapon_stats(weapon_index).size() != 7:
 			all_stats_present = false
-	check(all_stats_present, "every base weapon has six stat fields")
+	check(all_stats_present, "every base weapon has its six stats and an optional launcher row")
 	game_menu._on_Weapon_Next_Page_Pressed(game_menu.WEAPON_SELECT, game_menu.weapon_page_buttons[1])
-	check(game_menu.weapon_page_label.text == "Cruelty Squad" and game_menu.weapon_grid_buttons[0].visible, "empty Custom page cannot be selected")
+	check(game_menu.weapon_page_label.text == "Custom" and game_menu.custom_weapon_buttons[0].visible, "integrated F2500 appears on Custom page")
+	game_menu._on_Weapon_Prev_Page_Pressed(game_menu.WEAPON_SELECT, game_menu.weapon_page_buttons[0])
 	check(game_menu._weapon_button_for_index(game_menu.W_ROD).texture_normal == game_menu.MYSTERY or Global.WEAPONS_UNLOCKED[game_menu.W_ROD], "locked weapon uses mystery portrait")
 	if not Global.WEAPONS_UNLOCKED[game_menu.W_ROD]:
 		var locked_weapon = game_menu._weapon_button_for_index(game_menu.W_ROD)

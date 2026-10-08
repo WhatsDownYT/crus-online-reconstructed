@@ -51,6 +51,8 @@ var preview_light
 var preview_rain = false
 var preview_time = 0.0
 var body_values = {}
+var implant_icons = {}
+var weapon_icons = []
 var tooltip_panel
 var buttons = []
 var hover_slot = 0
@@ -213,6 +215,57 @@ func _build_preview():
 	var indicator = avatar.get_node_or_null("Armature/Skeleton/Head/PlayerIndicator")
 	if indicator != null:
 		indicator.visible = false
+	for index in range(4):
+		var slot = ["head", "torso", "arm", "leg"][index]
+		var icon = _loadout_icon(portrait, Vector2(12, 126 + index * 55), Vector2(46, 46))
+		implant_icons[slot] = icon
+	for index in range(2):
+		var position = Vector2(247, 126 + index * 70)
+		var icon = _loadout_icon(portrait, position, Vector2(60, 60))
+		weapon_icons.append(icon)
+
+func _loadout_icon(parent, position, size):
+	var backing = ColorRect.new()
+	backing.rect_position = position + Vector2(2, 2)
+	backing.rect_size = size
+	backing.color = Color(0, 0.6, 0, 0.85)
+	backing.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(backing)
+	var icon = TextureRect.new()
+	icon.rect_position = position
+	icon.rect_size = size
+	icon.expand = true
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(icon)
+	return icon
+
+func _update_loadout_preview(campaign):
+	var equipped = campaign.get("equipped_implants", {})
+	if not equipped is Dictionary:
+		equipped = {}
+	var empty_texture = load("res://Textures/Menu/Empty_Slot.png")
+	for slot in implant_icons:
+		var key = str(equipped.get(slot, ""))
+		var texture = empty_texture
+		for implant in Global.implants.IMPLANTS:
+			if implant != null and not key.empty() and (implant.custom_id == key or implant.i_name == key):
+				texture = implant.texture
+				break
+		implant_icons[slot].texture = texture
+	var weapons = campaign.get("selected_weapons", [0, 1])
+	if not weapons is Array or weapons.size() != 2:
+		weapons = [0, 1]
+	for index in range(2):
+		var weapon_index = -1
+		if weapons[index] is String:
+			var registry = Global.get_node_or_null("WeaponRegistry")
+			if registry != null:
+				weapon_index = registry.index_for(weapons[index])
+		elif weapons[index] is int or weapons[index] is float:
+			weapon_index = int(weapons[index])
+		var button = Global.menu._weapon_button_for_index(weapon_index)
+		weapon_icons[index].texture = button.texture_normal if button != null else empty_texture
 
 func _build_buttons():
 	var grid = GridContainer.new()
@@ -291,6 +344,7 @@ func _show_slot(slot):
 	body_values["matrix"].add_color_override("font_color", Color(1, 0, 1) if bool(campaign.get("death", false)) else Color(0, 1, 0))
 	body_values["outfit"].text = OUTFITS.get(outfit, outfit.get_file().get_basename())
 	_apply_outfit(outfit)
+	_update_loadout_preview(campaign)
 	var earned = goals.get("unlocked", [])
 	if not earned is Array:
 		earned = []
@@ -316,6 +370,8 @@ func _show_slot(slot):
 	var equipment_owned = 0
 	for item in Global.implants.IMPLANTS:
 		if item == null or str(item.i_name) in ["N/A", "House"]:
+			continue
+		if not item.custom_id.empty():
 			continue
 		if ONLINE_IMPLANTS.has(str(item.i_name)):
 			online_equipment_total += 1
@@ -477,6 +533,8 @@ func _equipment_fraction(campaign):
 	var total = 0
 	for implant in Global.implants.IMPLANTS:
 		if implant == null:
+			continue
+		if not implant.custom_id.empty():
 			continue
 		var implant_name = str(implant.i_name)
 		if implant_name in ["N/A", "House"] or ONLINE_IMPLANTS.has(implant_name):

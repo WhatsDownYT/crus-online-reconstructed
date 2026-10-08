@@ -183,6 +183,10 @@ func _ready():
 		["apply_team_wipe", SteamNetwork.PERMISSION.SERVER],
 		["reward_npc_kill", SteamNetwork.PERMISSION.SERVER],
 		["spawn_enemy_weapon", SteamNetwork.PERMISSION.SERVER],
+		["request_f2500_grenade", SteamNetwork.PERMISSION.ALL],
+		["spawn_f2500_grenade", SteamNetwork.PERMISSION.SERVER],
+		["request_weapon_fx", SteamNetwork.PERMISSION.ALL],
+		["show_weapon_fx", SteamNetwork.PERMISSION.SERVER],
 		["report_death_weapons", SteamNetwork.PERMISSION.ALL],
 		["_player_respawn", SteamNetwork.PERMISSION.ALL],
 		["_request_player_revive", SteamNetwork.PERMISSION.ALL],
@@ -1256,6 +1260,78 @@ puppet func spawn_enemy_weapon(id, parent_path, position, velocity, weapon_id, a
 	drop.velocity = velocity
 	drop.gun.MESH[weapon_id].show()
 	drop.playerIgnoreId = id
+
+remote func request_f2500_grenade(id, origin:Vector3, velocity:Vector3):
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	if not players.has(id) or velocity.length() < 20.0 or velocity.length() > 80.0:
+		return
+	var actor = NetworkBridge.get_peer_actor(id)
+	if not is_instance_valid(actor) or actor.global_transform.origin.distance_to(origin) > 8.0:
+		return
+	var name = "F2500Grenade_%s_%s" % [id, OS.get_ticks_msec()]
+	_spawn_f2500_grenade(origin, velocity, name, id)
+	NetworkBridge.n_rpc(self, "spawn_f2500_grenade", [origin, velocity, name, id])
+
+puppet func spawn_f2500_grenade(_sender, origin:Vector3, velocity:Vector3, name:String, owner:int):
+	if NetworkBridge.is_world_authority():
+		return
+	_spawn_f2500_grenade(origin, velocity, name, owner)
+
+func _spawn_f2500_grenade(origin:Vector3, velocity:Vector3, name:String, owner:int):
+	if not is_instance_valid(Global.player) or not is_instance_valid(Global.player.weapon):
+		return
+	var destination = Global.player.weapon.get_parent().get_parent().get_parent()
+	if destination.has_node(NodePath(name)):
+		return
+	var projectile = preload("res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Grenade.tscn").instance()
+	projectile.name = name
+	projectile.set_meta("crus_damage_source", owner)
+	destination.add_child(projectile)
+	projectile.global_transform.origin = origin
+	projectile.velocity = velocity
+
+remote func request_weapon_fx(id, kind:String, weapon_index:int, position:Vector3, direction:Vector3, count:int):
+	if not NetworkBridge.is_world_authority():
+		return
+	id = NetworkBridge.request_sender(id)
+	if not players.has(id) or not kind in ["shell", "decal", "flechette"] or count < 1 or count > 5:
+		return
+	_show_weapon_fx(kind, weapon_index, position, direction, count)
+	NetworkBridge.n_rpc(self, "show_weapon_fx", [id, kind, weapon_index, position, direction, count])
+
+puppet func show_weapon_fx(_sender, origin_id:int, kind:String, weapon_index:int, position:Vector3, direction:Vector3, count:int):
+	if origin_id == NetworkBridge.get_id() or NetworkBridge.is_world_authority():
+		return
+	_show_weapon_fx(kind, weapon_index, position, direction, count)
+
+func _show_weapon_fx(kind:String, weapon_index:int, position:Vector3, direction:Vector3, count:int):
+	if not is_instance_valid(Global.current_scene) or not is_instance_valid(Global.player) or not is_instance_valid(Global.player.weapon):
+		return
+	var gun = Global.player.weapon
+	if kind == "shell":
+		if weapon_index < 0 or weapon_index >= gun.SHELLS.size() or gun.SHELLS[weapon_index] == null:
+			return
+		for _i in range(count):
+			var shell = gun.SHELLS[weapon_index].instance()
+			shell.isClientOnly = true
+			Global.current_scene.add_child(shell)
+			shell.global_transform.origin = position
+			shell.damage(10.0, direction + Vector3(rand_range(0, 0.1), rand_range(0, 0.1), rand_range(0, 0.1)), position, Vector3.ZERO)
+	elif kind in ["decal", "flechette"]:
+		if weapon_index < 0 or weapon_index >= gun.DECALS.size() or gun.DECALS[weapon_index] == null:
+			return
+		var decal = gun.DECALS[weapon_index].instance()
+		Global.current_scene.add_child(decal)
+		if kind == "flechette":
+			decal.global_transform.origin = position
+			decal.look_at(direction, Vector3.UP)
+			if weapon_index == gun.W_SNIPER:
+				decal.scale = Vector3(3, 3, 3)
+		else:
+			decal.global_transform.basis = gun.align_up(decal.global_transform.basis, direction.normalized())
+			decal.global_transform.origin = position + direction.normalized() * 0.00001
 
 puppet func sync_player_life(id, peer_id, is_dead):
 	if typeof(peer_id) != TYPE_INT or typeof(is_dead) != TYPE_BOOL or not players.has(peer_id):

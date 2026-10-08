@@ -1,0 +1,10 @@
+[remap]
+importer="texture"
+type="StreamTexture"
+path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_icon.stex"
+
+[deps]
+source_file="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_icon.png"
+dest_files=[ "res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_icon.stex" ]
+
+[params]

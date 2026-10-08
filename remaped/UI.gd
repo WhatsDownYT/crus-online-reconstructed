@@ -27,6 +27,8 @@ var snipe_timer = 0
 var comms:VBoxContainer
 var message_box:RichTextLabel
 var ammo_rotation = 0
+var ammo_image_angle = 0.0
+var ammo_image:TextureRect = null
 var reload_color = Color(0, 0, 0, 0)
 var reload_pos = Vector2(0, 0)
 
@@ -42,6 +44,7 @@ onready var death_timer_label = $CenterContainer2 / Death_Timer_Label
 
 var AMMO_TEXTURE = preload("res://Textures/UI/AMMO.png")
 var MAG_TEXTURE = preload("res://Textures/UI/MAG.png")
+var secondary_ammo_row:HBoxContainer = null
 
 const HANDLER_FRAMES:Array = [preload("res://Textures/Menu/Handler/1.png"), 
 								preload("res://Textures/Menu/Handler/2.png"), 
@@ -73,6 +76,28 @@ var sleep_label = null
 var sleep = false
 
 func _ready():
+	ammo_image = $Ammovbox/HBoxContainer/Ammo_Image
+	ammo_image_angle = ammo_image.rect_rotation
+	var ammo_layout = $Ammovbox/HBoxContainer
+	var ammo_position = ammo_image.get_index()
+	var ammo_holder = Control.new()
+	ammo_holder.name = "AmmoImageHolder"
+	ammo_holder.rect_min_size = Vector2(64, 64)
+	ammo_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ammo_layout.add_child(ammo_holder)
+	ammo_layout.move_child(ammo_holder, ammo_position)
+	ammo_layout.remove_child(ammo_image)
+	ammo_holder.add_child(ammo_image)
+	ammo_image.rect_position = Vector2.ZERO
+	ammo_image.rect_size = Vector2(64, 64)
+	ammo_image.rect_pivot_offset = Vector2(32, 32)
+	secondary_ammo_row = HBoxContainer.new()
+	secondary_ammo_row.name = "SecondaryAmmo"
+	secondary_ammo_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	secondary_ammo_row.add_constant_override("separation", 0)
+	$Ammovbox.add_child(secondary_ammo_row)
+	$Ammovbox.move_child(secondary_ammo_row, $Ammovbox/HBoxContainer.get_index())
+	secondary_ammo_row.hide()
 	sleep_label = Label.new()
 	sleep_label.text = "SLEEP CRISIS"
 	sleep_label.add_font_override("font", $UI_HBOX/Toxic/Toxic.get_font("font"))
@@ -209,15 +234,34 @@ func set_health(new_health):
 	health = float(ceil(new_health))
 
 func set_ammo(ammo, mag_ammo, max_mag_ammo, max_ammo):
+	if ammo_c != ammo or mag_ammo_c != mag_ammo:
+		ammo_rotation += 2
 	$Ammovbox / HBoxContainer / Ammo.text = str(ammo)
 	
 	ammo_c = ammo
-	ammo_rotation += 2
 	mag_ammo_c = mag_ammo
 	max_ammo_c = max_ammo
 	max_mag_ammo_c = max_mag_ammo
 	
 	$Ammovbox / HBoxContainer / Mag_Ammo.text = str(mag_ammo)
+
+func set_secondary_ammo(count:int, available:bool):
+	if not is_instance_valid(secondary_ammo_row):
+		return
+	secondary_ammo_row.visible = available
+	if not available:
+		return
+	count = clamp(count, 0, 32)
+	while secondary_ammo_row.get_child_count() < count:
+		var icon = TextureRect.new()
+		icon.texture = AMMO_TEXTURE
+		icon.rect_min_size = Vector2(28, 28)
+		icon.expand = true
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		secondary_ammo_row.add_child(icon)
+	for index in range(secondary_ammo_row.get_child_count()):
+		secondary_ammo_row.get_child(index).visible = index < count
 
 func _physics_process(delta):
 	process_time += 1
@@ -229,7 +273,8 @@ func _physics_process(delta):
 	elif Toxic_UI.visible:
 		Toxic_UI.hide()
 	
-	$Ammovbox / HBoxContainer / Ammo_Image.rect_rotation += ammo_rotation
+	ammo_image_angle = fposmod(ammo_image_angle + ammo_rotation, 360.0)
+	ammo_image.rect_rotation = ammo_image_angle
 	ammo_rotation = lerp(ammo_rotation, 0, 0.1)
 	comms.modulate = lerp(comms.modulate, comms_color, 0.1)
 	

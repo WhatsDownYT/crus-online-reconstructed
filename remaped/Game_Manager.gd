@@ -46,6 +46,10 @@ func select_save_slot(index):
 		implants.torso_implant = implants.empty_implant
 		implants.arm_implant = implants.empty_implant
 		implants.leg_implant = implants.empty_implant
+		menu.current_weapon_select = 1
+		menu.set_weapon(0)
+		menu.current_weapon_select = 2
+		menu.set_weapon(1)
 		slot_index = index
 		STOCKS.reset_slot_data()
 		load_game()
@@ -113,7 +117,7 @@ func consume_level_transition_loadout():
 	level_transition_loadout = null
 	return result
 
-enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS}
+enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY}
 enum {L_HQ, L_PHARMA, L_PARADISE, L_SPACE, L_ANDROGEN, L_MALL, L_APARTMENT, L_CRUISE, L_SWAMP, L_CASINO, L_CASTLE, L_OFFICE, L_PUNISHMENT}
 
 var LEVEL_META:Array
@@ -797,12 +801,22 @@ func _physics_process(delta):
 		ambience.volume_db = - 80
 
 func save()->Dictionary:
+	var custom_weapon_unlocks = {}
+	var weapon_registry = get_node_or_null("WeaponRegistry")
+	if weapon_registry != null:
+		weapon_registry.finalize()
+		for weapon_id in weapon_registry.indices:
+			var weapon_index = weapon_registry.index_for(weapon_id)
+			custom_weapon_unlocks[weapon_id] = weapon_index < WEAPONS_UNLOCKED.size() and WEAPONS_UNLOCKED[weapon_index]
 	var save_dict = {
 		"weapons_unlocked":WEAPONS_UNLOCKED, 
+		"custom_weapon_unlocks":custom_weapon_unlocks,
 		"levels_unlocked":LEVELS_UNLOCKED, 
 		"levels_punished":LEVEL_PUNISHED, 
 		"bonus_unlocked":BONUS_UNLOCK, 
 		"implants_unlocked":implants.purchased_implants, 
+		"equipped_implants":_equipped_implant_keys(),
+		"selected_weapons":[_weapon_save_key(menu.weapon_1), _weapon_save_key(menu.weapon_2)],
 		"items_found":MONEY_ITEMS, 
 		"soul":soul_intact, 
 		"husk":husk_mode, 
@@ -838,6 +852,62 @@ func save()->Dictionary:
 		save_dict[level_name + "_hell_string_time"] = HELL_TIMES[level]
 		meta_file.close()
 	return save_dict
+
+func _weapon_save_key(index):
+	var registry = get_node_or_null("WeaponRegistry")
+	if registry != null and registry.is_custom(index):
+		return registry.id_for(index)
+	return index
+
+func _weapon_index_from_save(value, fallback):
+	var index = -1
+	if value is String:
+		var registry = get_node_or_null("WeaponRegistry")
+		if registry != null:
+			registry.finalize()
+			index = registry.index_for(value)
+	elif value is int or value is float:
+		index = int(value)
+	if index < 0 or index >= WEAPONS_UNLOCKED.size() or not WEAPONS_UNLOCKED[index]:
+		return fallback
+	return index
+
+func _equipped_implant_keys():
+	var result = {}
+	for slot in ["head", "torso", "arm", "leg"]:
+		var equipped = implants.get(slot + "_implant")
+		result[slot] = "" if equipped == null or equipped == implants.empty_implant else (equipped.custom_id if not equipped.custom_id.empty() else equipped.i_name)
+	return result
+
+func _restore_saved_loadout(data):
+	var weapons = data.get("selected_weapons", [0, 1])
+	if not weapons is Array or weapons.size() != 2:
+		weapons = [0, 1]
+	var first = _weapon_index_from_save(weapons[0], 0)
+	var second = _weapon_index_from_save(weapons[1], 1 if WEAPONS_UNLOCKED.size() > 1 and WEAPONS_UNLOCKED[1] else 0)
+	if second == first:
+		second = 1 if first != 1 and WEAPONS_UNLOCKED.size() > 1 and WEAPONS_UNLOCKED[1] else 0
+	var selected = menu.current_weapon_select
+	menu.current_weapon_select = 1
+	menu.set_weapon(first)
+	menu.current_weapon_select = 2
+	menu.set_weapon(second)
+	menu.current_weapon_select = selected
+	var saved_implants = data.get("equipped_implants", {})
+	if not saved_implants is Dictionary:
+		saved_implants = {}
+	for slot in ["head", "torso", "arm", "leg"]:
+		var key = str(saved_implants.get(slot, ""))
+		var choice = implants.empty_implant
+		if not key.empty() and implants.purchased_implants.has(key):
+			for implant in implants.IMPLANTS:
+				if implant != null and (implant.custom_id == key or implant.i_name == key):
+					choice = implant
+					break
+		implants.set(slot + "_implant", choice)
+	var character_menu = menu.get_node_or_null("Character_Menu/Character_Container")
+	if character_menu != null:
+		character_menu.call_deferred("update_buttons")
 
 
 
@@ -917,6 +987,7 @@ func load_game()->void :
 	var parsedJSON:Dictionary = {}
 	parsedJSON = parse_json(save_game.get_line())
 	var new_weapons_unlocked = parsedJSON.get("weapons_unlocked")
+	var saved_custom_weapon_unlocks = parsedJSON.get("custom_weapon_unlocks", {})
 	var new_levels_unlocked = parsedJSON.get("levels_unlocked")
 	var new_implants_unlocked = parsedJSON.get("implants_unlocked")
 	var online_extension_name_migrations = {
@@ -972,7 +1043,17 @@ func load_game()->void :
 	if new_weapons_unlocked.size() < WEAPONS_UNLOCKED.size():
 		var size_difference = WEAPONS_UNLOCKED.size() - new_weapons_unlocked.size()
 		for weapon in range(size_difference):
-			new_weapons_unlocked.append(false)
+			var weapon_index = new_weapons_unlocked.size()
+			var registry = get_node_or_null("WeaponRegistry")
+			var definition = registry.definition_for(weapon_index) if registry != null else null
+			new_weapons_unlocked.append(bool(definition.unlocked_by_default) if definition != null else false)
+	var weapon_registry = get_node_or_null("WeaponRegistry")
+	if weapon_registry != null and saved_custom_weapon_unlocks is Dictionary:
+		weapon_registry.finalize()
+		for weapon_id in weapon_registry.indices:
+			var weapon_index = weapon_registry.index_for(weapon_id)
+			if saved_custom_weapon_unlocks.has(weapon_id):
+				new_weapons_unlocked[weapon_index] = bool(saved_custom_weapon_unlocks[weapon_id])
 	if not new_money:
 		new_money = 0
 	var cdeaths = parsedJSON.get("consecutive_deaths")
@@ -999,6 +1080,7 @@ func load_game()->void :
 		implants.purchased_implants = new_implants_unlocked
 	if new_weapons_unlocked:
 		WEAPONS_UNLOCKED = new_weapons_unlocked
+	call_deferred("_restore_saved_loadout", parsedJSON)
 	if new_levels_unlocked:
 		LEVELS_UNLOCKED = new_levels_unlocked
 	else :
@@ -1201,6 +1283,10 @@ func load_game()->void :
 					var action = InputEventKey.new()
 					action.scancode = key_scancodes[scancode][0]
 					set_inputs("Stocks", action)
+				KEY_SECONDARY:
+					var action = InputEventKey.new()
+					action.scancode = key_scancodes[scancode][0]
+					set_inputs("Shoot_Secondary", action)
 		elif key_scancodes[scancode][1] == "MOUSE":
 			match scancode:
 				KEY_FORWARD:
@@ -1283,6 +1369,10 @@ func load_game()->void :
 					var action = InputEventMouseButton.new()
 					action.button_index = key_scancodes[scancode][0]
 					set_inputs("Stocks", action)
+				KEY_SECONDARY:
+					var action = InputEventMouseButton.new()
+					action.button_index = key_scancodes[scancode][0]
+					set_inputs("Shoot_Secondary", action)
 	
 	
 	set_game_volume(master_volume)

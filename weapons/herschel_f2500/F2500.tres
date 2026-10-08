@@ -1,0 +1,45 @@
+[gd_resource type="Resource" load_steps=10 format=2]
+
+[ext_resource path="res://MOD_CONTENT/CruS Online/WeaponDefinition.gd" type="Script" id=1]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Behavior.gd" type="Script" id=2]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_icon.png" type="Texture" id=3]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500World.tscn" type="PackedScene" id=4]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500View.tscn" type="PackedScene" id=5]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/F2500Remote.tscn" type="PackedScene" id=6]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/rifle_fire.sample" type="AudioStream" id=7]
+[ext_resource path="res://MOD_CONTENT/CruS Online/weapons/herschel_f2500/assets/launcher_fire.sample" type="AudioStream" id=8]
+[ext_resource path="res://Entities/Decals/Decal.tscn" type="PackedScene" id=10]
+
+[resource]
+script = ExtResource( 1 )
+weapon_id = "herschel:f2500"
+display_name = "Herschel Firearms F2500"
+description = "A relatively futuristic bullpup weapon with an integrated optic and grenade launcher. Its recycled-plastic construction keeps it relatively light despite its size. It has recently seen wide use in policing, especially against violent riots and heavily armed barricaded suspects."
+gameplay_description = "A 30-round assault rifle used by Cult of Order PD, particularly its SWAT division. Its secondary launcher fires impact-detonated HEAT fragmentation grenades whose blast and shrapnel can also harm the shooter."
+weapon_type = "Assault Rifle"
+ammunition_name = "5.5850mm Standardized"
+weight_name = "Medium"
+magazine_size = 30
+starting_reserve = 135
+maximum_total_rounds = 200
+damage = 15
+armor_piercing = false
+accuracy = 0.01
+reload_time = 2.0
+launcher_magazine_size = 1
+launcher_starting_reserve = 3
+launcher_maximum_total = 6
+launcher_vest_reserve = 4
+icon_path = ""
+icon = ExtResource( 3 )
+world_model = ExtResource( 4 )
+view_model = ExtResource( 5 )
+remote_model = ExtResource( 6 )
+decal_scene = ExtResource( 10 )
+fire_sound = ExtResource( 7 )
+launcher_sound = ExtResource( 8 )
+idle_animation = "AR_Idle"
+fire_animation = "AR_Fire"
+view_slot = "AR"
+unlocked_by_default = true
+behavior = ExtResource( 2 )
