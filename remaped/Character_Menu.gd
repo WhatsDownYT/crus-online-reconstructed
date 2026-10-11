@@ -26,6 +26,8 @@ var IMPLANTS
 var confirmed = false
 var cancel = false
 var hover_info
+var hovered_implant_index:int = -1
+var hovered_implant_price:int = -1
 var current_page = 0
 var page_transitioning = false
 var button_implant_indices:Array = []
@@ -250,18 +252,23 @@ func _change_page(page):
 	if page_transitioning:
 		return
 	page_transitioning = true
+	hovered_implant_index = -1
 	hover_info.get_parent().hide()
 	for button in EQUIPMENT_BUTTONS:
 		button.disabled = true
 	_set_navigation_transition_empty()
 	var transition_count = 0
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_step = 0
 	for slot in range(PAGE_SLOT_COUNT - 1, -1, -1):
 		_set_button_empty(slot)
 		transition_count += 1
 		if transition_count % (TRANSITION_BATCH * 2) == 1:
 			_play_page_transition_sound(false)
 		if slot % TRANSITION_BATCH == 0:
-			yield (get_tree(), "idle_frame")
+			animation_step += 1
+			while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step / 120.0:
+				yield (get_tree(), "idle_frame")
 	current_page = page
 	var indices = _page_implant_indices(page)
 	transition_count = 0
@@ -274,7 +281,9 @@ func _change_page(page):
 		if transition_count % (TRANSITION_BATCH * 3) == 1:
 			_play_page_transition_sound(true)
 		if slot % TRANSITION_BATCH == TRANSITION_BATCH - 1:
-			yield (get_tree(), "idle_frame")
+			animation_step += 1
+			while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step / 120.0:
+				yield (get_tree(), "idle_frame")
 	_set_navigation_buttons()
 	page_transitioning = false
 	update_buttons()
@@ -351,6 +360,7 @@ func update_buttons():
 	$TextureRect/Leg_Button.texture_normal = Global.implants.leg_implant.texture
 
 func _show_navigation_info(slot):
+	hovered_implant_index = -1
 	hover_info.get_node("Image").hide()
 	hover_info.get_node("Name").show()
 	hover_info.get_parent().raise()
@@ -364,6 +374,8 @@ func _show_navigation_info(slot):
 func _show_implant_info(i):
 	if i < 0 or i >= IMPLANTS.size():
 		return
+	hovered_implant_index = i
+	hovered_implant_price = Global.STOCKS.implant_price(IMPLANTS[i])
 	if _implant_is_undiscovered(IMPLANTS[i]):
 		hover_info.get_node("Image").show()
 		hover_info.get_parent().raise()
@@ -396,7 +408,10 @@ func _show_implant_info(i):
 	if IMPLANTS[i].arms:
 		hover_info.get_node("Hint").text += "Slot: Arms\n"
 	if not _owns_implant(IMPLANTS[i]):
-		hover_info.get_node("Hint").text += "$" + str(IMPLANTS[i].price) + "\n"
+		var price_text = "$" + str(hovered_implant_price)
+		if IMPLANTS[i].price > 0:
+			price_text += " (" + Global.STOCKS.implant_company_ticker(IMPLANTS[i]).strip_edges() + ")"
+		hover_info.get_node("Hint").text += price_text + "\n"
 	hover_info.get_node("Hint").show()
 	hover_info.get_node("Hint").text += infotext + "\n"
 	if IMPLANTS[i].armor != 1:
@@ -413,6 +428,7 @@ func _on_navigation_mouse_entered(slot):
 	_show_navigation_info(slot)
 
 func _on_navigation_mouse_exited():
+	hovered_implant_index = -1
 	hover_info.get_node("Image").hide()
 	hover_info.get_parent().hide()
 
@@ -435,6 +451,7 @@ func _on_mouse_entered(slot):
 		_show_implant_info(implant_index)
 
 func _on_mouse_exited(slot):
+	hovered_implant_index = -1
 	hover_info.get_node("Image").hide()
 	hover_info.get_parent().hide()
 
@@ -467,9 +484,10 @@ func _on_implant_pressed(slot):
 		return
 	if not _owns_implant(IMPLANTS[i]):
 		cancel = false
-		if Global.money >= IMPLANTS[i].price:
+		var purchase_price = Global.STOCKS.implant_price(IMPLANTS[i])
+		if Global.money >= purchase_price:
 			$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
-			$ConfirmationDialog.dialog_text = "Do you want to purchase " + IMPLANTS[i].i_name + " for $" + str(IMPLANTS[i].price) + "?"
+			$ConfirmationDialog.dialog_text = "Do you want to purchase " + IMPLANTS[i].i_name + " for $" + str(purchase_price) + "?"
 			while confirmed == false and cancel == false:
 				yield (get_tree(), "idle_frame")
 			confirmed = false
@@ -478,7 +496,7 @@ func _on_implant_pressed(slot):
 				return
 			cancel = false
 			var m = Global.money
-			Global.money -= IMPLANTS[i].price
+			Global.money -= purchase_price
 			if Global.money < 0:
 				Global.money = m
 				return
@@ -516,6 +534,13 @@ func _on_implant_pressed(slot):
 func _process(delta):
 	if Input.is_action_just_pressed("ui_cancel"):
 		cancel = true
+	if not is_visible_in_tree():
+		hovered_implant_index = -1
+		return
+	if hovered_implant_index >= 0 and hovered_implant_index < IMPLANTS.size() and is_instance_valid(hover_info) and hover_info.get_parent().visible:
+		var live_price = Global.STOCKS.implant_price(IMPLANTS[hovered_implant_index])
+		if live_price != hovered_implant_price:
+			_show_implant_info(hovered_implant_index)
 
 func _on_ConfirmationDialog_confirmed():
 	confirmed = true

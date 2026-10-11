@@ -27,7 +27,7 @@ ONLINE MODES
 MISSION FLOW, OBJECTIVES, AND PROGRESSION
 - Reworked Online mission starts, scene changes, restarts, exits, failures, and results as shared host-directed events. The synchronization screen shows how many players have finished loading and ignores stale loading reports from an old mission or from players who already left.
 - Mission objectives are synchronized between host and clients, including both the original total and the number still remaining. Clients receive the normal target-eliminated and all-objectives-complete announcements, and Discord presence counts the actual live mission targets, including difficulty-specific cases such as Cruelty Squad HQ. Deathmatch presence shows remaining players instead.
-- Online results use the game's normal level-end presentation and send the same mission time, enemy and civilian counts, difficulty, rewards, and ending result to everyone. Normal campaign progression applies to Online wins as well, including money, weapon and level unlocks, Punishment rewards, endings, and any failure penalties or difficulty changes the game normally requires.
+- Online results use the game's normal level-end presentation and send the same mission time, enemy and civilian counts, difficulty, rewards, and ending result to everyone. Normal campaign progression applies to Online wins as well, including money, weapon and level unlocks, Punishment rewards, endings, and any failure penalties or difficulty changes the game normally requires. The Cruelty Squad Headquarters, Archon Grid, and Trauma Loop endings now stop on their final shot, cut the music, and show the mission results before returning to level select or the menu
 - Mission exits only wait for living players who are actually participating in the mission, so dead players and players waiting outside the mission do not block completion. The exit is checked again before a transition is committed to make sure the living players are still inside.
 - Competitive wipes no longer leave the final revive message hanging over the result screen, and missions can be restarted directly through the shared results flow.
 - Immortal enemies no longer inflate the enemies-killed total. The same killable-enemy definition is used by the Controlled Depopulation goal.
@@ -64,6 +64,8 @@ ENEMIES AND MISSION SYSTEMS
 - NPC animation handling is more tolerant of models that do not contain every expected animation name.
 
 COMBAT AND WEAPONS
+- Golem Exosystem punches now strip armor before applying their normal impact damage. The Bolt ACR's direct beam likewise damages armor, while its lingering radiation keeps its existing behavior
+- The Parasonic D2, Minato M9, and Parasonic MP-1 now hide the center crosshair while equipped, leaving their laser dot as the aiming indicator
 - Added a weapons catalog within CruS Online for new weapons with their own descriptions, ammunition settings, firing behavior, art, sounds, pickups, and map entities. The Herschel Firearms F2500 is the first self-contained example, with its weapon visuals and audio bundled in its own folder for the menu, first-person view, pickups, other players, and grenades. Its menu icon also serves as its large detail portrait. It is a 30-round assault rifle with an integrated optic and an impact grenade launcher that follows the rifle's aim and produces a lethal blast and damaging shrapnel. Shoot Secondary is a separate, rebindable control for custom weapons, set to middle mouse by default; the original tertiary control remains available for implants. The F2500 starts with 135 spare rifle rounds and three spare grenades, while the Load Bearing Vest raises those reserves to 180 rounds and four grenades. It can be collected from a custom mission pickup or carried by a Cult of Order SWAT variant
 - Weapons with secondary ammunition show the remaining secondary rounds as a row of small ammo icons above the ordinary ammo display. The F2500's secondary fire now creates its projectile through the multiplayer host so both host and clients can use the launcher, and its SWAT carrier visibly holds the F2500 model
 - Bullet casings and weapon impact marks are shared with other players during Online missions
@@ -82,6 +84,11 @@ PHYSICS OBJECTS AND INTERACTIVE LEVEL ELEMENTS
 - Switch use and spiritual-door interactions are validated against player position and state. Terror door destruction, destructibles, pushblocks, rotating objects, paintings, slot machines, and other interactive props are synchronized through the session.
 - Added synchronized cancer growth and destruction with limits on how much spread and damage processing can happen in one frame.
 
+STOCK MARKET AND EQUIPMENT PRICES
+- Reworked company shares into a dynamic market with distinct calm, growth, decline, and crash periods. Companies can gain or lose substantial value over a campaign, including recovery from ordinary downturns, while mission-driven changes unfold over time instead of dropping a share price in a single tick. Existing holdings and prices remain in their save slots
+- Added a Market Outlook panel below the shorter stock list. It describes the effects of built-in missions with market events and places rising and falling tickers on separate lines without revealing exact percentages. Archon Grid and Trauma Loop list every company ticker individually. Secret mission forecasts appear once unlocked, while Cruelty Squad Headquarters requires Hope Eradicated and Death mode to have been active together at least once in that save slot. A successful takeover of Cruelty Squad Headquarters sharply raises Cruelty Squad shares and damages Security Redefined. House has no market event, and the panel says when no forecasts are available. After completion, the latest mission's exact impacts appear to the right of the Outlook heading only while the 20-second price movement is active. Mission events occur once per save slot. Mall Madness sharply raises GamesGames, Apartment Atrocity bankrupts it, and Archon Grid later revives it while nearly doubling every company stock; Trauma Loop brings every company stock close to zero. Fish and body parts are unaffected by these market-wide events
+- Linked implant purchase quotes to the market value of related companies. Head, torso, leg, and arm equipment respond to different shares, and an open implant tooltip shows its live price beside the relevant stock ticker while the equipment menu is open. Price changes are capped so market conditions affect planning without making equipment unobtainable. Fish and body parts retain their existing price behavior
+
 ONLINE EQUIPMENT AND IMPLANTS
 - Added a custom implant API with namespaced definitions for the existing head, torso, arm, and leg slots. Custom implants appear in the equipment menu's Custom page, can be purchased or hidden until discovered in a mission, and persist by stable ID. Discoverable implants use placeable TrenchBroom map entities that grant the implant when collected, and require a matching source mission declaration so the implant and mission cannot be used independently. Modders can define supported stat modifiers and optional equip, unequip, per-frame, and input-use behavior, while equipped custom IDs are available in multiplayer implant state. A flat test mission pairs the example implant with an F2500-armed hostile
 - Added Online extension implants with their own inventory art and tooltips.
@@ -94,9 +101,9 @@ ONLINE EQUIPMENT AND IMPLANTS
 - Reworked implant banning into a scrollable icon grid with clear allowed and banned states plus hover details. Ban presets can be selected, saved, and deleted, and the implant grid keeps a stable width while adjacent controls are used.
 
 SURVEILLANCE EYECAMS
-- Added Surveillance Eyecam for scanning visible players within 15 units. It draws an expanding one-pixel tracking rectangle around the visible player model, contracts when the target leaves view, and reveals money, health, Life or Death matrix, equipped implants, and carried weapons after a three-second analysis.
+- Added Surveillance Eyecam as a PURE ocular implant for scanning visible players within 15 units. It draws an expanding one-pixel tracking rectangle around the visible player model, contracts when the target leaves view, and reveals money, health, Life or Death matrix, equipped implants, and carried weapons after a three-second analysis.
 - A scan is forgotten once the target leaves view, so reacquiring them requires another analysis. Scan acquisition audio is synchronized, and the equipment and weapon readouts animate as the information is revealed.
-- Added Surveillance Eyecam PRO MAX, which locks the user's camera and body onto the nearest player within ten units. It uses a three-second lock-on, a ten-second initial delay, and a 45-second cooldown.
+- Added Surveillance Eyecam PRO MAX as a second PURE ocular implant, which locks the user's camera and body onto the nearest player within ten units. It uses a three-second lock-on, a ten-second initial delay, and a 45-second cooldown.
 - Once PRO MAX acquires a player, that target remains locked for the full sequence even if they move out of range. The hijack sound plays at acquisition, the target gets a red flickering hijack warning, and one of their weapons or implants is disabled for 15 seconds. A jammed firearm can still reload.
 
 PNEUMATIC MERIT PUMP
@@ -116,10 +123,10 @@ VOICE CHAT AND COMMUNICATION
 
 GOALS AND MASTERY
 - Added an in-game Goals menu containing achievement portraits, names, descriptions, and rewards. Goals can be browsed through Campaign, Online, Extras, and Mastery categories, each with its own completion count.
-- Secret goal names and portraits remain hidden until their relevant level has actually been completed.
+- Every goal has a visible slot in its category. Secret goals show "???" for their name and description and a secret portrait until their associated level is beaten or their reveal condition is met. OPEN YOUR EYES remains secret until earned, while THE UNHOLY TRINITY is revealed when Trauma Loop is unlocked
 - Added rotating phone goal notifications with the goal portrait, title, reward sound, and a sequential queue. Goals and their money rewards are awarded immediately even when several notifications are still waiting to play.
 - Added per-mission mastery objectives for S rank, Hope Eradicated, Punishment, Chaos, Extravagant Suit, and no implants. Every campaign mission has its own mastery goal and progress display.
-- Undiscovered mastery conditions remain hidden until the relevant systems have been found, including Hope Eradicated, Chaos, and the Extravagant Suit.
+- Undiscovered mastery conditions remain hidden until the relevant systems have been found, including Hope Eradicated, Chaos, and the Extravagant Suit. SYNAPTIC CASCADE, SUFFERING FOR AEONS, and BEAUTY OF LIFE occupy secret slots until Hope Eradicated is discovered, Chaos is unlocked, or the Extravagant Suit is purchased, respectively
 - Existing saves can backfill goals using mission completion, times, difficulty records, and other saved progression. Goal and mastery progress is stored separately per save slot and clears with that slot's save data.
 
 STATISTICS, PROFILES, AND SAVE SLOTS
@@ -128,15 +135,18 @@ STATISTICS, PROFILES, AND SAVE SLOTS
 - Statistics shows completion, money, kills, deaths, playtime, weapons, equipment, fish, body parts, and goals in one profile. Collection statistics show unique finds out of the actual game total instead of counting repeated pickups, and playtime is displayed as hours, minutes, and seconds. Wearing the Level VI suit is shown simply as Golem Exosystem in the outfit field.
 - Player kills, Online Equipment, and Total, Deathmatch, or Counter-Opps wins and losses are shown separately from the normal campaign statistics.
 - Added a completion percentage that can extend beyond the base game's 100% through mastery and Online goals.
-- Added four save slots after the opening sequence, with existing saves assigned to Slot 1. Hovering a slot with data shows a read-only player preview and detailed progress for that save.
+- Added four save slots after the opening sequence, with existing saves assigned to Slot 1. Hovering a slot with data shows a read-only player preview and detailed progress for that save; cleared slots remain empty without a preview until selected again. Settings and Quit to OS are available below the four slots before entering a save, with Settings opening on the left without the Modloader status text or save-reset controls
 - Each slot has its own campaign, stock, goal, profile, custom-campaign, and online-stat records. Skip Intro users are sent directly to save-slot selection, while the opening cutscene's final camera view is held at a 60-degree field of view while the slot screen is active.
+- Clear Save Data resets the selected slot's market events and active company trends along with its other progress, then returns to the save-slot selection screen.
 
 MENUS AND PRESENTATION
 - Reorganized the main menu into Start, News, Settings, and Quit grid buttons, while Online, Goals, and Statistics live on level select. The main grid stays visible when another menu is opened, and Return controls occupy their corresponding tiles.
+- Menu grid population, equipment-page changes, sidebar expansion, and Online menu transitions use elapsed time and run at twice their previous speed, so their pacing stays consistent across different frame rates. Level portraits now appear in sequence with the level-select grid. Settings opens at full size without an expansion animation and saves each change as it is made, including keybinds from the save-slot screen. Disabled menu art animates at the same rate regardless of the physics tick rate
 - Repositioned the level-select Equipment, Stock Market, Weapons, Start, campaign controls, and ready information around the new grid. Campaign names appear between previous and next controls that wrap in both directions when another campaign or custom-mission page contains levels. When Cruelty Squad is the only page, both its label and the arrows are hidden.
 - Reworked the Online host, player, chat, voice, implant, and lobby panels to fit the game's visual style more consistently. Several plain option controls were replaced with matching styled dropdowns, Save, Ban All, and Allow All remain aligned with the bottoms of their panels, and menu sizes no longer stretch unexpectedly while values change. The in-game Online pause menu has a Settings square that opens the game's settings and returns to the Online pause menu, while its Stats panel uses the same dark red backdrop as the lobby status area.
 - Disabled starts and unavailable missions now explain themselves through hover text instead of simply looking broken.
-- Updated the credits with separate RECONSTRUCTED and original CruS Online sections.
+- Updated the credits with separate RECONSTRUCTED and original CruS Online sections. The RECONSTRUCTED section uses the new logo
+- The News square displays a Coming soon! tooltip and does not open a menu yet
 - Removed the unused bundled multiplayer test maps so custom missions can be installed separately.
 - Removed the Elsa Holmes outfit from the player outfit selection.
 
@@ -180,6 +190,7 @@ VANILLA GAME FIXES
 - Made grid-crab stepping and movement independent of frame rate.
 - Corrected startup window positioning and fixed resolution changes assigning the vertical window position to the horizontal axis.
 - Hope Eradicated music slowdown now applies on the first title screen and to both mission music and ambient tracks.
+- Mission results preserve the music that was playing when the level ended, including either Pharmakokinetiks track, instead of changing tracks as the next level is selected
 - The level-entry visual effect can finish while paused, restores movement access when it ends, and clears itself when returning to the menu.
 - Opening cutscene music stays at its original speed even when the initial save already has Hope Eradicated.
 - The final cutscene actor is restored correctly when the opening is skipped while it is playing.

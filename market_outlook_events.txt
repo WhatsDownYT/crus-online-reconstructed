@@ -1,0 +1,53 @@
+CRUELTY SQUAD ONLINE: RECONSTRUCTED - MARKET OUTLOOK EVENTS
+
+Each listed mission has the authored stock impacts shown below. They begin
+after the first successful completion in a save slot and unfold over 20 seconds.
+Ordinary market movement continues at the same time, so the observed price
+change may differ from the listed percentage. Replays do not repeat an event.
+Pre-mission outlooks describe the forecast without exact percentages.
+The latest completed mission's authored impacts appear beside the Market
+Outlook heading only while the 20-second impact is active.
+Secret mission forecasts appear only after those missions are unlocked.
+The Headquarters forecast appears only after Hope Eradicated and Death mode
+have both been active together at least once in that save slot.
+GAGA's -100% Apartment Atrocity event takes its price to zero over 20 seconds;
+it cannot be bought while bankrupt. Archon Grid restores it at its original
+listing price before applying the market-wide rise.
+
+MAIN CAMPAIGN
+
+Cruelty Squad Headquarters: CRUS +200%, SCRD -35%
+Pharmakokinetiks: CRUS +8%, GTC -7%
+Paradise: VEME +68%, GTC -90%, PIHO -8%
+Sin Space Engineering: AOI +15%, CRUS +6%, PURE -8%
+Androgen Assault: SCRD +16%, CRUS -10%
+Mall Madness: GAGA +286%, CRUS +18%, CSFT +12%, PIHO -8%
+Apartment Atrocity: SCRD +14%, GAGA -100%, CRUS -12%
+Seaside Shock: CRUS +18%, PWR +12%, SCRD -8%
+Bog Business: PWR +16%, GDHD +10%, SCRD -7%
+Casino Catastrophe: CRUS +8%, FBCA -64%, SCRD -8%
+Idiot Party: SCRD +14%, GDHD -12%, FBCA -10%
+Office: PURE +12%, CRUS -44%, SCRD -25%
+Archon Grid: ALL COMPANY STOCKS +99%
+
+SECRET MISSIONS
+
+Darkworld: CRUS -6%
+Alpine Hospitality: CRUS +18%, GDHD +10%, SCRD -12%
+Miner's Miracle: CRUS +8%, PWR +8%, GDHD -42%
+Neuron Activator: SCRD +12%, GDHD -15%
+Trauma Loop: ALL COMPANY STOCKS -99%
+
+TICKERS
+
+AOI  - Advanced Orbital Instruments
+CSFT - Consumer Softproducts
+FBCA - Fatberg Casino
+GAGA - GamesGames
+GDHD - Godhead Heavy Industries
+GTC  - G-Tech
+PIHO - Pizza House
+PURE - Pure Optics
+PWR  - Power Monger Shipping Company
+SCRD - Security Redefined
+VEME - Veggo's Meatoids

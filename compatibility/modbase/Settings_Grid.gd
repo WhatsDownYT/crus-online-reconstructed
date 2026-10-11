@@ -7,14 +7,9 @@ func _ready():
 
 func come():
 	show()
-	rect_size.y = 0
+	rect_size.y = 600
 	rect_size.x = x_size
 	rect_position.y = 60
-	while (rect_size.y < 600):
-		rect_size.y += 50
-		if (rect_size.y > 600):
-			rect_size.y = 600
-		yield (get_tree(), "idle_frame")
 func go():
 	hide()
 

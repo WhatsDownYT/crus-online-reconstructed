@@ -112,7 +112,7 @@
     },
     {
       "id": "steam_archon_grid",
-      "name": "GOD'S BLOOD EARTH",
+      "name": "GOD'S GREEN EARTH",
       "description": "Reach the first ending by completing Archon Grid.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/archon_grid.png",
       "reward": 5000,
@@ -195,16 +195,16 @@
       "name": "SOUL EMULATION",
       "description": "Flip the matrix of life upside down.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 1500,
       "category": "extras",
       "secret": false
     },
     {
       "id": "financial_ascension",
       "name": "FINANCIAL ASCENSION",
-      "description": "Reach $1,000,000.",
+      "description": "Have $1,000,000 in stocks.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 2000,
       "category": "extras",
       "secret": false
     },
@@ -213,25 +213,25 @@
       "name": "OPEN YOUR EYES",
       "description": "Free yourself from the Limit Chancellor.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 3500,
       "category": "extras",
-      "secret": false
+      "secret": true
     },
     {
       "id": "synaptic_cascade",
       "name": "SYNAPTIC CASCADE",
       "description": "Beat every mission in Hope Eradicated.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 25000,
       "category": "mastery",
-      "secret": false
+      "secret": true
     },
     {
       "id": "eternal_malice",
       "name": "ETERNAL MALICE",
       "description": "Get an S rank in every mission.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 20000,
       "category": "mastery",
       "secret": false
     },
@@ -240,7 +240,7 @@
       "name": "ENTRAPMENT",
       "description": "Beat every mission in Punishment mode.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 10000,
       "category": "mastery",
       "secret": false
     },
@@ -249,34 +249,34 @@
       "name": "SUFFERING FOR AEONS",
       "description": "Beat every mission in Chaos mode.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 17500,
       "category": "mastery",
-      "secret": false
+      "secret": true
     },
     {
       "id": "beauty_of_life",
       "name": "BEAUTY OF LIFE",
       "description": "Beat every mission with the Extravagant Suit.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 100000,
       "category": "mastery",
-      "secret": false
+      "secret": true
     },
     {
       "id": "the_unholy_trinity",
       "name": "THE UNHOLY TRINITY",
       "description": "Be bestowed the power of the Triagons.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 5000,
       "category": "extras",
-      "secret": false
+      "secret": true
     },
     {
       "id": "biological_traversal",
       "name": "BIOLOGICAL TRAVERSAL",
       "description": "Collect all organs and body parts.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 10000,
       "category": "extras",
       "secret": false
     },
@@ -285,7 +285,7 @@
       "name": "CATCH OF THE DAY",
       "description": "Collect all fish.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 35000,
       "category": "extras",
       "secret": false
     },
@@ -294,7 +294,7 @@
       "name": "CONTROLLED DEPOPULATION",
       "description": "Complete a mission after killing all killable hostile NPCs.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 6000,
       "category": "extras",
       "secret": false
     },
@@ -303,7 +303,7 @@
       "name": "THE FIRST TRANSACTION",
       "description": "Collect all weapons.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 15000,
       "category": "extras",
       "secret": false
     },
@@ -312,7 +312,7 @@
       "name": "METABOLIC ABOMINATION",
       "description": "Purchase all equipment/implants.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 10000,
       "category": "extras",
       "secret": false
     },
@@ -321,7 +321,7 @@
       "name": "FULLY PEELED",
       "description": "Collect all game achievements.",
       "icon": "res://MOD_CONTENT/CruS Online/achievements/steam_portraits/pharmakokinetiks.png",
-      "reward": 0,
+      "reward": 50000,
       "category": "extras",
       "secret": false
     },

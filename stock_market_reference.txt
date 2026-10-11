@@ -5,7 +5,7 @@ Scope and source
 ----------------
 This describes the stock market as implemented in the current project. Market
 data and price simulation are in remaped/Stock_Handler.gd. The trading screen
-uses the base game's Stocks.gd (there is no Stocks.gd override in this mod).
+uses remaped/Stocks.gd, based on the original game's Stocks.gd.
 Physical body-part pickups use remaped/Asset_Pickup.gd; fishing uses the base
 game's Scripts/Fishing_Hook.gd. Save-slot routing is in remaped/Game_Manager.gd.
 The catalogue at the end is generated from the current Stock_Handler.gd data.
@@ -16,8 +16,9 @@ There are 103 assets: 12 company equities, 18 body parts, and 73 fish. Every
 asset has a unique four-character ticker (some include a trailing space), a
 name, description, current price, amount owned, trend, volatility, nominal
 minimum/maximum prices, and an issued-share count. All three tabs use the same
-price simulation and the same buy/sell actions. Body parts and fish are not a
-separate currency: their market holdings are valued and sold like shares.
+buy/sell actions, but company shares now have their own price simulation.
+Body parts and fish are not a separate currency: their market holdings are
+valued and sold like shares.
 
 The Stocks, Parts, and Fish tabs list their assets by ticker. Each row shows
 the owned quantity, price change since the last market tick, and, if any are
@@ -32,6 +33,7 @@ times issued shares). The graph plots the most recent 100 simulated prices;
 its segments are green when rising and red when falling. That graph history is
 not saved. The market panel refreshes its text every fifth physics frame while
 visible, whereas prices tick on their own timer even when the panel is closed.
+The stock list is shorter to make room for a Market Outlook panel beneath it.
 
 Trading
 -------
@@ -56,53 +58,70 @@ unit; catching a fish adds one owned unit.
 Price updates
 -------------
 The stock handler starts a repeating 1-second Timer. With Eyes of Corporate
-Insight equipped in the head slot, _physics_process changes that timer's
-wait_time to 0.1 seconds; without it, wait_time is 1 second. Each timeout
-updates EVERY asset once. The market does not need to be open. The simulation
-uses its own RandomNumberGenerator and a normally distributed randfn() value.
+Insight equipped, its wait_time is 0.1 seconds. Every asset updates while the
+game runs, even when the market panel is closed.
 
-For each asset, on each tick:
+Company equities use a percentage-based model. Each company spends about
+90-240 simulated seconds in a calm, growing, declining, or crashing state,
+then randomly changes state. The respective per-second drifts are +0.005%,
++0.12%, -0.06%, and -0.2%, with Gaussian noise scaled by company volatility
+and elapsed time. A company below 12% of its starting value enters growth
+on its next state change. New company prices are bounded between 3% and
+2,000% of starting price, with a $0.90 absolute floor; legacy saved prices
+above that ceiling are preserved rather than abruptly clipped. Faster ticks
+from Eyes of Corporate Insight do not accelerate company-price movement.
 
-  1. last_price = price
-  2. effective_trend = stored trend
-  3. If LEVELS_UNLOCKED is exactly 6, add 0.1 to effective_trend
-  4. If LEVELS_UNLOCKED is at least price_action_day AND price is strictly
-     between its nominal minimum and maximum, add price_action
-  5. If LEVELS_UNLOCKED is exactly extreme_action, add 1
-  6. price += sqrt(0.03333 * 0.5) * randfn() * volatility + effective_trend
-  7. If bankrupt is zero, clamp price to nominal min_price..max_price.
-     Otherwise clamp price to $0.87..$10,000,000
-  8. If bankrupt < LEVELS_UNLOCKED, subtract 0.01 from the STORED trend.
-     Otherwise, when price is within $5 of a nominal limit and the stored
-     trend points outwards, reverse the stored trend's sign
-  9. If min_price equals max_price, force price to that value
- 10. Append price to graph history and discard its oldest sample above 100
+Fish and body parts keep the original additive rules. Their effective trend
+starts at their stored trend. LEVELS_UNLOCKED exactly 6 adds 0.1; reaching
+price_action_day adds price_action while the current price is strictly within
+its nominal range; matching extreme_action adds 1. A tick then adds
+sqrt(0.03333 * 0.5) * randfn() * volatility plus effective trend. Prices
+are clamped to nominal min/max only when bankrupt is zero, otherwise to
+$0.87-$10,000,000. Once LEVELS_UNLOCKED exceeds bankrupt, stored trend
+falls by 0.01 every tick; otherwise it reverses near an outward-facing
+nominal boundary. Equal nominal minimum and maximum force a fixed price.
+The temporary progression bonuses do not rewrite stored trend. Each asset
+keeps a 100-price graph history in memory.
 
-"bankrupt", "min_price", and "max_price" are variable names, not a separate
-bankruptcy event or guaranteed price bounds. In this catalogue bankrupt is a
-nonzero threshold for every asset, so the broad $0.87..$10,000,000 clamp is
-the one normally used. Nominal limits mainly cause trend reversals. For an
-asset whose bankruptcy threshold has been passed, its stored trend instead
-falls by 0.01 every tick. The temporary bonuses in steps 3–5 affect that
-tick's price calculation; they do not themselves rewrite the stored trend.
+Mission events and implant prices
+---------------------------------
+The first successful completion of each eligible built-in campaign mission
+realizes its authored stock impacts once in that save slot. Missions can move
+more than two shares; Darkworld slightly lowers only CRUS. Every built-in
+mission except House has an event. The stock screen's Market Outlook describes each mission's expected effects and marks rising and falling
+tickers without disclosing exact percentages. The latest completed mission's
+authored percentage impacts appear in one line beside the Outlook heading
+only while their movement is active. Rising and falling forecast tickers occupy
+separate lines; the two market-wide forecasts list every company ticker on its
+own line. Secret mission forecasts remain hidden until those missions
+are unlocked. The Headquarters forecast requires Hope Eradicated and Death
+mode to have been active together at least once in that save slot. Replacing
+Cruelty Squad's CEO lifts CRUS sharply and hurts rival SCRD. When none
+are available, the panel says so. Ordinary impacts are spread across 20 seconds and start a
+matching growth or decline period. Other market movement continues during
+that period, so the final observed price need not differ by exactly the
+authored impact percentage. Replaying a mission does not repeat its effects.
 
-The default values for fields not overridden by an asset are: price $100,
-nominal minimum $20, nominal maximum $200, volatility 1, trend 0,
-price_action_day 600, price_action 0.1, extreme_action 200, bankrupt 600,
-issued shares 1,238,299, and owned 0. LEVELS_UNLOCKED is the campaign's
-progression variable, not elapsed market days. The equality conditions for
-level 6 and extreme_action apply on EVERY tick while progression stays at
-that exact value, not just once when the level is unlocked.
+Apartment Atrocity's GAGA -100% is a special terminal event. Its price falls
+linearly from its value at mission completion to zero over 20 seconds, then
+remains at zero until Archon Grid restores it at its original listing price
+and gives it the same 99% upward impact as every other company stock. Purchases
+are blocked while it is bankrupt, and existing shares retain their quantity. The other negative
+events use the ordinary percentage movement and can recover later. Trauma
+Loop applies a 99% decline to every company stock; its event can go below the
+ordinary market price floor. Fish and body parts are unaffected by these two
+market-wide events. Stock
+event version 3 clears the one-time history from earlier outlook versions,
+allowing an existing save to replay missions and receive the revised events.
+The complete event list is in market_outlook_events.txt.
 
-Notable equity schedules
-------------------------
-G-Tech (GTC ) has bankruptcy threshold 3. Its stored trend loses 0.01 per
-tick once LEVELS_UNLOCKED exceeds 3. GamesGames (GAGA) does likewise after
-threshold 7 and gets the temporary +1 extreme action on every tick while
-LEVELS_UNLOCKED equals 6. Advanced Orbital Instruments (AOI ) gets an extra
-+0.01 per eligible tick from progression 4; Veggo's Meatoids (VEME) gets
-+0.02 from progression 3. Other assets retain the default thresholds unless
-their catalogue data says otherwise.
+The implant shop quotes head items against Pure Optics, torso items against
+Godhead Heavy Industries, leg items against G-Tech, and arm items against
+Security Redefined. Other priced implants use Consumer Softproducts. The
+implant tooltip shows a live price and linked ticker on one line. The multiplier is 1 + 0.15 * natural_log(current company price / starting price),
+clamped to 0.75-1.35. Zero-price items remain free. The quote is captured
+when the confirmation opens, so a tick during confirmation does not silently
+change the amount charged.
 
 Finding fish and parts
 ----------------------
@@ -130,8 +149,10 @@ Saving, slots, and online sessions
 Market data is stored separately from campaign cash. Slot 1 uses
 user://stocks.save; slots 2–4 use
 user://crus_online_slots/slotN/stocks.save. Each stock entry saves its ticker,
-owned quantity, current price, previous price, and stored trend; the file also
-contains fish_found and org_found. On load, price, owned, and trend are
+owned quantity, current price, previous price, stored trend, company market
+state, its remaining duration, and any pending mission movement; the file also contains fish_found,
+org_found, and the list of market events already realized. On load, price,
+owned, trend, company state, and completed market events are
 restored. Previous price is written to disk but is not currently restored by
 load_stocks(), and the last-100-point graph is not stored. A missing or empty
 stock save is initialized from catalogue defaults or the stock backup.

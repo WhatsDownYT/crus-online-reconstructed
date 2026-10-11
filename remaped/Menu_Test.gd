@@ -238,6 +238,7 @@ var online_sidebar_was_visible = false
 var online_sidebar_position = Vector2.ZERO
 var online_navigation_generation = 0
 const ONLINE_NAVIGATION_STEPS = 12
+const GRID_STEP_SECONDS = 1.0 / 120.0
 onready var clear_button = $Settings / GridContainer / PanelContainer6 / VBoxContainer3 / ClearSave
 class Menu extends Control:
 	var buttons:Array
@@ -254,10 +255,10 @@ func _physics_process(delta):
 	_apply_online_level_lock()
 	var modloader_version = get_node_or_null("ModLoaderVersion")
 	if modloader_version != null:
-		modloader_version.visible = not in_game and not active_menus.empty() and active_menus.back() == menu[START]
-	time += 1
+		modloader_version.visible = not in_game and not Global.cutscene and not active_menus.empty() and active_menus.back() == menu[START]
+	time += delta
 	
-	if in_game:
+	if in_game or Global.cutscene:
 		clear_button.hide()
 	else :
 		clear_button.show()
@@ -279,7 +280,7 @@ func _physics_process(delta):
 			if button == b:
 				return 
 		if button.disabled and button.get_parent() != menu[WEAPON_SELECT] and not (button.has_meta("competitive_start_locked") and button.get_meta("competitive_start_locked")):
-			button.texture_disabled = BUTTON_TEXTURES_D[int(sin(button.get_index() + time * 0.05) * 3) % 3]
+			button.texture_disabled = BUTTON_TEXTURES_D[int(sin(button.get_index() + time * 3.0) * 3) % 3]
 
 func get_key_index(action):
 	if action is InputEventKey:
@@ -500,7 +501,23 @@ func _ready():
 	
 
 	set_res(Global.resolution[0], Global.resolution[1])
+	_connect_settings_autosave($Settings)
 	call_deferred("_align_startup_window")
+
+func _connect_settings_autosave(control):
+	if control is Range:
+		control.connect("value_changed", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is BaseButton:
+		control.connect("toggled", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is OptionButton:
+		control.connect("item_selected", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is ItemList and control == resolution_list:
+		control.connect("item_activated", self, "_settings_changed", [], CONNECT_DEFERRED)
+	for child in control.get_children():
+		_connect_settings_autosave(child)
+
+func _settings_changed(_value = null):
+	Global.save_settings()
 
 func _align_startup_window():
 	if Global.full_screen:
@@ -989,7 +1006,8 @@ func create_buttons(m:int):
 			B_STATS:
 				create_button(m, "Statistics", "_on_Statistics_Button_Pressed", menu[m].buttons[i])
 			B_NEWS:
-				create_button(m, "News", "_on_News_Button_Pressed", menu[m].buttons[i])
+				var news_button = create_button(m, "News", "_on_News_Button_Pressed", menu[m].buttons[i])
+				news_button.hint_tooltip = "Coming soon!"
 			B_LEVEL:
 				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
 				level_button.set_meta("level_index", level)
@@ -1264,13 +1282,7 @@ func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
 	menu[STATS].raise()
 
 func _on_News_Button_Pressed(m:int, button_id:TextureButton):
-	if in_game or menu_changing:
-		return
-	_close_online_panel()
-	goto_menu(m, NEWS, button_id)
-	active_element = news_panel
-	news_panel.come()
-	menu[NEWS].raise()
+	pass
 
 func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	goto_menu(m, SETTINGS, button_id)
@@ -1535,6 +1547,8 @@ func go_back(m:int, b_id:TextureButton):
 		if active_element == $Character_Menu or active_element == $Stock_Menu:
 			active_element = $Level_Info_Grid
 	b_position = b_id.rect_position
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_step = 0
 	for child in range(active_menus[active_menus.size() - 1].get_children().size() - 1, - 1, - 1):
 		counter += 1
 		if fmod(counter, 2) - 1 == 0:
@@ -1544,18 +1558,15 @@ func go_back(m:int, b_id:TextureButton):
 		if closing_weapon_menu:
 			active_menus.back().get_child(child).hide()
 			active_menus.back().get_child(child).rect_position = to_pos
-			yield (get_tree(), "idle_frame")
-			if generation != _navigation_generation:
-				return
-			continue
-		
-		while ( not active_menus[active_menus.size() - 1].get_children()[child].rect_position.is_equal_approx(to_pos)):
-			active_menus[active_menus.size() - 1].get_children()[child].set_position(lerp(active_menus[active_menus.size() - 1].get_children()[child].rect_position, to_pos, 1))
+		else:
+			active_menus.back().get_child(child).rect_position = to_pos
 			hover_info.get_parent().hide()
+			active_menus.back().get_child(child).hide()
+		animation_step += 1
+		while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step * GRID_STEP_SECONDS:
 			yield (get_tree(), "idle_frame")
 			if generation != _navigation_generation:
 				return
-		active_menus[active_menus.size() - 1].get_children()[child].hide()
 	
 	for child in active_menus[active_menus.size() - 2].get_children():
 		child.disabled = false
@@ -1632,10 +1643,19 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 	if to_menu == WEAPON_SELECT:
 		for weapon_button in menu[WEAPON_SELECT].get_children():
 			weapon_button.rect_position = b.rect_position
+	var level_reveal_visibility = {}
+	if to_menu == LEVEL_SELECT:
+		button_state()
+		for level_button in menu[LEVEL_SELECT].get_children():
+			if level_button.get_meta("menu_button_type") == B_LEVEL:
+				level_reveal_visibility[level_button] = level_button.visible
+			level_button.hide()
 	
 	var wep_dir = 1
 	for child in menu[from_menu].get_children():
 		child.disabled = true
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_step = 0
 	for child in menu[to_menu].get_children():
 		if to_menu == LEVEL_SELECT and _client_mission_button(child):
 			if child.get_meta("menu_button_type") == B_MISSION_START:
@@ -1690,7 +1710,7 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 			LEFT:
 				b_position.x -= button_size.x
 				
-		if to_menu != WEAPON_SELECT or (not child in weapon_page_buttons and (weapon_page == 0 or not child in weapon_grid_buttons)):
+		if (to_menu != WEAPON_SELECT or (not child in weapon_page_buttons and (weapon_page == 0 or not child in weapon_grid_buttons))) and (to_menu != LEVEL_SELECT or child.get_meta("menu_button_type") != B_LEVEL or level_reveal_visibility.get(child, false)):
 			child.show()
 		if to_menu == LEVEL_SELECT and child.get_meta("menu_button_type") == B_MISSION_START:
 			_apply_competitive_start_gate()
@@ -1707,20 +1727,25 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 		if to_menu == SETTINGS and b.get_meta("menu_button_type") == B_MULTIPLAYER_MENU:
 			to_pos = b.rect_position + Vector2(button_size.x, 0)
 			b_position = to_pos
-		button_state()
-		while ( not child.rect_position.is_equal_approx(to_pos)):
-			child.disabled = true
-			child.set_position(lerp(child.rect_position, to_pos, 1))
-			
+		if to_menu != LEVEL_SELECT:
+			button_state()
+		child.disabled = true
+		child.rect_position = to_pos
+		animation_step += 1
+		while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step * GRID_STEP_SECONDS:
 			yield (get_tree(), "idle_frame")
 			if generation != _navigation_generation:
 				return
 		child.disabled = false
-		button_state()
+		if to_menu != LEVEL_SELECT:
+			button_state()
 		if to_menu == LEVEL_SELECT:
 			_apply_competitive_start_gate()
 		
 		update_level_info()
+	if to_menu == LEVEL_SELECT:
+		button_state()
+		_apply_competitive_start_gate()
 	if to_menu == WEAPON_SELECT:
 		_show_weapon_page()
 	menu_changing = false
@@ -1748,11 +1773,13 @@ func _input(event):
 		return
 	if menu_changing:
 		return 
-	if Global.cutscene:
-		return 
 	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed() and wait_for_key:
 		key_pressed = event
 		wait_for_key = false
+		get_tree().set_input_as_handled()
+		return
+	if Global.cutscene:
+		return 
 	if event is InputEventMouseButton and not in_game:
 		if event.pressed and not visible:
 			toggle_menu()
@@ -2184,6 +2211,7 @@ func _on_Key_List_item_activated(index):
 		KEY_SECONDARY:
 			set_inputs("Shoot_Secondary")
 			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot Secondary: " + key_pressed.as_text())
+	Global.save_settings()
 func set_inputs(action):
 	InputMap.action_erase_events(action)
 	InputMap.action_add_event(action, key_pressed)
@@ -2241,14 +2269,20 @@ func _reset_level_progression():
 	button_state()
 
 func _on_ClearSave_pressed():
+	confirmed = false
+	cancel = false
 	$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
 	$ConfirmationDialog.dialog_text = "This will reset all of your progress. Are you sure?"
-	while confirmed == false:
+	while confirmed == false and cancel == false:
 		yield (get_tree(), "idle_frame")
 	confirmed = false
 	if cancel == true:
 		cancel = false
 		return 
+	$ConfirmationDialog.hide()
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.leave_server()
+	Global.campaign_save.set_mode(Global, "cruelty")
 	Global.money = 0
 	Global.play_time = 0
 	Global.total_kills = 0
@@ -2304,11 +2338,21 @@ func _on_ClearSave_pressed():
 	button_state()
 	for stock in Global.STOCKS.stocks:
 		stock.price = stock.starting_price
+		stock.last_price = stock.starting_price
 		stock.trend = stock.starting_trend
 		stock.owned = 0
+		stock.market_state = 0
+		stock.market_state_time = 0.0
+		stock.market_impulse = 0.0
+		stock.market_impulse_time = 0.0
+		stock.market_collapse_time = 0.0
+		stock.market_collapse_start_price = 0.0
+		stock.permanently_bankrupt = false
+		stock.values.clear()
 	Global.MONEY_ITEMS = []
 	Global.STOCKS.FISH_FOUND = []
 	Global.STOCKS.ORGANS_FOUND = []
+	Global.STOCKS.market_events_applied.clear()
 	Global.STOCKS.save_stocks("user://stocks.save")
 	var goals = Global.get_node_or_null("AchievementGoals")
 	if goals != null:
@@ -2319,6 +2363,13 @@ func _on_ClearSave_pressed():
 	if is_instance_valid(Multiplayer.Extensions):
 		Multiplayer.Extensions.reset_campaign_progress()
 	Global.save_game()
+	var empty_marker = File.new()
+	if empty_marker.open(Global.slot_path("crus_online_empty.marker"), File.WRITE) == OK:
+		empty_marker.close()
+	Global.save_slot_selected = false
+	Global.force_save_selector = true
+	get_tree().paused = false
+	Global.goto_scene("res://Cutscenes/Cutscene1.tscn")
 
 
 func _on_ConfirmationDialog_confirmed():
@@ -2427,14 +2478,17 @@ func _animate_level_sidebar(showing, generation):
 		panel.rect_scale = Vector2(1, 0.05)
 		start_scale = 0.05
 		panel.show()
-	for step in range(1, ONLINE_NAVIGATION_STEPS + 1):
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_seconds = ONLINE_NAVIGATION_STEPS * GRID_STEP_SECONDS
+	while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_seconds:
 		if generation != online_navigation_generation:
 			return
-		var amount = float(step) / float(ONLINE_NAVIGATION_STEPS)
+		var amount = min(1.0, (OS.get_ticks_msec() - animation_start_msec) / (animation_seconds * 1000.0))
 		panel.rect_scale.y = lerp(start_scale, target_scale, amount)
 		yield (get_tree(), "idle_frame")
 	if generation != online_navigation_generation:
 		return
+	panel.rect_scale.y = target_scale
 	if showing:
 		panel.rect_scale = Vector2(1, 1)
 	else:

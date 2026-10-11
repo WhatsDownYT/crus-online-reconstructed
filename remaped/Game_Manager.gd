@@ -3,6 +3,7 @@ extends Node
 var campaign_save = preload("res://MOD_CONTENT/CruS Online/CampaignSave.gd").new()
 var slot_index = 1
 var save_slot_selected = false
+var force_save_selector = false
 var slot_defaults = {}
 var slot_implants_default = []
 
@@ -631,6 +632,7 @@ func level_finished()->void :
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return 
 	consecutive_deaths = 0
+	STOCKS.apply_mission_market_event(CURRENT_LEVEL)
 	if not hope_discarded:
 		if Global.stock_mode and LEVEL_STIMES_RAW[CURRENT_LEVEL] > level_time_raw:
 			LEVEL_STIMES[CURRENT_LEVEL] = level_time
@@ -790,6 +792,8 @@ func _physics_process(delta):
 		every_20 = true
 	else :
 		every_20 = false
+	if menu.active_element == menu.get_node("Level_End_Grid") and menu.visible:
+		return
 	action = lerp(action, action_lerp_value, 5 * delta)
 	action_lerp_value = lerp(action_lerp_value, 0, delta * 0.1)
 	action = clamp(action, 0, 72)
@@ -1390,6 +1394,7 @@ func set_inputs(action, key):
 
 func record_multiplayer_win():
 	consecutive_deaths = 0
+	STOCKS.apply_mission_market_event(CURRENT_LEVEL)
 	if not hope_discarded:
 		if Global.stock_mode and LEVEL_STIMES_RAW[CURRENT_LEVEL] > level_time_raw:
 			LEVEL_STIMES[CURRENT_LEVEL] = level_time

@@ -56,6 +56,10 @@ var weapon_icons = []
 var tooltip_panel
 var buttons = []
 var hover_slot = 0
+var settings_open = false
+var settings_button
+var settings_restore = {}
+var menu_was_visible = false
 var body_font
 var title_font
 var name_font
@@ -288,6 +292,92 @@ func _build_buttons():
 		button.connect("pressed", self, "_choose_slot", [index + 1])
 		grid.add_child(button)
 		buttons.append(button)
+	settings_button = TextureButton.new()
+	settings_button.name = "Settings"
+	settings_button.rect_min_size = Global.menu.button_size
+	settings_button.rect_size = Global.menu.button_size
+	settings_button.expand = true
+	settings_button.texture_normal = load("res://Textures/Menu/settings_normal.png")
+	settings_button.texture_hover = load("res://Textures/Menu/hover.png")
+	settings_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	settings_button.connect("mouse_entered", self, "_show_action_tooltip", ["Settings"])
+	settings_button.connect("mouse_exited", self, "_leave_slot")
+	settings_button.connect("pressed", self, "_toggle_settings")
+	grid.add_child(settings_button)
+	var quit_button = TextureButton.new()
+	quit_button.name = "Quit to OS"
+	quit_button.rect_min_size = Global.menu.button_size
+	quit_button.rect_size = Global.menu.button_size
+	quit_button.expand = true
+	quit_button.texture_normal = load("res://Textures/Menu/OS_normal.png")
+	quit_button.texture_hover = load("res://Textures/Menu/hover.png")
+	quit_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	quit_button.connect("mouse_entered", self, "_show_action_tooltip", ["Quit to OS"])
+	quit_button.connect("mouse_exited", self, "_leave_slot")
+	quit_button.connect("pressed", self, "_quit_game")
+	grid.add_child(quit_button)
+
+func _quit_game():
+	_close_settings()
+	get_tree().quit()
+
+func _show_action_tooltip(label):
+	stats_panel.hide()
+	tooltip_panel.get_node("Hover_Info/Name").text = label
+	tooltip_panel.rect_size = Vector2.ZERO
+	tooltip_panel.show()
+
+func _toggle_settings():
+	if settings_open:
+		_close_settings()
+		return
+	settings_open = true
+	stats_panel.hide()
+	var game_menu = Global.menu
+	menu_was_visible = game_menu.visible
+	settings_restore.clear()
+	for entry in game_menu.menu:
+		settings_restore[entry] = entry.visible
+		entry.hide()
+	for path in ["Level_Info_Grid", "Character_Menu", "Stock_Menu", "Hover_Panel", "Settings", "StatisticsScreen", "GoalsScreen"]:
+		var panel = game_menu.get_node_or_null(path)
+		if panel != null:
+			settings_restore[panel] = panel.visible
+			panel.hide()
+	game_menu.show()
+	var settings = game_menu.get_node("Settings")
+	settings.rect_position.x = 42
+	settings.come()
+	settings.raise()
+	for control_name in ["ClearSave", "ResetTimer", "ResetLevels"]:
+		var save_control = game_menu.get_node_or_null("Settings/GridContainer/PanelContainer6/VBoxContainer3/" + control_name)
+		if save_control != null:
+			settings_restore[save_control] = save_control.visible
+			save_control.hide()
+	settings_button.texture_normal = game_menu.BUTTON_TEXTURES[game_menu.B_RETURN]
+	settings_button.name = "Return"
+
+func _close_settings():
+	if not settings_open:
+		return
+	settings_open = false
+	for control in settings_restore:
+		if is_instance_valid(control):
+			control.visible = settings_restore[control]
+	settings_restore.clear()
+	Global.menu.visible = menu_was_visible
+	settings_button.texture_normal = load("res://Textures/Menu/settings_normal.png")
+	settings_button.name = "Settings"
+	stats_panel.hide()
+	tooltip_panel.hide()
+
+func _exit_tree():
+	_close_settings()
+
+func _input(event):
+	if settings_open and not Global.menu.wait_for_key and event.is_action_pressed("ui_cancel"):
+		_close_settings()
+		get_tree().set_input_as_handled()
 
 func _build_tooltip():
 	tooltip_panel = Global.menu.get_node("Hover_Panel").duplicate()
@@ -320,6 +410,9 @@ func _show_slot(slot):
 	tooltip_panel.get_node("Hover_Info/Name").text = "Save Slot " + str(slot)
 	tooltip_panel.rect_size = Vector2.ZERO
 	tooltip_panel.show()
+	if settings_open or File.new().file_exists(Global.slot_path_for(slot, "crus_online_empty.marker")):
+		stats_panel.hide()
+		return
 	if not File.new().file_exists(Global.slot_path_for(slot, "savegame.save")):
 		stats_panel.hide()
 		return
@@ -612,5 +705,9 @@ func _count_true(values):
 	return total
 
 func _choose_slot(slot):
+	_close_settings()
+	var empty_marker = Global.slot_path_for(slot, "crus_online_empty.marker")
+	if File.new().file_exists(empty_marker):
+		Directory.new().remove(empty_marker)
 	Global.select_save_slot(slot)
 	Global.get_node("Multiplayer").goto_menu_host()

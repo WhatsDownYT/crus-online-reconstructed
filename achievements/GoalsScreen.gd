@@ -777,11 +777,8 @@ func _update_category_menu_styles():
 
 func _filtered_goals():
 	var filtered = []
-	var manager = Global.get_node_or_null("AchievementGoals")
 	for goal in goals:
 		if typeof(goal) != TYPE_DICTIONARY:
-			continue
-		if manager != null and not manager.should_show_entry(goal):
 			continue
 		var category = str(goal.get("category", "campaign")).to_lower()
 		if current_category == "all" or category == current_category:

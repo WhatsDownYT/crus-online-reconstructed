@@ -11,6 +11,78 @@ var FISH_FOUND:Array
 var ORGANS_FOUND:Array
 var timer:Timer
 var total_assets = 0
+var market_events_applied:Array = []
+var market_news_history:Array = []
+var market_impact_display_time:float = 0.0
+var market_hq_revealed:bool = false
+const MARKET_IMPACT_SECONDS = 20.0
+
+# Each eligible built-in mission has disclosed stock impacts, realized once per save.
+const MISSION_MARKET_EVENTS = {
+0: {"mission": "Cruelty Squad Headquarters", "outlook": "The death of Cruelty Squad's CEO will bring new leadership, sending the company's stock soaring while Security Redefined suffers.", "effects": [
+		{"ticker": "CRUS", "percent": 200},
+		{"ticker": "SCRD", "percent": -35}]},
+	1: {"mission": "Pharmakokinetiks", "outlook": "The internal cleanup will slightly benefit Cruelty Squad, while the biological-currency scandal prompts a small G-Tech sell-off.", "effects": [
+		{"ticker": "CRUS", "percent": 8},
+		{"ticker": "GTC ", "percent": -7}]},
+	2: {"mission": "Paradise", "outlook": "Eliminating G-Tech's executives will bring the company close to collapse. Veggo's Meatoids stands to gain substantially, while Pizza House will see a small loss.", "effects": [
+		{"ticker": "VEME", "percent": 68},
+		{"ticker": "GTC ", "percent": -90},
+		{"ticker": "PIHO", "percent": -8}]},
+	3: {"mission": "Sin Space Engineering", "outlook": "AOI will gain leadership aligned with the Mercury project, lifting its stock. Cruelty Squad will benefit slightly, while demand for Pure Optics' survival equipment will fall.", "effects": [
+		{"ticker": "AOI ", "percent": 15},
+		{"ticker": "CRUS", "percent": 6},
+		{"ticker": "PURE", "percent": -8}]},
+	4: {"mission": "Androgen Assault", "outlook": "The loss of police leadership will increase demand for rival private security, while Cruelty Squad loses some of its influence.", "effects": [
+		{"ticker": "SCRD", "percent": 16},
+		{"ticker": "CRUS", "percent": -10}]},
+	5: {"mission": "Mall Madness", "outlook": "Gurney's death will send GamesGames into an extraordinary speculative surge. Cruelty Squad and Consumer Softproducts will also benefit, while damage to the mall hurts Pizza House slightly.", "effects": [
+		{"ticker": "GAGA", "percent": 286},
+		{"ticker": "CRUS", "percent": 18},
+		{"ticker": "CSFT", "percent": 12},
+		{"ticker": "PIHO", "percent": -8}]},
+	6: {"mission": "Apartment Atrocity", "outlook": "The GamesGames boom will end in bankruptcy. The hunt for Cruelty Squad's operative will benefit Security Redefined, while the internal conflict weighs on Cruelty Squad.", "effects": [
+		{"ticker": "SCRD", "percent": 14},
+		{"ticker": "GAGA", "percent": -100},
+		{"ticker": "CRUS", "percent": -12}]},
+	7: {"mission": "Seaside Shock", "outlook": "The government contract will benefit Cruelty Squad, and removing the seasteaders will favor established shipping. Security Redefined will lose a little ground.", "effects": [
+		{"ticker": "CRUS", "percent": 18},
+		{"ticker": "PWR ", "percent": 12},
+		{"ticker": "SCRD", "percent": -8}]},
+	8: {"mission": "Bog Business", "outlook": "Safer fracking operations and supply routes will benefit Power Monger Shipping and Godhead Heavy Industries. Security Redefined will see a slight loss.", "effects": [
+		{"ticker": "PWR ", "percent": 16},
+		{"ticker": "GDHD", "percent": 10},
+		{"ticker": "SCRD", "percent": -7}]},
+	9: {"mission": "Casino Catastrophe", "outlook": "The casino owner's death will cause severe losses for Fatberg Casino and a smaller loss for Security Redefined. Completing the contract will slightly benefit Cruelty Squad.", "effects": [
+		{"ticker": "CRUS", "percent": 8},
+		{"ticker": "FBCA", "percent": -64},
+		{"ticker": "SCRD", "percent": -8}]},
+	10: {"mission": "Idiot Party", "outlook": "Attacking the gathering of elites will increase demand for private security, while Godhead Heavy Industries and Fatberg Casino lose business.", "effects": [
+		{"ticker": "SCRD", "percent": 14},
+		{"ticker": "GDHD", "percent": -12},
+		{"ticker": "FBCA", "percent": -10}]},
+	11: {"mission": "Office", "outlook": "Destabilizing the security hierarchy will cause major losses for Cruelty Squad and Security Redefined. Pure Optics will gain as personal defense becomes more valuable.", "effects": [
+		{"ticker": "PURE", "percent": 12},
+		{"ticker": "CRUS", "percent": -44},
+		{"ticker": "SCRD", "percent": -25}]},
+	12: {"mission": "Archon Grid", "outlook": "The eventual rise of opportunity will send every company stock soaring.", "effects": [
+		{"ticker": "ALL", "percent": 99}]},
+	13: {"mission": "Darkworld", "outlook": "Cruelty Squad will suffer a slight loss after spending resources on a redundant, unusually dangerous contract.", "effects": [
+		{"ticker": "CRUS", "percent": -6}]},
+	14: {"mission": "Alpine Hospitality", "outlook": "Removing executives of competing firms will benefit Cruelty Squad and Godhead Heavy Industries, while Security Redefined loses ground.", "effects": [
+		{"ticker": "CRUS", "percent": 18},
+		{"ticker": "GDHD", "percent": 10},
+		{"ticker": "SCRD", "percent": -12}]},
+	15: {"mission": "Miner's Miracle", "outlook": "The death of Godhead's CEO will cause major losses for the company. Cruelty Squad and Power Monger Shipping will see smaller gains.", "effects": [
+		{"ticker": "CRUS", "percent": 8},
+		{"ticker": "PWR ", "percent": 8},
+		{"ticker": "GDHD", "percent": -42}]},
+	16: {"mission": "Neuron Activator", "outlook": "The collapse of the redevelopment venture will hurt Godhead Heavy Industries, while violence in the arcology increases demand for Security Redefined.", "effects": [
+		{"ticker": "SCRD", "percent": 12},
+		{"ticker": "GDHD", "percent": -15}]},
+	18: {"mission": "Trauma Loop", "outlook": "???", "effects": [
+		{"ticker": "ALL", "percent": -99}]}
+}
 
 var TOILET_FISH = ["BNBO"]
 var POSSIBLE_FISH = [
@@ -59,6 +131,14 @@ class stock:
 	var night = false
 	var starting_price = price
 	var starting_trend = trend
+	var market_state:int = 0
+	var market_state_time:float = 0.0
+	var market_impulse:float = 0.0
+	var market_impulse_time:float = 0.0
+	var market_collapse_time:float = 0.0
+	var market_collapse_start_price:float = 0.0
+	var market_event_floor:float = 0.0
+	var permanently_bankrupt:bool = false
 	var fish_speed = 1
 	var fish_chance = 100
 	var fish_night = false
@@ -70,7 +150,15 @@ class stock:
 			"owned":owned, 
 			"price":price, 
 			"l_price":last_price, 
-			"trend":trend
+			"trend":trend,
+			"market_state":market_state,
+			"market_state_time":market_state_time,
+			"market_impulse":market_impulse,
+			"market_impulse_time":market_impulse_time,
+			"market_collapse_time":market_collapse_time,
+			"market_collapse_start_price":market_collapse_start_price,
+			"market_event_floor":market_event_floor,
+			"permanently_bankrupt":permanently_bankrupt
 		}
 		return stock_data
 
@@ -1679,6 +1767,10 @@ func _enter_tree():
 var slot_stock_defaults = {}
 
 func reset_slot_data():
+	market_events_applied = []
+	market_news_history = []
+	market_impact_display_time = 0.0
+	market_hq_revealed = false
 	var fish = slot_stock_defaults.get("fish_found")
 	var organs = slot_stock_defaults.get("org_found")
 	FISH_FOUND = fish.duplicate(true) if fish is Array else []
@@ -1689,10 +1781,19 @@ func reset_slot_data():
 		stock.last_price = data.get("l_price", stock.price)
 		stock.trend = data.get("trend", stock.starting_trend)
 		stock.owned = data.get("owned", 0)
+		stock.market_state = data.get("market_state", 0)
+		stock.market_state_time = data.get("market_state_time", 0.0)
+		stock.market_impulse = data.get("market_impulse", 0.0)
+		stock.market_impulse_time = data.get("market_impulse_time", 0.0)
+		stock.market_collapse_time = data.get("market_collapse_time", 0.0)
+		stock.market_collapse_start_price = data.get("market_collapse_start_price", 0.0)
+		stock.market_event_floor = data.get("market_event_floor", 0.0)
+		stock.permanently_bankrupt = data.get("permanently_bankrupt", false)
 		stock.values.clear()
 	total_assets = 0
 
 func _ready():
+	rng.randomize()
 	timer = Timer.new()
 	add_child(timer)
 	timer.wait_time = 1
@@ -1701,8 +1802,13 @@ func _ready():
 	timer.start()
 
 func stock_tick():
+	_capture_hq_reveal()
 	var asset_value = 0
 	for stock in stocks:
+		if stock.asset_type == "equity":
+			_tick_company(stock, timer.wait_time)
+			asset_value += stock.price * stock.owned
+			continue
 		
 			
 		
@@ -1735,6 +1841,192 @@ func stock_tick():
 		if stock.last_price <= stock.price:
 			color = Color(0, 1, 0)
 	total_assets = asset_value
+	market_impact_display_time = max(0.0, market_impact_display_time - timer.wait_time)
+
+func _capture_hq_reveal()->void:
+	if not market_hq_revealed and Global.hope_discarded and Global.death:
+		market_hq_revealed = true
+		save_stocks()
+
+func _tick_company(company, elapsed:float)->void:
+	company.last_price = company.price
+	if company.permanently_bankrupt:
+		company.price = 0.0
+		company.values.append(0.0)
+		if company.values.size() > 100:
+			company.values.pop_front()
+		return
+	if company.market_collapse_time > 0.0:
+		company.market_collapse_time = max(0.0, company.market_collapse_time - elapsed)
+		company.price = company.market_collapse_start_price * company.market_collapse_time / MARKET_IMPACT_SECONDS
+		if company.market_collapse_time <= 0.0:
+			company.price = 0.0
+			company.permanently_bankrupt = true
+		company.values.append(company.price)
+		if company.values.size() > 100:
+			company.values.pop_front()
+		return
+	company.market_state_time -= elapsed
+	if company.market_state_time <= 0.0:
+		# Calm, growth, decline, and crash/recovery periods have different risks.
+		var roll = rng.randf()
+		if roll < 0.35:
+			company.market_state = 0
+		elif roll < 0.62:
+			company.market_state = 1
+		elif roll < 0.92:
+			company.market_state = -1
+		else:
+			company.market_state = -2
+		company.market_state_time = rng.randf_range(90.0, 240.0)
+		if company.price < company.starting_price * 0.12 and company.market_state < 1:
+			company.market_state = 1
+	var drift = 0.00005
+	var noise = 0.006 + min(company.volatility, 15.0) * 0.0005
+	match company.market_state:
+		1:
+			drift = 0.0012
+		-1:
+			drift = -0.0006
+		-2:
+			drift = -0.002
+	var change = drift * elapsed + rng.randfn() * noise * sqrt(elapsed)
+	if company.market_impulse_time > 0.0:
+		var impulse_step = min(elapsed, company.market_impulse_time)
+		var impulse_change = company.market_impulse * impulse_step / company.market_impulse_time
+		change += impulse_change
+		company.market_impulse -= impulse_change
+		company.market_impulse_time -= impulse_step
+	var price_floor = max(0.9, company.starting_price * 0.03)
+	if company.market_event_floor > 0.0:
+		price_floor = min(price_floor, company.market_event_floor)
+	company.price = clamp(company.price * exp(change), price_floor, max(company.starting_price * 20.0, company.last_price))
+	company.values.append(company.price)
+	if company.values.size() > 100:
+		company.values.pop_front()
+
+func market_outlook(level_index:int)->String:
+	_capture_hq_reveal()
+	if level_index == 0 and not market_hq_revealed:
+		return ""
+	if not MISSION_MARKET_EVENTS.has(level_index) or market_events_applied.has(level_index):
+		return ""
+	var event = MISSION_MARKET_EVENTS[level_index]
+	return event.mission + ": " + event.outlook
+
+func stock_outlook(ticker:String)->String:
+	for level_index in MISSION_MARKET_EVENTS:
+		if market_events_applied.has(level_index):
+			continue
+		for effect in MISSION_MARKET_EVENTS[level_index].effects:
+			if effect.ticker == ticker or effect.ticker == "ALL":
+				return market_outlook(level_index)
+	return ""
+
+func market_forecast_entries()->Array:
+	_capture_hq_reveal()
+	var entries = []
+	for level_index in range(19):
+		if level_index == 0 and not market_hq_revealed:
+			continue
+		if not MISSION_MARKET_EVENTS.has(level_index):
+			continue
+		if market_events_applied.has(level_index):
+			continue
+		if level_index <= 12 and level_index > Global.LEVELS_UNLOCKED:
+			continue
+		if level_index >= 13 and not Global.BONUS_UNLOCK.has(Global.BONUS_LEVELS[level_index - 13]):
+			continue
+		var event = MISSION_MARKET_EVENTS[level_index]
+		entries.append({"mission": event.mission, "description": event.outlook, "effects": event.effects})
+	return entries
+
+func market_forecast_lines()->Array:
+	var lines = []
+	for entry in market_forecast_entries():
+		lines.append(entry.mission + ":\n" + entry.description)
+	return lines
+
+func market_news_entries()->Array:
+	var entries = market_news_history.duplicate(true)
+	entries.invert()
+	return entries
+
+func apply_mission_market_event(level_index:int)->void:
+	if not MISSION_MARKET_EVENTS.has(level_index) or market_events_applied.has(level_index):
+		return
+	var event = MISSION_MARKET_EVENTS[level_index]
+	for effect in event.effects:
+		for company in stocks:
+			if effect.ticker == "ALL":
+				if company.asset_type != "equity":
+					continue
+			elif company.ticker != effect.ticker:
+				continue
+			if level_index == 12 and company.ticker == "GAGA" and company.permanently_bankrupt:
+				company.permanently_bankrupt = false
+				company.market_collapse_time = 0.0
+				company.market_collapse_start_price = 0.0
+				company.market_impulse = 0.0
+				company.market_impulse_time = 0.0
+				company.market_event_floor = 0.0
+				company.price = company.starting_price
+				company.last_price = company.price
+			if effect.percent == -100:
+				company.market_collapse_start_price = company.price
+				company.market_collapse_time = MARKET_IMPACT_SECONDS
+				company.market_impulse = 0.0
+				company.market_impulse_time = 0.0
+				if effect.ticker != "ALL":
+					break
+				continue
+			if company.permanently_bankrupt or company.market_collapse_time > 0.0:
+				if effect.ticker != "ALL":
+					break
+				continue
+			if effect.percent == -99:
+				company.market_event_floor = max(0.001, company.price * 0.001)
+			company.market_impulse += log(1.0 + float(effect.percent) / 100.0)
+			company.market_impulse_time = MARKET_IMPACT_SECONDS
+			company.market_state = 1 if effect.percent > 0 else -1
+			company.market_state_time = rng.randf_range(120.0, 240.0)
+			if effect.ticker != "ALL":
+				break
+	market_events_applied.append(level_index)
+	market_news_history.append({"mission": event.mission, "effects": event.effects.duplicate(true)})
+	market_impact_display_time = MARKET_IMPACT_SECONDS
+	save_stocks()
+
+func implant_company_ticker(implant)->String:
+	var ticker = "CSFT"
+	if implant.head:
+		ticker = "PURE"
+	elif implant.torso:
+		ticker = "GDHD"
+	elif implant.legs:
+		ticker = "GTC "
+	elif implant.arms:
+		ticker = "SCRD"
+	return ticker
+
+func implant_company_name(implant)->String:
+	if implant.price <= 0:
+		return ""
+	var ticker = implant_company_ticker(implant)
+	for company in stocks:
+		if company.ticker == ticker:
+			return company.s_name + " (" + ticker.strip_edges() + ")"
+	return ""
+
+func implant_price(implant)->int:
+	if implant.price <= 0:
+		return implant.price
+	var ticker = implant_company_ticker(implant)
+	for company in stocks:
+		if company.ticker == ticker:
+			var relative = company.price / max(company.starting_price, 0.9)
+			return int(max(1, round(implant.price * clamp(1.0 + 0.15 * log(relative), 0.75, 1.35))))
+	return implant.price
 
 
 func _physics_process(delta):
@@ -1754,6 +2046,11 @@ func _physics_process(delta):
 
 func stock_save()->Dictionary:
 	var stocks_dict:Dictionary
+	stocks_dict["market_events_version"] = 7
+	stocks_dict["market_events_applied"] = market_events_applied
+	stocks_dict["market_news_history"] = market_news_history
+	stocks_dict["market_impact_display_time"] = market_impact_display_time
+	stocks_dict["market_hq_revealed"] = market_hq_revealed
 	for stock in stocks:
 		
 		stocks_dict[stock.ticker] = stock.get_data()
@@ -1802,6 +2099,48 @@ func load_stocks()->void :
 	
 	var parsedJSON:Dictionary = {}
 	parsedJSON = parse_json(stocks_save.get_line())
+	var saved_market_event_version = int(parsedJSON.get("market_events_version", 0))
+	market_events_applied = []
+	market_news_history = []
+	market_impact_display_time = float(parsedJSON.get("market_impact_display_time", 0.0)) if saved_market_event_version >= 5 else 0.0
+	market_hq_revealed = bool(parsedJSON.get("market_hq_revealed", false)) if saved_market_event_version >= 5 else false
+	if saved_market_event_version >= 3:
+		for level_index in parsedJSON.get("market_events_applied", []):
+			var normalized_index = int(level_index)
+			if not market_events_applied.has(normalized_index):
+				market_events_applied.append(normalized_index)
+	if saved_market_event_version >= 4:
+		market_news_history = parsedJSON.get("market_news_history", []).duplicate(true)
+	elif saved_market_event_version == 3:
+		for level_index in market_events_applied:
+			if not MISSION_MARKET_EVENTS.has(level_index):
+				continue
+			var old_event = MISSION_MARKET_EVENTS[level_index]
+			var old_effects = old_event.effects.duplicate(true)
+			if level_index == 13:
+				old_effects[0].percent = 6
+			market_news_history.append({"mission": old_event.mission, "effects": old_effects})
+	if saved_market_event_version == 5:
+		for changed_level in [12, 17, 18]:
+			market_events_applied.erase(changed_level)
+		var retained_history = []
+		for old_entry in market_news_history:
+			if ["Archon Grid", "House", "Trauma Loop"].has(old_entry.mission):
+				continue
+			retained_history.append(old_entry)
+		market_news_history = retained_history
+		market_impact_display_time = 0.0
+	if saved_market_event_version >= 5 and saved_market_event_version < 7:
+		market_events_applied.erase(0)
+		var hq_was_latest = not market_news_history.empty() and market_news_history.back().mission == "Cruelty Squad Headquarters"
+		var retained_hq_history = []
+		for old_entry in market_news_history:
+			if old_entry.mission == "Cruelty Squad Headquarters":
+				continue
+			retained_hq_history.append(old_entry)
+		market_news_history = retained_hq_history
+		if hq_was_latest:
+			market_impact_display_time = 0.0
 	var fish_found = parsedJSON.get("fish_found")
 	if fish_found != null:
 		FISH_FOUND = fish_found
@@ -1817,6 +2156,25 @@ func load_stocks()->void :
 			stock.trend = trend
 			var owned = stock_data["owned"]
 			stock.owned = owned
+			stock.market_state = stock_data.get("market_state", 0)
+			stock.market_state_time = stock_data.get("market_state_time", 0.0)
+			stock.market_impulse = stock_data.get("market_impulse", 0.0)
+			stock.market_impulse_time = stock_data.get("market_impulse_time", 0.0)
+			stock.market_collapse_time = stock_data.get("market_collapse_time", 0.0)
+			stock.market_collapse_start_price = stock_data.get("market_collapse_start_price", 0.0)
+			stock.market_event_floor = stock_data.get("market_event_floor", 0.0)
+			stock.permanently_bankrupt = stock_data.get("permanently_bankrupt", false)
+			if saved_market_event_version < 3:
+				stock.market_impulse = 0.0
+				stock.market_impulse_time = 0.0
+			elif saved_market_event_version == 4:
+				stock.market_impulse_time *= 2.0
+				if stock.market_collapse_time > 0.0:
+					stock.market_collapse_time *= 2.0
+					stock.market_collapse_start_price = stock.price * MARKET_IMPACT_SECONDS / stock.market_collapse_time
+			if stock.permanently_bankrupt:
+				stock.price = 0.0
+				stock.market_collapse_time = 0.0
 	stocks_save.close()
 
 

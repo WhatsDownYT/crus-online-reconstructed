@@ -110,6 +110,8 @@ func set_performance_info():
 		$Level_Info_Vbox/Level_Select.visible = not $Level_Info_Vbox/Next_Level.visible
 
 func _has_next_level():
+	if Global.CURRENT_LEVEL in [Global.L_HQ, Global.L_PUNISHMENT, 18]:
+		return false
 	if Global.CURRENT_LEVEL < 19:
 		return true
 	var extensions = Global.get_node_or_null("Multiplayer/ExtensionCompatibility")
@@ -117,7 +119,9 @@ func _has_next_level():
 
 func _mission_won():
 	var mp = Global.get_node_or_null("Multiplayer")
-	return mp.Flow.result_won if mp != null and mp.NetworkBridge.check_connection() and mp.Flow.result_active else not Global.player.dead
+	if mp != null and mp.NetworkBridge.check_connection() and mp.Flow.result_active:
+		return mp.Flow.result_won
+	return not Global.player.dead if is_instance_valid(Global.player) else Global.objective_complete
 
 func _show_misery_message():
 	var mp = Global.get_node_or_null("Multiplayer")

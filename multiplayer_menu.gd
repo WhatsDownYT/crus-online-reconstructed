@@ -231,7 +231,7 @@ func _credit_maroon(rich, text):
 func _setup_credit_logos():
 	if credit_logos_ready:
 		return
-	var sections = get_node_or_null("Credits/VBoxContainer/Scroll/Sections")
+	var sections = credits_overlay.get_node_or_null("VBoxContainer/Scroll/Sections") if is_instance_valid(credits_overlay) else null
 	if sections == null:
 		return
 	var reconstructed = HBoxContainer.new()
@@ -239,7 +239,7 @@ func _setup_credit_logos():
 	reconstructed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reconstructed.add_constant_override("separation", 8)
 	sections.add_child(reconstructed)
-	var reconstructed_logo = _load_runtime_texture("res://MOD_CONTENT/CruS Online/crus_online_reconstructed_logo.png")
+	var reconstructed_logo = _load_runtime_texture("res://MOD_CONTENT/CruS Online/branding/Logo.png")
 	if reconstructed_logo != null:
 		reconstructed.add_child(_credit_logo(reconstructed_logo, 288, 250))
 	var reconstructed_text = _credit_text()
@@ -538,14 +538,17 @@ func _animate_menu_visibility(showing):
 		container.rect_scale = Vector2(1, 0.05)
 		start_scale = 0.05
 		container.show()
-	for step in range(1, MENU_ANIMATION_STEPS + 1):
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_seconds = MENU_ANIMATION_STEPS / 120.0
+	while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_seconds:
 		if generation != menu_animation_generation:
 			return
-		var amount = float(step) / float(MENU_ANIMATION_STEPS)
+		var amount = min(1.0, (OS.get_ticks_msec() - animation_start_msec) / (animation_seconds * 1000.0))
 		container.rect_scale.y = lerp(start_scale, target_scale, amount)
 		yield (get_tree(), "idle_frame")
 	if generation != menu_animation_generation:
 		return
+	container.rect_scale.y = target_scale
 	if showing:
 		container.rect_scale = Vector2(1, 1)
 		menu_animating = false

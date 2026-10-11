@@ -1005,7 +1005,9 @@ func _process(delta)->void :
 			
 		else :
 			AR_dot.hide()
-		if current_weapon == W_PISTOL or current_weapon == W_SILENCED_SMG or current_weapon == W_NAILER:
+		var laser_sighted_weapon = current_weapon == W_PISTOL or current_weapon == W_SILENCED_SMG or current_weapon == W_NAILER
+		glob.player.reticle.visible = not laser_sighted_weapon
+		if laser_sighted_weapon:
 			if raycast.is_colliding():
 				glob.player.UI.distance(global_transform.origin.distance_to(raycast.get_collision_point()))
 				if not leaning:
@@ -1014,10 +1016,9 @@ func _process(delta)->void :
 					raycast.rotation = Vector3(sin(t * 0.05) * 0.05, cos(t * 0.0732) * 0.051, raycast_init_rot.z)
 				laser_dot.global_transform.origin = raycast.get_collision_point() + raycast.get_collision_normal() * 1e-06
 				laser_dot.show()
-				
-				glob.player.reticle.reticle_color = Color(0, 1, 0, 0.5)
+			else:
+				laser_dot.hide()
 		else :
-			glob.player.reticle.show()
 			glob.player.reticle.reticle_color = Color(1, 0, 0, 1)
 			laser_dot.hide()
 		
@@ -1275,6 +1276,8 @@ func _process(delta)->void :
 						NetworkBridge.n_rpc(self, "_play_sound", ["Kicksound"])
 					if b.get_class() == "StaticBody" and not Global.player.is_on_floor():
 						glob.player.player_velocity += col_n * 4
+					if b.has_method("piercing_damage"):
+						NetworkBridge.apply_damage(self, b, "piercing_damage", [100, (global_transform.origin - b.global_transform.origin).normalized(), b.global_transform.origin, Vector3.ZERO])
 					if b.has_method("damage"):
 						NetworkBridge.apply_damage(self, b, "damage", [100, (global_transform.origin - b.global_transform.origin).normalized(), b.global_transform.origin, Vector3.ZERO])
 			if $orbarms / AnimationPlayer2.is_playing() and $orbarms / AnimationPlayer2.current_animation_position > 0.4 and $orbarms / AnimationPlayer2.current_animation_position < 0.5:
@@ -1286,8 +1289,9 @@ func _process(delta)->void :
 						NetworkBridge.n_rpc(self, "_play_sound", ["Kicksound"])
 					if b.get_class() == "StaticBody" and not Global.player.is_on_floor():
 						glob.player.player_velocity += col_n * 4
+					if b.has_method("piercing_damage"):
+						NetworkBridge.apply_damage(self, b, "piercing_damage", [100, (global_transform.origin - b.global_transform.origin).normalized(), b.global_transform.origin, Vector3.ZERO])
 					if b.has_method("damage"):
-						
 						NetworkBridge.apply_damage(self, b, "damage", [100, (global_transform.origin - b.global_transform.origin).normalized(), b.global_transform.origin, Vector3.ZERO])
 		if Input.is_action_just_pressed("mouse_1") and orb:
 			
@@ -2758,6 +2762,8 @@ func radiator()->void :
 			
 			NetworkBridge.n_rpc(self, "_spawn_object", [missleParent.get_path(), "res://Entities/Bullets/Radiation.tscn", rad_new.name, rad_new.global_transform])
 		for b in $Radiation_Area.get_overlapping_bodies():
+			if b.has_method("piercing_damage"):
+				NetworkBridge.apply_damage(self, b, "piercing_damage", [50, (global_transform.origin - $Front_Pos_Helper.global_transform.origin).normalized(), b.global_transform.origin, global_transform.origin])
 			if b.has_method("damage"):
 				NetworkBridge.apply_damage(self, b, "damage", [50, (global_transform.origin - $Front_Pos_Helper.global_transform.origin).normalized(), b.global_transform.origin, global_transform.origin])
 				

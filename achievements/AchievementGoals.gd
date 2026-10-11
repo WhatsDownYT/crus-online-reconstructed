@@ -87,15 +87,20 @@ func level_beaten(level):
 	return Global.LEVEL_TIMES_RAW[level] < 99999999 or Global.HELL_TIMES_RAW[level] < 99999999
 
 func is_hidden(entry):
-	return entry.get("secret", false) and not unlocked.has(str(entry.get("id", ""))) and not level_beaten(entry.get("level", -1))
-
-func should_show_entry(entry):
+	if not entry.get("secret", false):
+		return false
 	var id = str(entry.get("id", ""))
+	if unlocked.has(id):
+		return false
 	if id == "synaptic_cascade":
-		return Global.hell_discovered or unlocked.has(id)
+		return not Global.hell_discovered
 	if id == "suffering_for_aeons":
-		return Global.ending_3 or unlocked.has(id)
-	return true
+		return not Global.ending_3
+	if id == "beauty_of_life":
+		return Global.implants == null or not Global.implants.purchased_implants.has("Extravagant Suit")
+	if id == "the_unholy_trinity":
+		return not Global.BONUS_UNLOCK.has("END")
+	return not level_beaten(entry.get("level", -1))
 
 func mastery_for(level):
 	var saved = mastery.get(str(int(level)), {})

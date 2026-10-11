@@ -715,7 +715,7 @@ func _ready():
 
 	new_implant = Implant.new()
 	new_implant.i_name = "Surveillance Eyecam"
-	new_implant.explanation = "An ocular surveillance gear package used extensively by SCRD. Scan players within range to view their biology and equipment. Useful for making quick, educated decisions in tense combat scenarios."
+	new_implant.explanation = "An ocular surveillance gear package used extensively by PURE. Scan players within range to view their biology and equipment. Useful for making quick, educated decisions in tense combat scenarios."
 	new_implant.price = 15000
 	new_implant.head = true
 	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/surveillance_eyecam.png")
@@ -724,7 +724,7 @@ func _ready():
 
 	new_implant = Implant.new()
 	new_implant.i_name = "Surveillance Eyecam PRO MAX"
-	new_implant.explanation = "Experimental remote warfare ocular gear developed by a third-party contractor for SCRD. Widely known to have been created solely as a marketing ploy and nigh-instantaneous rug pull. Locks onto any closest player, and periodically jams one of their weapons or implants."
+	new_implant.explanation = "Experimental remote warfare ocular gear developed by a third-party contractor for PURE. Widely known to have been created solely as a marketing ploy and nigh-instantaneous rug pull. Locks onto any closest player, and periodically jams one of their weapons or implants."
 	new_implant.price = 50000
 	new_implant.head = true
 	new_implant.texture = _load_mod_texture("res://MOD_CONTENT/CruS Online/surveillance_eyecam_plus.png")

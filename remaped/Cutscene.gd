@@ -15,11 +15,12 @@ onready var SUBTITLE = $MarginContainer / CenterContainer / Subtitle
 var current_scene = 0
 var t = 0
 var save_selector_active = false
+var ending_results_active = false
 
 onready var Multiplayer = Global.get_node('Multiplayer')
 
 func _ready():
-	NetworkBridge.register_rpcs(self, [["skip_line", NetworkBridge.PERMISSION.SERVER]])
+	NetworkBridge.register_rpcs(self, [["skip_line", NetworkBridge.PERMISSION.SERVER], ["show_ending_results", NetworkBridge.PERMISSION.SERVER]])
 	$MarginContainer / CenterContainer / Subtitle.get_font("font").size = 32 * (Global.resolution[0] / 1280)
 	
 	Global.menu.hide()
@@ -45,7 +46,8 @@ func _ready():
 		set_process(false)
 		set_process_input(false)
 		return
-	if filename == "res://Cutscenes/Cutscene1.tscn" and Global.skip_intro:
+	if filename == "res://Cutscenes/Cutscene1.tscn" and (Global.skip_intro or Global.force_save_selector):
+		Global.force_save_selector = false
 		_show_save_selector()
 
 func _show_save_selector():
@@ -66,6 +68,11 @@ func _show_save_selector():
 		final_camera.fov = 60
 		final_camera.set_process(false)
 	var final_actor = get_node_or_null("intro_guy3")
+	for actor in get_children():
+		if actor.get_script() != null and actor.get_script().resource_path == "res://Scripts/scripted_anim.gd":
+			actor.set_process(false)
+			if actor != final_actor:
+				actor.hide()
 	if final_actor != null:
 		final_actor.show()
 		var animation = final_actor.get_node_or_null("AnimationPlayer")
@@ -95,13 +102,7 @@ func _process(delta):
 		TIMER.start()
 	if TIMER.is_stopped() and current_scene == LINES.size():
 		if NetworkBridge.n_is_network_master(self):
-			if next_scene == "res://Menu/Main_Menu.tscn":
-				if filename == "res://Cutscenes/Cutscene1.tscn":
-					_show_save_selector()
-				else:
-					Multiplayer.goto_menu_host()
-			else:
-				Multiplayer.goto_scene_host(next_scene)
+			_finish_cutscene()
 
 func _input(event):
 	if save_selector_active:
@@ -109,13 +110,7 @@ func _input(event):
 	if event is InputEventKey:
 		if Input.is_action_just_pressed("ui_cancel") or Input.is_action_just_pressed("ui_accept"):
 			if NetworkBridge.n_is_network_master(self):
-				if next_scene == "res://Menu/Main_Menu.tscn":
-					if filename == "res://Cutscenes/Cutscene1.tscn":
-						_show_save_selector()
-					else:
-						Multiplayer.goto_menu_host()
-				else:
-					Multiplayer.goto_scene_host(next_scene)
+				_finish_cutscene()
 		if Input.is_action_just_pressed("movement_jump") and line_skip and NetworkBridge.is_world_authority():
 			NetworkBridge.n_rpc(self, "skip_line", [current_scene])
 			skip_line(null, current_scene)
@@ -123,3 +118,43 @@ func _input(event):
 puppet func skip_line(id, line):
 	current_scene = clamp(line, 0, LINES.size())
 	TIMER.stop()
+
+func _finish_cutscene():
+	if filename in ["res://Cutscenes/CutsceneEnd1.tscn", "res://Cutscenes/CutsceneEnd2.tscn", "res://Cutscenes/CutsceneEnd3.tscn"]:
+		NetworkBridge.n_rpc(self, "show_ending_results")
+		show_ending_results(null)
+	elif next_scene == "res://Menu/Main_Menu.tscn":
+		if filename == "res://Cutscenes/Cutscene1.tscn":
+			_show_save_selector()
+		else:
+			Multiplayer.goto_menu_host()
+	else:
+		Multiplayer.goto_scene_host(next_scene)
+
+puppet func show_ending_results(_id):
+	if ending_results_active:
+		return
+	ending_results_active = true
+	TIMER.stop()
+	set_process(false)
+	set_process_input(false)
+	SUBTITLE.hide()
+	Global.music.stop()
+	_stop_cutscene_audio(self)
+	Global.cutscene = false
+	Global.border.show()
+	Global.menu.in_game = true
+	Global.menu.set_process_input(true)
+	Global.menu.get_node("Level_End_Grid").active = true
+	Global.menu.level_end()
+	Global.menu.get_node("Level_End_Grid").rect_size.x = 720
+	Global.menu.get_node("Level_End_Grid/Performance_Hbox/Performance_Scroll/Performance_Vbox/Time_Label").text = "Time:" + Global.level_time
+	Global.menu.show()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	get_tree().paused = true
+
+func _stop_cutscene_audio(node):
+	for child in node.get_children():
+		if child is AudioStreamPlayer or child is AudioStreamPlayer2D or child is AudioStreamPlayer3D:
+			child.stop()
+		_stop_cutscene_audio(child)
