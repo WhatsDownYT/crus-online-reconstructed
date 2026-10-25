@@ -3,7 +3,11 @@ extends Control
 const DATA_PATH = "res://MOD_CONTENT/CruS Online/achievements/achievements.json"
 const SECRET_ICON = "res://Textures/Menu/mystery.png"
 const TAP_SOUND = "res://MOD_CONTENT/CruS Online/assets/interface/phone_tap.wav"
+const MASTERY_DISABLED_ICON = "res://Textures/Menu/Disabled_Button/1.png"
 const MASTERY_KEYS = ["s_rank", "hope_eradicated", "punishment", "chaos", "extravagance", "stripped"]
+const MASTERY_ICONS = ["res://Textures/rank_letters/S.png", "res://Maps/textures/base/helldoor.png", "res://Textures/Menu/punished.png", "res://Maps/textures/trauma/tface1.png", "res://Textures/Menu/Implants/tux.png", "res://MOD_CONTENT/CruS Online/assets/interface/shiner.png"]
+const MASTERY_NAMES = ["EXPEDITIOUS", "ERADICATED", "PUNISHED", "TORMENTED", "EXTRAVAGANCE", "STRIPPED"]
+const MASTERY_DESCRIPTIONS = ["Complete the mission with an S Rank.", "Complete the mission in Hope Eradicated.", "Complete the mission on Punishment Mode.", "Complete the mission on Chaos Mode.", "Complete the mission with the Extravagant Suit.", "Complete the mission without any implants."]
 
 var ui_overlay
 var goals = []
@@ -14,15 +18,18 @@ var current_category_index = 0
 var ming_title
 var ming_body
 var game_body
+var header_back
+var header_label
 var header_nav_button
 var filter_label
 var list_scroll
 var cards
-var category_menu
-var category_buttons = {}
-var category_numbers = {}
 var filter_count_label
 var mastery_panel
+var mastery_background
+var mastery_hovered_index = -1
+var mastery_name_label
+var mastery_description_label
 var mastery_level = -1
 var card_width = 0
 var card_border_color = Color(1.0, 0.0, 0.68)
@@ -77,9 +84,7 @@ func open():
 			return
 		initialized = true
 	else:
-		mastery_level = -1
-		mastery_panel.hide()
-		_set_category_menu_visible(false)
+		_close_mastery()
 		_refresh_category_view()
 	set_process(true)
 	set_process_input(true)
@@ -92,7 +97,7 @@ func _input(event):
 	if event.button_index in [BUTTON_WHEEL_UP, BUTTON_WHEEL_DOWN]:
 		var mapped = _map_input_position(local_point - input_overlay.rect_position)
 		var list_rect = Rect2(ui_overlay.rect_position + list_scroll.rect_position, list_scroll.rect_size)
-		if mastery_level < 0 and not category_menu.visible and list_rect.has_point(mapped):
+		if mastery_level < 0 and list_rect.has_point(mapped):
 			_scroll_by(-52 if event.button_index == BUTTON_WHEEL_UP else 52)
 			get_tree().set_input_as_handled()
 		return
@@ -281,7 +286,7 @@ func _show_character_meshes(node):
 	for child in node.get_children():
 		_show_character_meshes(child)
 
-func _process(delta):
+func _process(_delta):
 	if not visible:
 		return
 	if not is_instance_valid(scene_camera) or not is_instance_valid(scene_phone):
@@ -293,13 +298,14 @@ func _process(delta):
 	)
 	var target_rotation = scene_camera_base_rotation + Vector3(-centered.y * 2.6, -centered.x * 3.7, 0)
 	scene_camera.translation = scene_camera_base_translation
-	scene_camera.rotation_degrees = scene_camera.rotation_degrees.linear_interpolate(target_rotation, min(1.0, delta * 7.5))
-	if is_instance_valid(header_nav_button):
+	scene_camera.rotation_degrees = target_rotation
+	if mastery_level >= 0 and is_instance_valid(header_nav_button):
 		var nav_hovered = _is_category_nav_screen_hit(mouse)
 		var nav_color = Color(1.0, 0.0, 0.68) if nav_hovered else Color(0.12, 1.0, 0.18)
 		header_nav_button.add_color_override("font_color", nav_color)
 		header_nav_button.add_color_override("font_color_hover", nav_color)
 	_update_phone_input_bounds()
+	_update_category_hover(mouse)
 
 func _prepare_intro_scene(node):
 	if node.name == "Activator":
@@ -407,18 +413,41 @@ func _build_ui(phone):
 	field.color = Color(0.055, 0.008, 0.07)
 	field.rect_size = ui_overlay.rect_size
 	ui_overlay.add_child(field)
-	var header_back = ColorRect.new()
+	mastery_background = Control.new()
+	mastery_background.rect_size = ui_overlay.rect_size
+	mastery_background.mouse_filter = MOUSE_FILTER_IGNORE
+	mastery_background.rect_clip_content = true
+	mastery_background.hide()
+	ui_overlay.add_child(mastery_background)
+	var implant_tiles = TextureRect.new()
+	implant_tiles.texture = load("res://Textures/Menu/implant_screen_back.png")
+	implant_tiles.rect_position = Vector2(0, 37)
+	implant_tiles.rect_size = Vector2(width * 2, 336)
+	implant_tiles.rect_scale = Vector2(0.5, 0.5)
+	implant_tiles.stretch_mode = TextureRect.STRETCH_TILE
+	implant_tiles.mouse_filter = MOUSE_FILTER_IGNORE
+	mastery_background.add_child(implant_tiles)
+	var lower_background = Panel.new()
+	lower_background.rect_position = Vector2(0, 205)
+	lower_background.rect_size = Vector2(width, ui_overlay.rect_size.y - 205)
+	lower_background.mouse_filter = MOUSE_FILTER_IGNORE
+	var lower_style = _goal_card_style(false)
+	lower_style.modulate_color = Color("#426339")
+	lower_background.add_stylebox_override("panel", lower_style)
+	mastery_background.add_child(lower_background)
+	header_back = ColorRect.new()
 	header_back.color = Color(0.16, 0.18, 0.24)
 	header_back.rect_size = Vector2(width, 37)
 	ui_overlay.add_child(header_back)
-	var header = _label("GOALS", ming_title, Vector2(38, 6), Vector2(width - 105, 27))
-	ui_overlay.add_child(header)
+	header_label = _label("GOALS", ming_title, Vector2(24, 6), Vector2(width - 105, 27))
+	ui_overlay.add_child(header_label)
 	header_nav_button = Button.new()
 	header_nav_button.rect_position = Vector2(width - 96, 2)
 	header_nav_button.rect_size = Vector2(72, 33)
 	header_nav_button.flat = true
 	header_nav_button.focus_mode = Control.FOCUS_NONE
 	header_nav_button.text = "01"
+	header_nav_button.mouse_filter = MOUSE_FILTER_IGNORE
 	header_nav_button.add_font_override("font", ming_body)
 	header_nav_button.add_color_override("font_color", Color(0.12, 1.0, 0.18))
 	header_nav_button.add_color_override("font_color_hover", Color(1.0, 0.0, 0.68))
@@ -465,15 +494,9 @@ func _build_ui(phone):
 	cards.add_constant_override("separation", 5)
 	list_scroll.add_child(cards)
 	_style_scrollbar()
-	category_menu = Control.new()
-	category_menu.rect_position = list_scroll.rect_position
-	category_menu.rect_size = list_scroll.rect_size
-	category_menu.visible = false
-	ui_overlay.add_child(category_menu)
-	_build_category_menu()
 	mastery_panel = Control.new()
-	mastery_panel.rect_position = list_scroll.rect_position
-	mastery_panel.rect_size = list_scroll.rect_size
+	mastery_panel.rect_position = Vector2.ZERO
+	mastery_panel.rect_size = ui_overlay.rect_size
 	mastery_panel.visible = false
 	ui_overlay.add_child(mastery_panel)
 	_refresh_category_view()
@@ -524,6 +547,8 @@ func _on_input_overlay_gui_input(event):
 				elif not drag_scrolling:
 					if _is_category_nav_hit(event.position):
 						_on_header_nav_pressed()
+					elif _is_category_row_hit(event.position):
+						_advance_category()
 					else:
 						_send_click(event.position)
 				scrollbar_drag = false
@@ -550,7 +575,7 @@ func _on_input_overlay_gui_input(event):
 		_forward_mouse_motion(event)
 
 func _is_list_hit(position):
-	if category_menu.visible or mastery_level >= 0:
+	if mastery_level >= 0:
 		return false
 	var mapped = _map_input_position(position)
 	return Rect2(ui_overlay.rect_position + list_scroll.rect_position, list_scroll.rect_size).has_point(mapped)
@@ -563,11 +588,17 @@ func _is_scrollbar_hit(position):
 	return Rect2(origin, scrollbar.rect_size).has_point(_map_input_position(position))
 
 func _is_category_nav_hit(position):
-	if not is_instance_valid(input_overlay) or not is_instance_valid(header_nav_button):
+	if mastery_level < 0 or not is_instance_valid(input_overlay) or not is_instance_valid(header_nav_button):
 		return false
 	var mapped = _map_input_position(position)
 	var nav_rect = Rect2(ui_overlay.rect_position + header_nav_button.rect_position, header_nav_button.rect_size)
 	return nav_rect.has_point(mapped)
+
+func _is_category_row_hit(position):
+	if mastery_level >= 0:
+		return false
+	var mapped = _map_input_position(position) - ui_overlay.rect_position
+	return Rect2(Vector2(12, 42), Vector2(ui_overlay.rect_size.x - 24, 18)).has_point(mapped)
 
 func _barycentric_2d(point, a, b, c):
 	var v0 = b - a
@@ -672,7 +703,7 @@ func _forward_mouse_motion(event):
 	screen_viewport.input(mapped)
 
 func _scroll_by(amount):
-	if not is_instance_valid(list_scroll) or category_menu.visible or mastery_level >= 0:
+	if not is_instance_valid(list_scroll) or mastery_level >= 0:
 		return
 	list_scroll.scroll_vertical = int(clamp(list_scroll.scroll_vertical + amount, 0, list_scroll.get_v_scrollbar().max_value))
 
@@ -718,65 +749,18 @@ func _scroll_grabber(color):
 	style.bg_color = color
 	return style
 
-func _build_category_menu():
-	var title = _label("CATEGORIES", ming_body, Vector2(9, 10), Vector2(category_menu.rect_size.x - 18, 20))
-	title.add_color_override("font_color", Color(1.0, 0.0, 0.68))
-	category_menu.add_child(title)
-	var line = ColorRect.new()
-	line.color = Color(0.46, 0.27, 0.43)
-	line.rect_position = Vector2(8, 34)
-	line.rect_size = Vector2(category_menu.rect_size.x - 16, 1)
-	category_menu.add_child(line)
-	for i in range(category_ids.size()):
-		var id = category_ids[i]
-		var button = Button.new()
-		button.rect_position = Vector2(8, 44 + i * 54)
-		button.rect_size = Vector2(category_menu.rect_size.x - 16, 46)
-		button.focus_mode = Control.FOCUS_NONE
-		button.text = "  " + category_labels[id]
-		button.align = Button.ALIGN_LEFT
-		button.add_font_override("font", ming_body)
-		button.connect("pressed", self, "_on_category_button_pressed", [id])
-		button.connect("mouse_entered", self, "_on_category_number_hover", [id, true])
-		button.connect("mouse_exited", self, "_on_category_number_hover", [id, false])
-		category_menu.add_child(button)
-		category_buttons[id] = button
-		var number = _label(str(i + 1).pad_zeros(2), ming_body, Vector2(category_menu.rect_size.x - 45, 57 + i * 54), Vector2(30, 20))
-		number.align = Label.ALIGN_RIGHT
-		category_menu.add_child(number)
-		category_numbers[id] = number
-	_update_category_menu_styles()
+func _update_category_hover(position):
+	if mastery_level >= 0:
+		return
+	var hovered = _is_category_row_hit(position - input_overlay.rect_position)
+	var color = Color(0.12, 1.0, 0.18) if hovered else Color(1.0, 0.0, 0.68)
+	filter_label.add_color_override("font_color", color)
+	filter_count_label.add_color_override("font_color", color)
 
-func _on_category_number_hover(id, hovered):
-	category_numbers[id].add_color_override("font_color", Color(1, 0, 0.68) if hovered else (Color(0.12, 1, 0.18) if id == current_category else Color(0.86, 0.85, 0.82)))
-
-func _make_menu_button_style(active, hover):
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.01, 0.07)
-	style.border_width_left = 2 if active else 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = Color(0.08, 0.95, 0.15) if active else Color(0.46, 0.27, 0.43)
-	if hover:
-		style.bg_color = Color(0.14, 0.04, 0.14)
-		style.border_color = Color(1.0, 0.0, 0.68)
-	if active and hover:
-		style.bg_color = Color(0.12, 0.04, 0.11)
-		style.border_color = Color(0.08, 0.95, 0.15)
-	return style
-
-func _update_category_menu_styles():
-	for id in category_buttons.keys():
-		var button = category_buttons[id]
-		var active = id == current_category
-		button.add_stylebox_override("normal", _make_menu_button_style(active, false))
-		button.add_stylebox_override("hover", _make_menu_button_style(active, true))
-		button.add_stylebox_override("pressed", _make_menu_button_style(true, false))
-		button.add_color_override("font_color", Color(0.12, 1.0, 0.18) if active else Color(0.86, 0.85, 0.82))
-		button.add_color_override("font_color_hover", Color(1.0, 0.0, 0.68))
-		button.add_color_override("font_color_pressed", Color(0.12, 1.0, 0.18))
-		_on_category_number_hover(id, false)
+func _advance_category():
+	current_category_index = (current_category_index + 1) % category_ids.size()
+	current_category = category_ids[current_category_index]
+	_refresh_category_view()
 
 func _filtered_goals():
 	var filtered = []
@@ -836,28 +820,26 @@ func _refresh_cards():
 
 func _refresh_category_view():
 	header_nav_button.text = str(current_category_index + 1).pad_zeros(2)
+	header_nav_button.mouse_filter = MOUSE_FILTER_IGNORE
+	header_nav_button.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+	header_nav_button.add_color_override("font_color_hover", Color(0.12, 1.0, 0.18))
+	header_nav_button.add_color_override("font_color_pressed", Color(0.12, 1.0, 0.18))
 	_refresh_cards()
-	_update_category_menu_styles()
-
-func _set_category_menu_visible(visible):
-	category_menu.visible = visible
-	list_scroll.visible = not visible and mastery_level < 0
-	filter_label.visible = not visible and mastery_level < 0
-	filter_count_label.visible = not visible and mastery_level < 0
 
 func _on_header_nav_pressed():
 	if mastery_level >= 0:
 		_close_mastery()
-		return
-	_set_category_menu_visible(not category_menu.visible)
 
-func _on_category_button_pressed(id):
-	current_category = id
-	current_category_index = category_ids.find(id)
-	if current_category_index < 0:
-		current_category_index = 0
-	_refresh_category_view()
-	_set_category_menu_visible(false)
+func _goal_card_style(completed):
+	var style = StyleBoxTexture.new()
+	style.texture = load("res://Textures/Menu/background_1.png")
+	style.region_rect = Rect2(0, 0, 256, 256)
+	style.margin_left = 10.0
+	style.margin_right = 10.0
+	style.margin_top = 10.0
+	style.margin_bottom = 10.0
+	style.modulate_color = Color(0.04, 0.58, 0.12, 1.0) if completed else Color(0.52, 0.0, 0.72, 1.0)
+	return style
 
 func _add_card(cards, goal, width, ming_body, game_body):
 	var manager = Global.get_node_or_null("AchievementGoals")
@@ -880,27 +862,8 @@ func _add_card(cards, goal, width, ming_body, game_body):
 	var card = Panel.new()
 	card.rect_min_size = Vector2(width, card_height)
 	card.mouse_filter = MOUSE_FILTER_PASS
-	var style = StyleBoxTexture.new()
-	style.texture = load("res://Textures/Menu/background_1.png")
-	style.region_rect = Rect2(0, 0, 256, 256)
-	style.margin_left = 10.0
-	style.margin_right = 10.0
-	style.margin_top = 10.0
-	style.margin_bottom = 10.0
-	style.modulate_color = Color(0.04, 0.58, 0.12, 1.0) if completed else Color(0.52, 0.0, 0.72, 1.0)
-	card.add_stylebox_override("panel", style)
+	card.add_stylebox_override("panel", _goal_card_style(completed))
 	cards.add_child(card)
-	for border in [
-		Rect2(0, 0, width, 1),
-		Rect2(0, card_height - 1, width, 1),
-		Rect2(0, 0, 1, card_height),
-		Rect2(width - 1, 0, 1, card_height)
-	]:
-		var edge = ColorRect.new()
-		edge.color = border_color
-		edge.rect_position = border.position
-		edge.rect_size = border.size
-		card.add_child(edge)
 	var title = _label("\n".join(title_lines), ming_body, Vector2(5, 8), Vector2(width - 10, title_height))
 	card.add_child(title)
 	var image = TextureRect.new()
@@ -917,23 +880,20 @@ func _add_card(cards, goal, width, ming_body, game_body):
 		for key in MASTERY_KEYS:
 			if progress[key]:
 				mastered += 1
-		var mastery_count = _label(str(mastered) + " / 6", ming_title, Vector2(103, image_y + 19), Vector2(width - 110, 31))
-		mastery_count.align = Label.ALIGN_CENTER
+		var mastery_count = Button.new()
+		mastery_count.text = str(mastered) + " / 6"
+		mastery_count.rect_position = Vector2(103, image_y + 30)
+		mastery_count.rect_size = Vector2(width - 110, 31)
+		mastery_count.focus_mode = Control.FOCUS_NONE
+		mastery_count.add_font_override("font", ming_title)
 		mastery_count.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+		mastery_count.add_color_override("font_color_hover", Color(1, 0, 0.68))
+		mastery_count.add_color_override("font_color_pressed", Color(1, 0, 0.68))
+		var no_background = StyleBoxEmpty.new()
+		for state in ["normal", "hover", "pressed", "focus"]:
+			mastery_count.add_stylebox_override(state, no_background)
+		mastery_count.connect("pressed", self, "_open_mastery", [int(goal.get("level", -1))])
 		card.add_child(mastery_count)
-		var mastery_button = Button.new()
-		mastery_button.text = "MASTERY"
-		mastery_button.rect_position = Vector2(103, image_y + 54)
-		mastery_button.rect_size = Vector2(width - 110, 31)
-		mastery_button.add_font_override("font", ming_body)
-		mastery_button.add_color_override("font_color", Color(0.86, 0.85, 0.82))
-		mastery_button.add_color_override("font_color_hover", Color(1, 0, 0.68))
-		mastery_button.add_color_override("font_color_pressed", Color(1, 0, 0.68))
-		mastery_button.add_stylebox_override("normal", _make_menu_button_style(false, false))
-		mastery_button.add_stylebox_override("hover", _make_menu_button_style(false, true))
-		mastery_button.add_stylebox_override("pressed", _make_menu_button_style(true, false))
-		mastery_button.connect("pressed", self, "_open_mastery", [int(goal.get("level", -1))])
-		card.add_child(mastery_button)
 	var description = _label(description_text, game_body, Vector2(6, desc_y), Vector2(desc_width, desc_height))
 	description.clip_text = false
 	card.add_child(description)
@@ -954,25 +914,35 @@ func _open_mastery(level):
 	if level < 0:
 		return
 	mastery_level = level
-	category_menu.hide()
 	list_scroll.hide()
 	filter_label.hide()
 	filter_count_label.hide()
+	header_label.text = "MASTERY"
 	header_nav_button.text = "BACK"
+	header_nav_button.mouse_filter = MOUSE_FILTER_STOP
 	_render_mastery()
+	mastery_background.show()
 	mastery_panel.show()
 
 func _close_mastery():
 	mastery_level = -1
+	mastery_hovered_index = -1
 	mastery_panel.hide()
+	mastery_background.hide()
 	list_scroll.show()
 	filter_label.show()
 	filter_count_label.show()
+	header_label.text = "GOALS"
 	header_nav_button.text = str(current_category_index + 1).pad_zeros(2)
+	header_nav_button.mouse_filter = MOUSE_FILTER_IGNORE
+	header_nav_button.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+	header_nav_button.add_color_override("font_color_hover", Color(0.12, 1.0, 0.18))
+	header_nav_button.add_color_override("font_color_pressed", Color(0.12, 1.0, 0.18))
 
 func _render_mastery():
 	for child in mastery_panel.get_children():
 		child.queue_free()
+	mastery_hovered_index = -1
 	var manager = Global.get_node_or_null("AchievementGoals")
 	if manager == null:
 		return
@@ -988,40 +958,70 @@ func _render_mastery():
 	for key in MASTERY_KEYS:
 		if progress[key]:
 			completed += 1
-	var title = _label(str(entry.get("name", "")).to_upper(), ming_body, Vector2(6, 3), Vector2(mastery_panel.rect_size.x - 12, 44))
-	title.autowrap = true
-	mastery_panel.add_child(title)
-	var icon = TextureRect.new()
-	icon.rect_position = Vector2(8, 54)
-	icon.rect_size = Vector2(91, 91)
-	icon.expand = true
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	icon.mouse_filter = MOUSE_FILTER_IGNORE
-	icon.texture = _texture(SECRET_ICON if manager.is_hidden(entry) else str(entry.get("icon", "")))
-	mastery_panel.add_child(icon)
-	var count = _label(str(completed) + " / 6", ming_title, Vector2(115, 79), Vector2(125, 35))
+	var portrait = TextureRect.new()
+	portrait.rect_position = Vector2(18, 50)
+	portrait.rect_size = Vector2(112, 112)
+	portrait.expand = true
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	portrait.mouse_filter = MOUSE_FILTER_IGNORE
+	portrait.texture = _texture(SECRET_ICON if manager.is_hidden(entry) else str(entry.get("icon", "")))
+	mastery_panel.add_child(portrait)
+	var count = _label(str(completed) + " / 6", _font("res://Fonts/MingLiU-ExtB-01.ttf", 39), Vector2(146, 83), Vector2(108, 58))
+	count.align = Label.ALIGN_CENTER
 	count.add_color_override("font_color", Color(0.12, 1.0, 0.18))
 	mastery_panel.add_child(count)
-	var labels = {"s_rank": "S RANK", "hope_eradicated": "HOPE ERADICATED", "punishment": "PUNISHMENT", "chaos": "CHAOS", "extravagance": "EXTRAVAGANCE", "stripped": "STRIPPED"}
+	var mission_name = str(entry.get("name", "")).replace(" Mastery", "")
+	var mission_font_size = 16
+	var mission_width = mastery_panel.rect_size.x - 20
+	while mission_font_size > 10 and _font("res://Fonts/gamefont(1).ttf", mission_font_size).get_string_size(mission_name).x > mission_width:
+		mission_font_size -= 1
+	var mission = _label(mission_name, _font("res://Fonts/gamefont(1).ttf", mission_font_size), Vector2(10, 171), Vector2(mission_width, 33))
+	mission.autowrap = false
+	mastery_panel.add_child(mission)
 	for index in range(MASTERY_KEYS.size()):
 		var key = MASTERY_KEYS[index]
-		var won = progress[key]
-		var row = ColorRect.new()
-		row.color = Color(0.01, 0.30, 0.05) if won else Color(0.22, 0.01, 0.08)
-		row.rect_position = Vector2(7, 158 + index * 47)
-		row.rect_size = Vector2(mastery_panel.rect_size.x - 14, 41)
-		mastery_panel.add_child(row)
-		var marker = ColorRect.new()
-		marker.color = Color(0.12, 1.0, 0.18) if won else Color(1, 0.08, 0.16)
-		marker.rect_position = Vector2(15, 174 + index * 47)
-		marker.rect_size = Vector2(10, 10)
-		mastery_panel.add_child(marker)
-		var hidden_name = key in ["hope_eradicated", "chaos", "extravagance"] and not manager.known_condition(key)
-		var label = _label("???" if hidden_name else labels[key], ming_body, Vector2(37, 165 + index * 47), Vector2(mastery_panel.rect_size.x - 45, 25))
-		mastery_panel.add_child(label)
+		var hidden = key in ["hope_eradicated", "chaos", "extravagance"] and not manager.known_condition(key)
+		var button = Button.new()
+		var icon_size = 70
+		button.rect_position = Vector2((mastery_panel.rect_size.x - icon_size * 3) / 2 + (index % 3) * icon_size, 218 + int(index / 3) * icon_size)
+		button.rect_size = Vector2(icon_size, icon_size)
+		button.focus_mode = Control.FOCUS_NONE
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		var empty_style = StyleBoxEmpty.new()
+		for state in ["normal", "hover", "pressed", "focus"]:
+			button.add_stylebox_override(state, empty_style)
+		button.connect("mouse_entered", self, "_hover_mastery_condition", [index, hidden])
+		button.connect("mouse_exited", self, "_leave_mastery_condition", [index])
+		mastery_panel.add_child(button)
+		var image = TextureRect.new()
+		image.rect_size = button.rect_size
+		image.expand = true
+		image.stretch_mode = TextureRect.STRETCH_SCALE
+		image.mouse_filter = MOUSE_FILTER_IGNORE
+		image.texture = _texture(SECRET_ICON if hidden else (MASTERY_ICONS[index] if progress.get(key, false) else MASTERY_DISABLED_ICON))
+		button.add_child(image)
+	mastery_name_label = _label("", _font("res://Fonts/MingLiU-ExtB-01.ttf", 25), Vector2(18, 371), Vector2(mastery_panel.rect_size.x - 36, 37))
+	mastery_name_label.add_color_override("font_color", Color(0.12, 1.0, 0.18))
+	mastery_panel.add_child(mastery_name_label)
+	mastery_description_label = _label("", _font("res://Fonts/gamefont(1).ttf", 17), Vector2(18, 410), Vector2(mastery_panel.rect_size.x - 36, 118))
+	mastery_description_label.autowrap = true
+	mastery_panel.add_child(mastery_description_label)
+
+func _hover_mastery_condition(index, hidden):
+	mastery_hovered_index = index
+	mastery_name_label.text = "???" if hidden else MASTERY_NAMES[index]
+	mastery_description_label.text = "" if hidden else MASTERY_DESCRIPTIONS[index]
+
+func _leave_mastery_condition(index):
+	if mastery_hovered_index != index:
+		return
+	mastery_hovered_index = -1
+	mastery_name_label.text = ""
+	mastery_description_label.text = ""
 
 func go():
-	mastery_level = -1
+	if initialized:
+		_close_mastery()
 	hide()
 	set_process(false)
 	set_process_input(false)

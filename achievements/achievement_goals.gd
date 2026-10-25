@@ -254,11 +254,20 @@ func _all_regular_achievements_unlocked():
 			return false
 	return required > 0
 
+func _stock_portfolio_value():
+	if Global.STOCKS == null or Global.STOCKS.stocks.empty():
+		return 0.0
+	var value = 0.0
+	for stock in Global.STOCKS.stocks:
+		if stock.asset_type == "equity":
+			value += stock.price * stock.owned
+	return value
+
 func _evaluate_global_conditions(earned):
 	var changed = false
 	if Global.death:
 		changed = _award_id("soul_emulation", earned) or changed
-	if Global.money >= 1000000:
+	if _stock_portfolio_value() >= 1000000:
 		changed = _award_id("financial_ascension", earned) or changed
 	if Global.DEAD_CIVS.find("Limit Chancellor") != -1:
 		changed = _award_id("open_your_eyes", earned) or changed
