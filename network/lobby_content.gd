@@ -44,7 +44,7 @@ func create_popup():
 	add_child(layer)
 	popup = WindowDialog.new()
 	popup.name = "HostContent"
-	popup.window_title = "Cruelty Squad Online"
+	popup.window_title = "CruS Revitalized"
 	popup.rect_min_size = Vector2(650, 440)
 	popup.rect_size = popup.rect_min_size
 	popup.theme = load("res://Menu/menu_theme.tres")

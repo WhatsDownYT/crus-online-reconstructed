@@ -1,6 +1,6 @@
-# CruS Online codebase guide
+# CruS Revitalized codebase guide
 
-This guide is a starting point for reading or changing RECONSTRUCTED. [Project layout](project_layout.md) lists the folders; this page explains how the main systems meet. Scripts under `remapped/` replace original Cruelty Squad resources, so changes there need to preserve the game's expected node paths, signals, and serialized data.
+This guide is a starting point for reading or changing CruS Revitalized. [Project layout](project_layout.md) lists the folders; this page explains how the main systems meet. Scripts under `remapped/` replace original Cruelty Squad resources, so changes there need to preserve the game's expected node paths, signals, and serialized data.
 
 ## Startup and session flow
 

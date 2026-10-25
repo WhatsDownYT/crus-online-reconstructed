@@ -292,8 +292,8 @@ margin_right = 601.0
 margin_bottom = 361.0
 custom_fonts/normal_font = SubResource( 10 )
 bbcode_enabled = true
-bbcode_text = "Welcome to CruS Online"
-text = "Welcome to CruS Online"
+bbcode_text = "Welcome to CruS Revitalized"
+text = "Welcome to CruS Revitalized"
 scroll_following = true
 
 [node name="LineEdit" type="LineEdit" parent="Menu/ChatBox/VBoxContainer"]
@@ -377,7 +377,7 @@ margin_bottom = 49.0
 size_flags_horizontal = 9
 custom_colors/font_color = Color( 0.101961, 1, 0, 1 )
 custom_fonts/font = SubResource( 8 )
-text = "CruS Online Reconstructed"
+text = "CruS Revitalized"
 
 [node name="SyncLoad" type="TextureRect" parent="."]
 visible = false

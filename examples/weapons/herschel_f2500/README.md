@@ -1,6 +1,6 @@
 # Herschel Firearms F2500
 
-This is an editable custom weapon example. CruS Online supplies the weapon API, but this folder is packaged separately.
+This is an editable custom weapon example. CruS Revitalized supplies the weapon API, but this folder is packaged separately.
 
 From the Online project root, run:
 

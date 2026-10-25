@@ -1,6 +1,6 @@
 ﻿# Custom weapons
 
-CruS Online loads weapon packages from `user://weapons/<folder>/weapon.zip`,
+CruS Revitalized loads weapon packages from `user://weapons/<folder>/weapon.zip`,
 alongside the game's `levels` and `campaigns` folders. Each archive contains
 `CUSTOM_WEAPONS/<folder>/weapon.json` and the weapon's definition, models,
 textures, sounds, optional projectile, behavior, and map entities. Folder

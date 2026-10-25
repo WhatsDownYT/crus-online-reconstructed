@@ -1,12 +1,18 @@
-# Cruelty Squad Online
+# CruS Revitalized
 
 <div align="center">
 
-<img src="assets/interface/crus_online_logo.png" width="600" alt="Cruelty Squad Online logo">
+<img src="branding/logo.png" width="600" alt="CruS Revitalized logo">
 
 English | [Русский](README_RU.md) 
 
 </div>
+
+CruS Revitalized builds on the original CruS Online mod. See [the full changelog](full_changelog.txt) for the current project's features and changes.
+
+## Original CruS Online documentation
+
+The instructions below document the original mod and its release.
 
 > [!WARNING]
 > This modification is in open **Beta** testing

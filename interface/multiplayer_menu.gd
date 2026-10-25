@@ -114,7 +114,7 @@ func _ready():
 	lobby_name_edit.align = LineEdit.ALIGN_CENTER
 	lobby_name_edit.max_length = 40
 	var saved_lobby_name = Multiplayer.config.get("hostLobbyName", "")
-	var default_lobby_name = "CruS Online lobby"
+	var default_lobby_name = "CruS Revitalized lobby"
 	if typeof(saved_lobby_name) == TYPE_STRING and not saved_lobby_name.strip_edges().empty() and saved_lobby_name.strip_edges().to_lower().find("null") < 0 and saved_lobby_name.length() <= 40:
 		lobby_name_edit.text = saved_lobby_name.strip_edges()
 	else:

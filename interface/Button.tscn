@@ -17,7 +17,7 @@ export (Texture) var disabledTexture
 
 export var enalbed = true
 
-export var labelText = \"Cruelty Squad Online\"
+export var labelText = \"CruS Revitalized\"
 export var buttonType = \"Menu\"
 
 onready var hint = get_tree().get_nodes_in_group(\"Hint\")[0]

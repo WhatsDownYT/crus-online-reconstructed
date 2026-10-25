@@ -1,6 +1,6 @@
 # Campaign folders
 
-CruS Online requires CruS Mod Loader and CruS Mod Base. Install a campaign under `user://campaigns/<folder>/` (the game's Godot user-data directory). The folder contains one `campaign.json` and one subfolder per stage. Existing single missions in `user://levels/` continue to appear under **Custom Missions**. The built-in game appears under **Cruelty Squad**.
+CruS Revitalized requires CruS Mod Loader and CruS Mod Base. Install a campaign under `user://campaigns/<folder>/` (the game's Godot user-data directory). The folder contains one `campaign.json` and one subfolder per stage. Existing single missions in `user://levels/` continue to appear under **Custom Missions**. The built-in game appears under **Cruelty Squad**.
 
 `campaign.json` declares the campaign's identity, display name, version, and ordered stages:
 

@@ -186,7 +186,7 @@ func get_lobby_members() -> Dictionary:
 
 func default_lobby_name() -> String:
 	var username = SteamInit.steam_username.strip_edges()
-	return username + "'s lobby" if not username.empty() and username.to_lower() != "null" else "CruS Online lobby"
+	return username + "'s lobby" if not username.empty() and username.to_lower() != "null" else "CruS Revitalized lobby"
 
 func valid_lobby_name(raw_name) -> String:
 	if typeof(raw_name) != TYPE_STRING:

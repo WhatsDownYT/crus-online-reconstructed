@@ -1347,8 +1347,8 @@ margin_right = 631.0
 margin_bottom = 463.0
 custom_fonts/normal_font = SubResource( 27 )
 bbcode_enabled = true
-bbcode_text = "Welcome to CruS Online"
-text = "Welcome to CruS Online"
+bbcode_text = "Welcome to CruS Revitalized"
+text = "Welcome to CruS Revitalized"
 scroll_following = true
 
 [node name="LineEdit" type="LineEdit" parent="CenterContainer/TabContainer/Chat/VBoxContainer"]
@@ -1397,7 +1397,7 @@ size_flags_vertical = 3
 theme = ExtResource( 1 )
 custom_colors/title_color = Color( 1, 0, 0, 1 )
 custom_styles/panel = SubResource( 19 )
-window_title = "Cruelty Squad Online"
+window_title = "CruS Revitalized"
 script = SubResource( 21 )
 
 [node name="Panel" type="Panel" parent="ErrorHandler"]
@@ -1444,7 +1444,7 @@ size_flags_vertical = 3
 theme = ExtResource( 1 )
 custom_colors/title_color = Color( 1, 0, 0, 1 )
 custom_styles/panel = SubResource( 19 )
-window_title = "Cruelty Squad Online"
+window_title = "CruS Revitalized"
 script = ExtResource( 29 )
 
 [node name="Panel" type="Panel" parent="LobbyCodeInput"]

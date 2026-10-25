@@ -1,4 +1,4 @@
-CRUELTY SQUAD ONLINE: RECONSTRUCTED
+CRUS REVITALIZED
 Cumulative changelog from the original CruS Online mod
 
 SINGLEPLAYER AND ONLINE
@@ -9,7 +9,7 @@ LOBBIES AND JOINING
 - Added a browser for compatible public Steam lobbies. It shows each lobby's name, game mode, player count and capacity, and estimated ping. You can join a listed lobby by double-clicking it or by using Join, and the list can be manually refreshed at any time.
 - Added editable lobby names with a Steam-name-based default, and replaced lobby passwords with six-character alphanumeric lobby codes. Direct Join can use these codes for public, friends-only, and private Steam lobbies, while the hosted lobby code stays hidden until its display is clicked.
 - Added Public, Friends Only, and Private lobby types, including Steam friend joining for Friends Only. Steam and LAN sessions can also set a maximum player count.
-- Added compatibility checks so unrelated CruS Online lobbies and mismatched RECONSTRUCTED builds do not appear as joinable public lobbies. Joining now stays on the connection screen until the connection actually succeeds or fails, with clearer handling for invalid codes, failed connections, cancellation, full lobbies, and hosts closing the session.
+- Added compatibility checks so unrelated CruS Online lobbies and mismatched Revitalized builds do not appear as joinable public lobbies. Joining now stays on the connection screen until the connection actually succeeds or fails, with clearer handling for invalid codes, failed connections, cancellation, full lobbies, and hosts closing the session.
 - Reworked the Online flow so hosting and joining remain on the Main Online tab instead of unexpectedly changing tabs. Choosing LAN or Steam opens the appropriate host settings, and host settings can continue being changed and synchronized while a lobby is already running.
 - Expanded host settings with progress saving, revive rules, friendly fire, shared difficulty, voice behavior, banned implants, tick rate, and death weapon drops. The lobby also has a player roster showing host, readiness, voice, and mute information.
 - Added client ready controls in level select. The Ready square occupies the same grid position as the host's Start square, and the host sees a compact Ready: #/# count beside the level-select Return square. Competitive matches cannot start with too few players, and Counter-Opps also requires opposing teams. When a match cannot start or a mission is unavailable for Counter-Opps, the reason is shown through the UI instead of silently blocking it. Start uses the ordinary disabled appearance whenever another menu locks the level-select grid.
@@ -144,7 +144,7 @@ MENUS AND PRESENTATION
 - Repositioned the level-select Equipment, Stock Market, Weapons, Start, campaign controls, and ready information around the new grid. Campaign names appear between previous and next controls that wrap in both directions when another campaign or custom-mission page contains levels. When Cruelty Squad is the only page, both its label and the arrows are hidden.
 - Reworked the Online host, player, chat, voice, implant, and lobby panels to fit the game's visual style more consistently. Several plain option controls were replaced with matching styled dropdowns, Save, Ban All, and Allow All remain aligned with the bottoms of their panels, and menu sizes no longer stretch unexpectedly while values change. The in-game Online pause menu has a Settings square that opens the game's settings and returns to the Online pause menu, while its Stats panel uses the same dark red backdrop as the lobby status area.
 - Disabled starts and unavailable missions now explain themselves through hover text instead of simply looking broken.
-- Updated the credits with separate RECONSTRUCTED and original CruS Online sections. The RECONSTRUCTED section uses the new logo
+- Updated the credits with separate CruS Revitalized and original CruS Online sections. Revitalized uses its own logo, and menus, popups, and default lobby names display the current title
 - The News square displays a Coming soon! tooltip and does not open a menu yet
 - Removed the unused bundled multiplayer test maps so custom missions can be installed separately.
 - Removed the Elsa Holmes outfit from the player outfit selection.
