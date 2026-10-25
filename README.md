@@ -87,6 +87,10 @@ After the game starts, players will not be able to join the lobby
 You can change the nickname, color and skin in the `Player` tab
 The `Host` tab has a bunch of parameters that can be changed
 
+## Contributing
+
+Start with the [codebase guide](docs/codebase_guide.md) for system ownership and data flow, then the [project layout](docs/project_layout.md) for where files belong. [Custom weapons](weapons/README.md) explains the installed weapon package format and how to build an example.
+
 ## Links
 My site: https://triggeredp.site
 

@@ -752,6 +752,7 @@ func _weapon_button_for_index(index):
 	return custom_weapon_buttons[custom_index] if custom_index < custom_weapon_buttons.size() else null
 
 func _register_custom_weapon_buttons():
+	# original menu only has buttons for the built-in slots
 	var registry = Global.get_node_or_null("WeaponRegistry")
 	if registry == null or weapon_menu_panel == null:
 		return

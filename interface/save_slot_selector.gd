@@ -511,6 +511,7 @@ func _show_slot(slot):
 		stats_values[key].text = values[key]
 
 func _completion_percentage(campaign, stock, goals, goal_file):
+	# work from the saved files here. actually loading this slot would change Global
 	var entries = {}
 	var campaign_levels = {}
 	for entry in goal_file.get("achievements", []):

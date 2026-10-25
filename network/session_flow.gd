@@ -40,6 +40,7 @@ func prepare_mission():
 	NetworkBridge.n_rpc(self, "configure_world", [world])
 
 puppet func configure_world(id, state):
+	# hold onto the client's own difficulty while the host's is active
 	world = state.duplicate(true)
 	waiting_peers.clear()
 	Global.rain = world.get("rain", false)

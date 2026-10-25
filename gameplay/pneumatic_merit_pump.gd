@@ -174,6 +174,7 @@ master func request_cancel(sender):
 	_publish("sync_sound", [peer, -2.0])
 
 master func request_finish(sender, requested):
+	# give the request a little travel time, but don't trust an arbitrary cash amount
 	var peer = bridge.request_sender(sender)
 	if not bridge.is_world_authority() or not sessions.has(peer) or not typeof(requested) in [TYPE_INT, TYPE_REAL] or is_nan(requested) or is_inf(requested) or requested < 0: return
 	var session = sessions[peer]
@@ -195,6 +196,7 @@ func _complete(peer, payable):
 	else:
 		bridge.n_rpc_id(self, peer, "sync_payment", [epoch, value, overload])
 	var dropped = min(value, int(capital))
+	# going into debt is allowed-- it doesn't create extra physical money
 	if overload or dropped <= 0: return
 	sequence += 1
 	var forward = actor.global_transform.basis.z.normalized()

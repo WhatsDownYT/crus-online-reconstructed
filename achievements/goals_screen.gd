@@ -582,6 +582,8 @@ func _barycentric_2d(point, a, b, c):
 	return Vector3(u, v, w)
 
 func _ui_point_to_scene(point):
+	# the buttons are flat UI, but what you click is a rotated phone mesh
+	# find the UV triangle and project that point back to screen space
 	if not is_instance_valid(scene_phone) or not is_instance_valid(scene_camera):
 		return Vector2(-10000, -10000)
 	var arrays = scene_phone.mesh.surface_get_arrays(1)
@@ -591,6 +593,7 @@ func _ui_point_to_scene(point):
 	if vertices.empty() or uvs.empty():
 		return Vector2(-10000, -10000)
 	var texture_uv = Vector2(point.x / screen_viewport.size.x, point.y / screen_viewport.size.y)
+	# Phone screen doesn't use the whole UV width, hence the odd conversion
 	var raw_uv = Vector2((texture_uv.x + 0.617) / 2.258, texture_uv.y)
 	var triangle_count = int(indices.size() / 3) if not indices.empty() else int(vertices.size() / 3)
 	for triangle in range(triangle_count):

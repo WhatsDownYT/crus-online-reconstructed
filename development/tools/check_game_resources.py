@@ -52,6 +52,7 @@ func _ready():
 		"res://MOD_CONTENT/CruS Online/interface/menu.tscn",
 		"res://MOD_CONTENT/CruS Online/interface/death_screen.tscn",
 		"res://MOD_CONTENT/CruS Online/maps/crus_online_lobby.tscn",
+		"res://MOD_CONTENT/CruS Online/effects/blood_particles.tscn",
 		"res://MOD_CONTENT/CruS Online/maps/respawn_point.tscn",
 		"res://Player_Manager.gd", "res://Scripts/E_Grunt_Movement_New.gd",
 		"res://Scripts/material_randomizer.gd", "res://Scripts/Enemy_Melee_Weapon.gd",

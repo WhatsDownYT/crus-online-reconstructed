@@ -181,6 +181,7 @@ func _animated_rect(bounds, amount):
 	return Rect2(bounds.position + (bounds.size - size) * 0.5, size)
 
 func _update_normal(camera, delta):
+	# looking away loses the scan, keep the last box around long enough to shrink it
 	var present = []
 	for peer in mp.players:
 		if not _eligible(peer, 15.0):
@@ -222,6 +223,7 @@ func _closest():
 	return closest
 
 func _update_pro(camera, delta):
+	# 10 units is acquisition range, not a way to break an active lock
 	if target == 0 and cooldown <= 0:
 		target = _closest()
 		if target != 0:

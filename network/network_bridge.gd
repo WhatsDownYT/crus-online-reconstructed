@@ -22,7 +22,7 @@ var rset_debug_list = {}
 var _pending_registrations = []
 var damage_source_context = 0
 var damage_source_node_context = null
-const NPC_SOURCE_ID = 2147483646
+const NPC_SOURCE_ID = 2147483646 # out of the way of actual peer IDs
 const FriendlyFirePolicy = preload("res://MOD_CONTENT/CruS Online/gameplay/friendly_fire.gd")
 
 func _counterop():
@@ -48,6 +48,7 @@ func npc_source_id():
 	return NPC_SOURCE_ID if is_instance_valid(counterop) and counterop.is_active() else 0
 
 func damage_source_id(source):
+	# explosions/fire may be several nodes away from whoever actually attacked
 	if source == Global.player:
 		return get_id()
 	if not is_instance_valid(source):
@@ -82,6 +83,7 @@ func npc_damage_allowed(source, target):
 	return damage_allowed(npc_source_id(), damage_target_id(target), source)
 
 func apply_damage(source, target, method, args):
+	# restore these after callv or the next unrelated hit gets the wrong owner
 	var source_id = damage_source_id(source)
 	var clearing_fire = method == "set_fire" and args == [false]
 	var counterop = _counterop()

@@ -6,6 +6,7 @@ const MAX_TOTAL_BYTES = 2147483648
 const MAX_GROUPS = 256
 
 static func safe_relative(path):
+	# these filenames come from another player, don't let one escape its install folder
 	if typeof(path) != TYPE_STRING or path.empty() or path.length() > 240 or path.begins_with("/") or path.ends_with("/") or "\\" in path or ":" in path:
 		return false
 	for part in path.split("/", false):

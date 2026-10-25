@@ -95,6 +95,7 @@ func _object_census():
 	return _census.duplicate()
 
 func _update_object_census():
+	# walk a bit of the tree each frame instead of scanning the whole level at once
 	if _census_pending.empty():
 		if OS.get_ticks_msec() - _census_finished_at < 1000:
 			return

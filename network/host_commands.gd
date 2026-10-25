@@ -68,6 +68,7 @@ func is_banned(peer):
 	return bans.has(identity(peer))
 
 func resolve_player(token):
+	# prefer an exact ID/name. a partial name only works if it matches one person
 	if token.begins_with("#") and token.substr(1).is_valid_integer(): token = token.substr(1)
 	var exact = []
 	var partial = []

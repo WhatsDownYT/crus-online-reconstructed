@@ -214,6 +214,7 @@ func publish_lobby_settings():
 		SteamInit.Steam.setRichPresence("connect", "+connect_lobby " + str(lobby_id) if lobby_type != "private" else "")
 
 func is_compatible_lobby(lobby_id) -> bool:
+	# make sure the browser shouldn't advertise lobbies from the old mod or another build
 	return SteamInit.Steam.getLobbyData(lobby_id, "crus_online") == "reconstructed" and SteamInit.Steam.getLobbyData(lobby_id, "version") == network_version()
 
 func lobby_ping_ms(lobby_id) -> int:
@@ -226,6 +227,7 @@ func publish_ping_location():
 	if not in_lobby() or not is_owner() or not SteamInit.Steam.has_method("getLocalPingLocation"):
 		return
 	var ping_location = SteamInit.Steam.getLocalPingLocation()
+	# GodotSteam has returned both a string and a dictionary here across builds
 	if typeof(ping_location) == TYPE_DICTIONARY:
 		ping_location = ping_location.get("location", ping_location.get("ping_location", ""))
 	if typeof(ping_location) == TYPE_STRING and not ping_location.empty() and ping_location != SteamInit.Steam.getLobbyData(get_lobby_id(), "ping_location"):

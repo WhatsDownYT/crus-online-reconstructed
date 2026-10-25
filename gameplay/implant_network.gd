@@ -1,6 +1,7 @@
 extends Reference
 
 static func resolve(catalog, names):
+	# check the claimed name against the real implant catalog and its actual slot
 	if typeof(names) != TYPE_ARRAY or names.size() != 4:
 		return null
 	var slots = ["head", "torso", "arms", "legs"]

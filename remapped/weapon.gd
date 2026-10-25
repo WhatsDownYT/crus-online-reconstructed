@@ -161,6 +161,7 @@ func _refresh_custom_view_model():
 	sample.free()
 
 func _setup_custom_weapons():
+	# the vanilla weapon code uses parallel arrays, so each new slot has to be added to all of them in the same order
 	var registry = _custom_registry()
 	if registry == null:
 		return

@@ -1,5 +1,7 @@
 # Project layout
 
+For how these pieces work together, see the [codebase guide](codebase_guide.md).
+
 - `core/` starts the mod and manages save and profile data
 - `network/` contains sessions, transport, lobbies, replication, and player peers
 - `gameplay/` contains rules, implants, interactions, and mission behavior

@@ -538,6 +538,7 @@ func lobby_enabled():
 	return Multiplayer.hostSettings.get("useVoiceChat", true)
 
 func can_hear(speaker, listener):
+	# results let everybody talk again, even if the mission was using proximity
 	if Multiplayer.Commands.global_mutes.get(speaker, false): return false
 	if not lobby_enabled():
 		return false
@@ -642,6 +643,7 @@ func local_voice_mask(dead):
 	return Effects.mask_for([implants.head_implant, implants.torso_implant, implants.arm_implant, implants.leg_implant], Global.player.max_gravity < 0, Global.player.helmet_flag)
 
 func effect_mask(peer):
+	# a dead listener hears the plain dead voice while living listeners still get the effect
 	if not effects_in_mission(): return 0
 	if peers.get(peer, {}).get("dead", false):
 		if peers.get(bridge.get_id(), {}).get("dead", false) or not spatial_voice(peer, bridge.get_id()): return 0

@@ -157,6 +157,7 @@ func _s_rank(level):
 	return Global.level_time_raw < threshold
 
 func _award(entry, earned):
+	# Makes sure to award instantly even if the phone still has a bunch of notifications queued
 	var id = str(entry.get("id", ""))
 	if id.empty() or unlocked.has(id):
 		return false
@@ -286,6 +287,7 @@ func _evaluate_global_conditions(earned):
 	return changed
 
 func _backfill_saved_missions(earned):
+	# older saves already have times and clears, even if this goal file didn't exist yet
 	var changed = false
 	for level in entries_by_level:
 		if not level_beaten(level):

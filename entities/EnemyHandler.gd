@@ -294,7 +294,7 @@ func _ready():
 	dead_head = $Collisions / Dead_Head
 	dead_body = $Collisions / Dead_Body
 	
-	blood_particles = load("res://MOD_CONTENT/CruS Online/BloodParticles.tscn").instance()
+	blood_particles = load("res://MOD_CONTENT/CruS Online/effects/blood_particles.tscn").instance()
 	add_child(blood_particles)
 	
 	Multiplayer.connect("scene_loaded", self, "spawn_check_npc")

@@ -199,6 +199,7 @@ func collect_files(root, relative, files):
 			files.append({"path": path})
 
 func hash_manifest(value):
+	# hash the whole offer, including files the joining player might already have
 	for group in value.groups:
 		for entry in group.files:
 			var path = "user://" + group.kind + "/" + group.folder + "/" + entry.path
@@ -410,6 +411,7 @@ puppet func content_chunk(sender, path, offset, bytes):
 		Bridge.n_rpc_id(self, Bridge.get_host_id(), "content_request", [path, current.offset])
 
 func install_content():
+	# nothing in the installed folders gets touched until staging is complete
 	status_label.text = "Installing verified content..."
 	for item in downloads:
 		if File.new().get_sha256(staging_root() + "/" + item.full_path) != item.sha256:

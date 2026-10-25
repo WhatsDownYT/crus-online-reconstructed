@@ -29,6 +29,7 @@ func _read_dictionary(path):
 	return parsed.result
 
 func save_data(filename, data):
+	# write .tmp first. the last readable save becomes .bak
 	last_error = ""
 	if not filename in ["player.save", "config.save", "voice.save", "stats.save"] or typeof(data) != TYPE_DICTIONARY:
 		last_error = "Invalid mod settings file or data"

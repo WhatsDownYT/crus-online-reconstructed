@@ -635,6 +635,7 @@ func _ready():
 	
 	IMPLANTS.append(new_implant)
 
+	# Online gear is still added to the normal implant list. the network side of each one lives outside this menu/catalog script
 	new_implant = Implant.new()
 	new_implant.i_name = "Military Camouflage+"
 	new_implant.explanation = "Online extension for Military Camouflage. Your body becomes entirely invisible at a distance to other players."

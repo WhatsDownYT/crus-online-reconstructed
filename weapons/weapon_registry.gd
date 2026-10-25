@@ -10,6 +10,7 @@ var indices = {}
 var names = {}
 
 func load_installed_weapons():
+	# mount the zip first or load() won't see any of its scenes
 	var root = "user://weapons"
 	var directory = Directory.new()
 	directory.make_dir_recursive(root)
@@ -100,6 +101,7 @@ func _register_point_classes(point_classes):
 			fgd.entity_definitions.append(point_class)
 
 func finalize():
+	# vanilla owns 0-28. the folder sort above has to agree on every peer
 	var changed = false
 	for key in registration_order:
 		if indices.has(key):

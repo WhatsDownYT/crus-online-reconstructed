@@ -13,6 +13,7 @@ func _init(owner):
 	_owner = weakref(owner)
 
 func queue(peer_id, caller, member, value, is_property):
+	# no point sending every intermediate transform when only the newest one matters
 	var network = _owner.get_ref()
 	if network._waiting_world_target(peer_id, caller):
 		return

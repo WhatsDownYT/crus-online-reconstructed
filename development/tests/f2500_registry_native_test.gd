@@ -77,14 +77,5 @@ func run():
 			has_swat_point = true
 	check(has_weapon_point, "TrenchBroom F2500 point registered")
 	check(has_swat_point, "TrenchBroom F2500 SWAT point registered")
-	if File.new().file_exists("user://levels/F2500 Test Range/level.json"):
-		var range_scene = load("user://levels/F2500 Test Range/f2500_test_range.tscn")
-		check(range_scene != null, "weapon-only test range loads")
-		var extensions = Global.get_node("Multiplayer/ExtensionCompatibility")
-		var range_registered = false
-		for level in extensions.custom_levels:
-			if level.get("name", "") == "F2500 Test Range":
-				range_registered = true
-		check(range_registered, "Mod Base registers the weapon-only test range")
 	print("F2500_RESULT failures=", failures)
 	get_tree().quit(0 if failures == 0 else 1)

@@ -1,6 +1,7 @@
 extends Node
 
 func _init():
+	# Modloader can reach us before the Online pack is mounted here
 	var loader = Global.get_node_or_null("/root/Mod")
 	if loader != null and loader.has_node("CruS Mod Base") and loader.has_node("CruS Online"):
 		for pack in loader.get_node("CruS Online").packs:

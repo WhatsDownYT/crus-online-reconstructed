@@ -8,6 +8,7 @@ var slot_defaults = {}
 var slot_implants_default = []
 
 func slot_path(filename):
+	# slot 1 keeps the old user:// paths so existing saves just work
 	if slot_index == 1:
 		return "user://" + filename
 	var folder = "user://crus_online_slots/slot" + str(slot_index)
@@ -858,6 +859,7 @@ func save()->Dictionary:
 	return save_dict
 
 func _weapon_save_key(index):
+	# don't save a package weapon's array slot, another package can shift it
 	var registry = get_node_or_null("WeaponRegistry")
 	if registry != null and registry.is_custom(index):
 		return registry.id_for(index)
