@@ -1,0 +1,10 @@
+[remap]
+importer="texture"
+type="StreamTexture"
+path="res://CUSTOM_WEAPONS/herschel_f2500/assets/rifle_texture.stex"
+
+[deps]
+source_file="res://CUSTOM_WEAPONS/herschel_f2500/assets/rifle_texture.png"
+dest_files=[ "res://CUSTOM_WEAPONS/herschel_f2500/assets/rifle_texture.stex" ]
+
+[params]

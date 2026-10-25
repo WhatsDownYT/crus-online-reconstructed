@@ -1,0 +1,1520 @@
+[gd_scene load_steps=49 format=2]
+
+[ext_resource path="res://Menu/menu_theme.tres" type="Theme" id=1]
+[ext_resource path="res://Textures/Misc/mainguy_clothes.png" type="Texture" id=2]
+[ext_resource path="res://Textures/Menu/background_1.png" type="Texture" id=3]
+[ext_resource path="res://Textures/NPC/Enemy_Nude.png" type="Texture" id=4]
+[ext_resource path="res://MOD_CONTENT/CruS Online/interface/multiplayer_menu.gd" type="Script" id=5]
+[ext_resource path="res://Textures/NPC/Enemy_Worker.png" type="Texture" id=6]
+[ext_resource path="res://MOD_CONTENT/CruS Online/assets/interface/redpanel.tres" type="StyleBox" id=11]
+[ext_resource path="res://MOD_CONTENT/CruS Online/interface/chat_box.gd" type="Script" id=13]
+[ext_resource path="res://Sfx/NPCs/night_creep_pain_1.wav" type="AudioStream" id=14]
+[ext_resource path="res://Textures/NPC/cultist_civilian.png" type="Texture" id=15]
+[ext_resource path="res://Textures/NPC/bosssguy_clothes.png" type="Texture" id=16]
+[ext_resource path="res://Textures/NPC/Enemy_Civilian2.png" type="Texture" id=17]
+[ext_resource path="res://Textures/NPC/Enemy_Assassin_Alt.png" type="Texture" id=18]
+[ext_resource path="res://Textures/NPC/Enemy_Assassin.png" type="Texture" id=20]
+[ext_resource path="res://Textures/NPC/Objective_CEO.png" type="Texture" id=21]
+[ext_resource path="res://Textures/NPC/Enemy_Kevin.png" type="Texture" id=22]
+[ext_resource path="res://Textures/NPC/Enemy_Cop1.png" type="Texture" id=23]
+[ext_resource path="res://MOD_CONTENT/CruS Online/assets/interface/extramenu.tres" type="Theme" id=24]
+[ext_resource path="res://Sfx/UI/Implant_Equip.wav" type="AudioStream" id=25]
+[ext_resource path="res://Sfx/UI/implant_unequip.wav" type="AudioStream" id=26]
+[ext_resource path="res://Fonts/gamefont(1).ttf" type="DynamicFontData" id=27]
+[ext_resource path="res://MOD_CONTENT/CruS Online/interface/lobby_browser.gd" type="Script" id=28]
+[ext_resource path="res://MOD_CONTENT/CruS Online/interface/lobby_code_input.gd" type="Script" id=29]
+
+[sub_resource type="StyleBoxEmpty" id=30]
+
+[sub_resource type="GDScript" id=31]
+script/source = "extends PanelContainer
+
+onready var NetworkBridge = Global.get_node(\"Multiplayer/NetworkBridge\")
+onready var main_tab = get_parent()
+
+onready var Multiplayer = Global.get_node(\"Multiplayer\")
+
+onready var SteamLobby = Global.get_node(\"Multiplayer/SteamInit/SteamLobby\")
+
+func _ready():
+	main_tab.current_tab = 0
+
+func lan_selected():
+	NetworkBridge.set_mode(NetworkBridge.MULTIPLAYER_TYPE.LAN)
+	main_tab.current_tab = 1
+	get_parent().get_parent().current_tab = 0
+
+func steam_selected():
+	if Multiplayer.SteamInit.is_online:
+		$\"../Steam/VBoxContainer/PlayersList/LobbyList\".show()
+		NetworkBridge.set_mode(NetworkBridge.MULTIPLAYER_TYPE.STEAM)
+		$\"../Steam\".get_lobbies()
+		main_tab.current_tab = 2
+		get_parent().get_parent().current_tab = 0
+"
+
+[sub_resource type="GDScript" id=18]
+script/source = "extends Label
+
+func _ready():
+	text = get_tree().get_nodes_in_group(\"Multiplayer\")[0].version
+"
+
+[sub_resource type="GDScript" id=12]
+script/source = "extends PanelContainer
+
+onready var main_tab = get_parent()
+
+onready var playersList = $VBoxContainer/PlayersList/PlayersListLabel
+onready var status = $VBoxContainer/Status/StatusLabel
+
+onready var Multiplayer = Global.get_node(\"Multiplayer\")
+
+func _ready():
+	playersList.bbcode_text = \"\"
+	
+	Multiplayer.connect(\"status_update\", self, \"update_status\")
+	Multiplayer.connect(\"players_update\", self, \"update_players_info\")
+
+func update_status(new_status):
+	status.text = new_status
+
+func update_players_info(info):
+	var playerNumber = 1
+	playersList.bbcode_text = \"\"
+	
+	for player in info:
+		print(info[player])
+		playersList.bbcode_text += str(playerNumber) + \": [color=#\" + info[player].color + \"]\" + info[player].nickname + \"[/color]\"
+		
+		if player == 1:
+			playersList.bbcode_text += \" (host)\\n\"
+		else:
+			playersList.bbcode_text += \"\\n\"
+		
+		playerNumber += 1
+
+func back_to_menu():
+	main_tab.current_tab = 0
+	Multiplayer.leave_server()
+"
+
+[sub_resource type="StyleBoxEmpty" id=39]
+content_margin_left = 5.0
+content_margin_right = 5.0
+
+[sub_resource type="StyleBoxTexture" id=32]
+texture = ExtResource( 3 )
+region_rect = Rect2( 0, 0, 256, 256 )
+margin_left = 10.0
+margin_right = 10.0
+margin_top = 10.0
+margin_bottom = 10.0
+modulate_color = Color( 0.298039, 0.0352941, 0.0352941, 1 )
+
+[sub_resource type="StyleBoxEmpty" id=38]
+content_margin_left = 5.0
+content_margin_right = 5.0
+
+[sub_resource type="StyleBoxFlat" id=36]
+bg_color = Color( 0.6, 0.6, 0.6, 0 )
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color( 0.0392157, 1, 0, 1 )
+
+[sub_resource type="StyleBoxEmpty" id=34]
+
+[sub_resource type="StyleBoxFlat" id=35]
+bg_color = Color( 0.6, 0.6, 0.6, 0 )
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color( 0.188235, 1, 0, 1 )
+
+[sub_resource type="StyleBoxEmpty" id=33]
+content_margin_left = 5.0
+content_margin_right = 5.0
+
+[sub_resource type="GDScript" id=25]
+script/source = "extends Button
+
+func button_pressed():
+	text = \"  Settings saved  \"
+	$Timer.start()
+
+func button_reset():
+	text = \"  Save  \"
+"
+
+[sub_resource type="GDScript" id=16]
+script/source = "extends HBoxContainer
+
+func r_change(text):
+	if int(text) > 255: text = \"255\"
+	if int(text) < 0: text = \"0\"
+	
+	$Red.text = str(int(text))
+	$ColorRect.color.r8 = int(int(text))
+
+func g_change(text):
+	if int(text) > 255: text = \"255\"
+	if int(text) < 0: text = \"0\"
+	
+	$Green.text = str(int(text))
+	$ColorRect.color.g8 = int(int(text))
+
+func b_change(text):
+	if int(text) > 255: text = \"255\"
+	if int(text) < 0: text = \"0\"
+	
+	$Blue.text = str(int(text))
+	$ColorRect.color.b8 = int(int(text))
+
+func focus_exited():
+	r_change($Red.text)
+	g_change($Green.text)
+	b_change($Blue.text)
+"
+
+[sub_resource type="GDScript" id=2]
+script/source = "extends HBoxContainer
+
+export (Array,Array) var playerSkins
+
+var selected = 0
+
+func _ready():
+	for skin in playerSkins:
+		$ItemList.add_item(skin[0])
+
+func _skin_selected(index):
+	$TextureRect.texture = playerSkins[index][2]
+	selected = index
+
+func set_texture(path):
+	selected = 0
+	for index in range(playerSkins.size()):
+		if playerSkins[index][1] == path:
+			selected = index
+			break
+	if not playerSkins.empty():
+		$ItemList.select(selected)
+		$TextureRect.texture = playerSkins[selected][2]
+
+func get_texture():
+	return playerSkins[selected][1]
+"
+
+[sub_resource type="GDScript" id=26]
+script/source = "extends Button
+
+func button_pressed():
+	text = \"  Settings saved  \"
+	$Timer.start()
+
+func button_reset():
+	text = \"  Save  \"
+"
+
+[sub_resource type="GDScript" id=11]
+script/source = "extends \"res://MOD_CONTENT/CruS Online/gameplay/mode_settings.gd\"
+"
+
+[sub_resource type="GDScript" id=13]
+script/source = "extends \"res://MOD_CONTENT/CruS Online/gameplay/implant_settings.gd\"
+"
+
+[sub_resource type="AudioStreamRandomPitch" id=14]
+audio_stream = ExtResource( 25 )
+
+[sub_resource type="DynamicFont" id=27]
+use_filter = true
+extra_spacing_bottom = 5
+font_data = ExtResource( 27 )
+
+[sub_resource type="DynamicFont" id=28]
+use_filter = true
+font_data = ExtResource( 27 )
+
+[sub_resource type="AudioStreamRandomPitch" id=29]
+audio_stream = ExtResource( 14 )
+random_pitch = 1.3
+
+[sub_resource type="GDScript" id=24]
+script/source = "extends PanelContainer
+
+func meta_clicked(meta):
+	OS.shell_open(str(meta))
+"
+
+[sub_resource type="StyleBoxFlat" id=19]
+bg_color = Color( 0.15863, 0.441406, 0, 0.470588 )
+expand_margin_top = 20.0
+
+[sub_resource type="GDScript" id=21]
+script/source = "extends WindowDialog
+
+onready var Multiplayer = get_tree().get_nodes_in_group(\"Multiplayer\")[0]
+
+onready var errorLabel = $Panel/MarginContainer/RichTextLabel
+
+var errorText = [
+	\"[center]Unknow error[/center]\",
+	\"[center]Time out[/center]\",
+	\"[center]The client and host mod versions do not match[/center]\",
+	\"[center]The host forcibly terminated the connection[/center]\",
+	\"[center]UPnP can't be enabled[/center]\",
+	\"[center]New player connected to lobby[/center]\"
+]
+
+func _ready():
+	rect_scale = Vector2(Global.resolution[0] / 1280 ,Global.resolution[1] / 720 )
+	
+	Multiplayer.connect(\"disconnected_from_server\", self, \"show_error\")
+	Multiplayer.connect(\"throw_error\", self, \"show_error\")
+
+func show_error(error):
+	rect_scale = Vector2(Global.resolution[0] / 1280 ,Global.resolution[1] / 720 )
+	errorLabel.bbcode_text = errorText[error]
+	popup_centered()
+	rect_size = Vector2(388, $Panel/MarginContainer/RichTextLabel.rect_size.y + 10)
+"
+
+[sub_resource type="StyleBoxTexture" id=20]
+texture = ExtResource( 3 )
+region_rect = Rect2( 0, 0, 256, 256 )
+modulate_color = Color( 0.831373, 0.878431, 0.419608, 0.705882 )
+
+[node name="MultiplayerMenu" type="Control" groups=["MultiplayerMenu"]]
+anchor_right = 1.0
+anchor_bottom = 1.0
+rect_pivot_offset = Vector2( 880, 333 )
+mouse_filter = 2
+theme = ExtResource( 1 )
+script = ExtResource( 5 )
+__meta__ = {
+"_edit_use_anchors_": true,
+"_edit_vertical_guides_": [  ]
+}
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+margin_left = 365.0
+margin_right = 1280.0
+margin_bottom = 720.0
+
+[node name="TabContainer" type="TabContainer" parent="CenterContainer"]
+margin_left = 195.0
+margin_top = 85.0
+margin_right = 856.0
+margin_bottom = 634.0
+rect_min_size = Vector2( 661, 549 )
+
+[node name="Main" type="TabContainer" parent="CenterContainer/TabContainer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+custom_styles/panel = SubResource( 30 )
+tabs_visible = false
+
+[node name="Select" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource( 31 )
+
+[node name="CenterContainer" type="CenterContainer" parent="CenterContainer/TabContainer/Main/Select"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/Select/CenterContainer"]
+margin_left = 170.0
+margin_top = 183.0
+margin_right = 470.0
+margin_bottom = 314.0
+custom_constants/separation = 50
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer"]
+margin_right = 300.0
+margin_bottom = 55.0
+text = "Select Online Mode"
+align = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer"]
+margin_top = 105.0
+margin_right = 300.0
+margin_bottom = 131.0
+custom_constants/separation = 35
+alignment = 1
+
+[node name="LAN" type="Button" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer/HBoxContainer"]
+margin_left = 12.0
+margin_right = 117.0
+margin_bottom = 26.0
+text = "  LAN  "
+
+[node name="Steam" type="Button" parent="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer/HBoxContainer"]
+margin_left = 152.0
+margin_right = 287.0
+margin_bottom = 26.0
+text = "  Steam  "
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/Select"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+mouse_filter = 2
+alignment = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Select/VBoxContainer"]
+margin_top = 471.0
+margin_right = 641.0
+margin_bottom = 497.0
+mouse_filter = 2
+alignment = 2
+
+[node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/Select/VBoxContainer/HBoxContainer"]
+margin_left = 387.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 10
+text = "v1.0"
+script = SubResource( 18 )
+
+[node name="LAN" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = SubResource( 12 )
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/LAN"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_constants/separation = 5
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_right = 641.0
+margin_bottom = 26.0
+text = "Main menu"
+align = 1
+
+[node name="IpPort" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_top = 31.0
+margin_right = 641.0
+margin_bottom = 67.0
+custom_constants/separation = 10
+alignment = 1
+
+[node name="IpEdit" type="LineEdit" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort"]
+margin_right = 258.0
+margin_bottom = 36.0
+rect_min_size = Vector2( 249, 36 )
+size_flags_horizontal = 3
+theme = ExtResource( 24 )
+text = "127.0.0.1"
+align = 1
+max_length = 15
+placeholder_text = "127.0.0.1"
+
+[node name="PortEdit" type="LineEdit" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort"]
+margin_left = 268.0
+margin_right = 436.0
+margin_bottom = 36.0
+theme = ExtResource( 24 )
+text = "25567"
+align = 1
+max_length = 5
+placeholder_text = "25567"
+
+[node name="Buttons" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort"]
+margin_left = 446.0
+margin_right = 641.0
+margin_bottom = 36.0
+custom_constants/separation = 15
+
+[node name="Join" type="Button" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons"]
+margin_right = 90.0
+margin_bottom = 36.0
+text = " Join "
+
+[node name="Host" type="Button" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons"]
+margin_left = 105.0
+margin_right = 195.0
+margin_bottom = 36.0
+text = " Host "
+
+[node name="Leave" type="Button" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons"]
+visible = false
+margin_left = 210.0
+margin_right = 315.0
+margin_bottom = 36.0
+text = " Leave "
+
+[node name="Status" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_top = 72.0
+margin_right = 641.0
+margin_bottom = 98.0
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/Status"]
+margin_right = 104.0
+margin_bottom = 26.0
+text = "Status:"
+
+[node name="StatusLabel" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/Status"]
+margin_left = 104.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Offline"
+align = 2
+
+[node name="PlayersList" type="PanelContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_top = 103.0
+margin_right = 641.0
+margin_bottom = 435.0
+size_flags_vertical = 3
+custom_styles/panel = ExtResource( 11 )
+
+[node name="PlayersListLabel" type="RichTextLabel" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/PlayersList"]
+margin_left = 10.0
+margin_top = 5.0
+margin_right = 631.0
+margin_bottom = 327.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_styles/normal = SubResource( 39 )
+bbcode_enabled = true
+
+[node name="BackContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_top = 440.0
+margin_right = 641.0
+margin_bottom = 466.0
+alignment = 1
+
+[node name="Back" type="Button" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/BackContainer"]
+margin_left = 215.0
+margin_right = 425.0
+margin_bottom = 26.0
+text = " Back to menu "
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer"]
+margin_top = 471.0
+margin_right = 641.0
+margin_bottom = 497.0
+
+[node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/LAN/VBoxContainer/HBoxContainer"]
+margin_left = 387.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 10
+text = "v1.0"
+script = SubResource( 18 )
+
+[node name="Steam" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource( 28 )
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/Steam"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+custom_constants/separation = 5
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+margin_right = 641.0
+margin_bottom = 26.0
+text = "Main menu"
+align = 1
+
+[node name="Buttons" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+margin_top = 31.0
+margin_right = 641.0
+margin_bottom = 57.0
+custom_constants/separation = 10
+alignment = 1
+
+[node name="Leave" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+visible = false
+margin_left = 18.0
+margin_right = 213.0
+margin_bottom = 26.0
+text = " Leave Lobby "
+
+[node name="DirectJoin" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+margin_left = 138.0
+margin_right = 273.0
+margin_bottom = 26.0
+text = " Direct Join "
+
+[node name="Refresh" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+margin_bottom = 26.0
+text = " Refresh "
+
+[node name="Join" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+margin_left = 283.0
+margin_right = 373.0
+margin_bottom = 26.0
+text = " Join "
+
+[node name="Create" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+margin_left = 383.0
+margin_right = 503.0
+margin_bottom = 26.0
+text = " Create "
+
+[node name="Test" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons"]
+visible = false
+margin_left = 463.0
+margin_right = 553.0
+margin_bottom = 26.0
+text = " Test "
+
+[node name="Status" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+visible = false
+margin_top = 62.0
+margin_right = 641.0
+margin_bottom = 88.0
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Status"]
+margin_right = 104.0
+margin_bottom = 26.0
+text = "Status:"
+
+[node name="StatusLabel" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Status"]
+margin_left = 104.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Offline"
+align = 2
+
+[node name="LobbyInfo" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+visible = false
+margin_top = 93.0
+margin_right = 641.0
+margin_bottom = 119.0
+
+[node name="PlayersInfo" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/LobbyInfo"]
+margin_right = 320.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Players: 0/0"
+
+[node name="CodeInfo" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/LobbyInfo"]
+margin_left = 320.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Code: ******"
+align = 2
+
+[node name="PlayersList" type="PanelContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+margin_top = 124.0
+margin_right = 641.0
+margin_bottom = 435.0
+size_flags_vertical = 3
+custom_styles/panel = SubResource( 32 )
+
+[node name="PlayersListLabel" type="RichTextLabel" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList"]
+visible = false
+margin_left = 10.0
+margin_top = 10.0
+margin_right = 631.0
+margin_bottom = 332.0
+mouse_filter = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_styles/normal = SubResource( 38 )
+bbcode_enabled = true
+
+[node name="LobbyList" type="ScrollContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList"]
+margin_left = 10.0
+margin_top = 10.0
+margin_right = 631.0
+margin_bottom = 301.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_styles/bg = SubResource( 33 )
+
+[node name="Rows" type="VBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/PlayersList/LobbyList"]
+margin_right = 621.0
+size_flags_horizontal = 3
+custom_constants/separation = 2
+
+[node name="BackContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+margin_top = 440.0
+margin_right = 641.0
+margin_bottom = 466.0
+alignment = 1
+
+[node name="Back" type="Button" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/BackContainer"]
+margin_left = 215.0
+margin_right = 425.0
+margin_bottom = 26.0
+text = " Back to menu "
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer"]
+margin_top = 471.0
+margin_right = 641.0
+margin_bottom = 497.0
+
+[node name="Version" type="Label" parent="CenterContainer/TabContainer/Main/Steam/VBoxContainer/HBoxContainer"]
+margin_left = 387.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 10
+text = "v1.0"
+script = SubResource( 18 )
+
+[node name="Host" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Host"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_constants/separation = 10
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_right = 641.0
+margin_bottom = 26.0
+text = "Host settings"
+align = 1
+
+[node name="LobbyType" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 36.0
+margin_right = 641.0
+margin_bottom = 62.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/LobbyType"]
+margin_right = 134.0
+margin_bottom = 26.0
+text = "Lobby type:"
+
+[node name="TypeSelect" type="OptionButton" parent="CenterContainer/TabContainer/Host/VBoxContainer/LobbyType"]
+margin_left = 134.0
+margin_right = 641.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+theme = ExtResource( 24 )
+align = 1
+
+[node name="MaxPlayers" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers"]
+size_flags_horizontal = 3
+text = "Max players:"
+
+[node name="CountEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers"]
+theme = ExtResource( 24 )
+min_value = 2.0
+max_value = 4096.0
+value = 16.0
+align = 1
+
+[node name="Port" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 72.0
+margin_right = 641.0
+margin_bottom = 98.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/Port"]
+margin_right = 473.0
+margin_bottom = 26.0
+rect_pivot_offset = Vector2( -179, -28 )
+size_flags_horizontal = 3
+text = "Port:"
+
+[node name="PortEdit" type="LineEdit" parent="CenterContainer/TabContainer/Host/VBoxContainer/Port"]
+margin_left = 473.0
+margin_right = 641.0
+margin_bottom = 26.0
+theme = ExtResource( 24 )
+text = "25567"
+align = 1
+max_length = 5
+placeholder_text = "8080"
+
+[node name="TickRate" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+visible = false
+margin_top = 108.0
+margin_right = 641.0
+margin_bottom = 134.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/TickRate"]
+margin_right = 457.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Tick rate:"
+
+[node name="TickEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/TickRate"]
+margin_left = 457.0
+margin_right = 641.0
+margin_bottom = 26.0
+theme = ExtResource( 24 )
+min_value = 1.0
+max_value = 60.0
+value = 3.0
+allow_greater = true
+align = 1
+
+[node name="CanRespawn" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 108.0
+margin_right = 641.0
+margin_bottom = 134.0
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn"]
+margin_right = 591.0
+margin_bottom = 26.0
+rect_pivot_offset = Vector2( -179, -28 )
+size_flags_horizontal = 3
+text = "Can revive:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/CanRespawn"]
+margin_left = 591.0
+margin_right = 641.0
+margin_bottom = 26.0
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="SelfRespawn" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn"]
+size_flags_horizontal = 3
+text = "Self-reviving:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/SelfRespawn"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+text = "<<"
+
+[node name="ShareDifficulty" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty"]
+size_flags_horizontal = 3
+text = "Share difficulty:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/ShareDifficulty"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = false
+text = "<<"
+
+[node name="FriendlyFire" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire"]
+size_flags_horizontal = 3
+text = "Friendly Fire:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/FriendlyFire"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="DropWeaponsOnDeath" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath"]
+size_flags_horizontal = 3
+text = "Drop weapons on death:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = false
+text = "<<"
+
+[node name="useVoiceChat" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/useVoiceChat"]
+size_flags_horizontal = 3
+text = "Use Voice Chat:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/useVoiceChat"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="proximityVoiceChat" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/proximityVoiceChat"]
+size_flags_horizontal = 3
+text = "Proximity Voice Chat:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/proximityVoiceChat"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="hearDeadPlayers" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/hearDeadPlayers"]
+size_flags_horizontal = 3
+text = "Hear Dead Players:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/hearDeadPlayers"]
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = false
+text = "<<"
+
+[node name="ChangeModeOnDeath" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 144.0
+margin_right = 641.0
+margin_bottom = 170.0
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath"]
+margin_right = 591.0
+margin_bottom = 26.0
+rect_pivot_offset = Vector2( -179, -28 )
+size_flags_horizontal = 3
+text = "change difficulty on death:"
+
+[node name="TickEdit" type="CheckBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/ChangeModeOnDeath"]
+margin_left = 591.0
+margin_right = 641.0
+margin_bottom = 26.0
+rect_min_size = Vector2( 50, 0 )
+theme = ExtResource( 24 )
+pressed = true
+text = "<<"
+
+[node name="ReviveTimer" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 180.0
+margin_right = 641.0
+margin_bottom = 206.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer"]
+margin_right = 457.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Revive timer:"
+
+[node name="ReviveEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/ReviveTimer"]
+margin_left = 457.0
+margin_right = 641.0
+margin_bottom = 26.0
+theme = ExtResource( 24 )
+min_value = 1.0
+max_value = 99.0
+value = 15.0
+allow_greater = true
+align = 1
+
+[node name="Lives" type="HBoxContainer" parent="CenterContainer/TabContainer/Host/VBoxContainer"]
+margin_top = 216.0
+margin_right = 641.0
+margin_bottom = 242.0
+alignment = 1
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Host/VBoxContainer/Lives"]
+margin_right = 457.0
+margin_bottom = 26.0
+size_flags_horizontal = 3
+text = "Lives:"
+
+[node name="LivesEdit" type="SpinBox" parent="CenterContainer/TabContainer/Host/VBoxContainer/Lives"]
+margin_left = 457.0
+margin_right = 641.0
+margin_bottom = 26.0
+theme = ExtResource( 24 )
+max_value = 5.0
+step = 1.0
+value = 0.0
+allow_greater = false
+allow_lesser = false
+align = 1
+
+[node name="Save" type="Button" parent="CenterContainer/TabContainer/Host"]
+margin_left = 263.0
+margin_top = 474.0
+margin_right = 383.0
+margin_bottom = 500.0
+size_flags_horizontal = 4
+size_flags_vertical = 8
+text = "  Save  "
+icon_align = 1
+script = SubResource( 25 )
+
+[node name="Timer" type="Timer" parent="CenterContainer/TabContainer/Host/Save"]
+one_shot = true
+
+[node name="Player" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Player"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+custom_constants/separation = 5
+
+[node name="ClientSettings" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
+margin_right = 641.0
+margin_bottom = 26.0
+text = "Player settings"
+align = 1
+
+[node name="Nickname" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
+margin_top = 31.0
+margin_right = 641.0
+margin_bottom = 67.0
+custom_constants/separation = 5
+
+[node name="Label3" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer/Nickname"]
+margin_top = 5.0
+margin_right = 74.0
+margin_bottom = 31.0
+text = "Name:"
+
+[node name="NicknameEdit" type="LineEdit" parent="CenterContainer/TabContainer/Player/VBoxContainer/Nickname"]
+margin_left = 79.0
+margin_right = 641.0
+margin_bottom = 36.0
+rect_min_size = Vector2( 249, 36 )
+size_flags_horizontal = 3
+theme = ExtResource( 24 )
+text = "MT Foxtrot"
+align = 1
+max_length = 15
+placeholder_text = "MT Foxtrot"
+
+[node name="Color" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
+margin_top = 72.0
+margin_right = 641.0
+margin_bottom = 136.0
+custom_constants/separation = 5
+script = SubResource( 16 )
+
+[node name="Label3" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer/Color"]
+margin_top = 19.0
+margin_right = 164.0
+margin_bottom = 45.0
+text = "Name Color:"
+
+[node name="Red" type="LineEdit" parent="CenterContainer/TabContainer/Player/VBoxContainer/Color"]
+margin_left = 169.0
+margin_top = 14.0
+margin_right = 300.0
+margin_bottom = 50.0
+rect_min_size = Vector2( 0, 36 )
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme = ExtResource( 24 )
+custom_constants/minimum_spaces = 0
+text = "255"
+align = 1
+max_length = 3
+middle_mouse_paste_enabled = false
+placeholder_text = "255"
+
+[node name="Green" type="LineEdit" parent="CenterContainer/TabContainer/Player/VBoxContainer/Color"]
+margin_left = 305.0
+margin_top = 14.0
+margin_right = 436.0
+margin_bottom = 50.0
+rect_min_size = Vector2( 0, 36 )
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme = ExtResource( 24 )
+custom_constants/minimum_spaces = 0
+text = "0"
+align = 1
+max_length = 3
+middle_mouse_paste_enabled = false
+placeholder_text = "255"
+
+[node name="Blue" type="LineEdit" parent="CenterContainer/TabContainer/Player/VBoxContainer/Color"]
+margin_left = 441.0
+margin_top = 14.0
+margin_right = 572.0
+margin_bottom = 50.0
+rect_min_size = Vector2( 0, 36 )
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme = ExtResource( 24 )
+custom_constants/minimum_spaces = 0
+text = "0"
+align = 1
+max_length = 3
+middle_mouse_paste_enabled = false
+placeholder_text = "255"
+
+[node name="ColorRect" type="ColorRect" parent="CenterContainer/TabContainer/Player/VBoxContainer/Color"]
+margin_left = 577.0
+margin_right = 641.0
+margin_bottom = 64.0
+rect_min_size = Vector2( 64, 64 )
+color = Color( 1, 0, 0, 1 )
+
+[node name="Skin" type="HBoxContainer" parent="CenterContainer/TabContainer/Player/VBoxContainer"]
+margin_top = 141.0
+margin_right = 641.0
+margin_bottom = 397.0
+custom_constants/separation = 5
+script = SubResource( 2 )
+playerSkins = [ [ "Default", "res://Textures/Misc/mainguy_clothes.png", ExtResource( 2 ) ], [ "Worker", "res://Textures/NPC/Enemy_Worker.png", ExtResource( 6 ) ], [ "Nude (FREE???)", "res://Textures/NPC/Enemy_Nude.png", ExtResource( 4 ) ], [ "Cultist", "res://Textures/NPC/cultist_civilian.png", ExtResource( 15 ) ], [ "Boss guy", "res://Textures/NPC/bosssguy_clothes.png", ExtResource( 16 ) ], [ "Assassin", "res://Textures/NPC/Enemy_Assassin.png", ExtResource( 20 ) ], [ "Assassin (Alt)", "res://Textures/NPC/Enemy_Assassin_Alt.png", ExtResource( 18 ) ], [ "Civilian", "res://Textures/NPC/Enemy_Civilian2.png", ExtResource( 17 ) ], [ "Cop", "res://Textures/NPC/Enemy_Cop1.png", ExtResource( 23 ) ], [ "Kevin", "res://Textures/NPC/Enemy_Kevin.png", ExtResource( 22 ) ], [ "CEO", "res://Textures/NPC/Objective_CEO.png", ExtResource( 21 ) ] ]
+
+[node name="Label3" type="Label" parent="CenterContainer/TabContainer/Player/VBoxContainer/Skin"]
+margin_top = 115.0
+margin_right = 74.0
+margin_bottom = 141.0
+text = "Skin:"
+
+[node name="ItemList" type="ItemList" parent="CenterContainer/TabContainer/Player/VBoxContainer/Skin"]
+margin_left = 79.0
+margin_right = 380.0
+margin_bottom = 256.0
+rect_pivot_offset = Vector2( -843, 287 )
+size_flags_horizontal = 3
+allow_reselect = true
+
+[node name="TextureRect" type="TextureRect" parent="CenterContainer/TabContainer/Player/VBoxContainer/Skin"]
+margin_left = 385.0
+margin_right = 641.0
+margin_bottom = 256.0
+texture = ExtResource( 2 )
+
+[node name="Save" type="Button" parent="CenterContainer/TabContainer/Player"]
+margin_left = 260.0
+margin_top = 474.0
+margin_right = 380.0
+margin_bottom = 500.0
+size_flags_horizontal = 4
+size_flags_vertical = 8
+text = "  Save  "
+icon_align = 1
+script = SubResource( 26 )
+
+[node name="Timer" type="Timer" parent="CenterContainer/TabContainer/Player/Save"]
+one_shot = true
+
+[node name="Modes" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = SubResource( 11 )
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Modes"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+alignment = 1
+
+[node name="LevelController" type="VBoxContainer" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
+margin_right = 305.0
+margin_bottom = 497.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+alignment = 2
+
+[node name="GamemodeLabel" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController"]
+margin_right = 305.0
+margin_bottom = 26.0
+text = "Gamemodes:"
+align = 1
+
+[node name="GamemodeList" type="ItemList" parent="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController"]
+margin_top = 26.0
+margin_right = 305.0
+margin_bottom = 497.0
+rect_pivot_offset = Vector2( -843, 287 )
+size_flags_vertical = 3
+allow_reselect = true
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
+margin_left = 305.0
+margin_top = 235.0
+margin_right = 335.0
+margin_bottom = 261.0
+text = "  "
+
+[node name="GamemodeDescription" type="VBoxContainer" parent="CenterContainer/TabContainer/Modes/HBoxContainer"]
+margin_left = 335.0
+margin_right = 641.0
+margin_bottom = 497.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="MapLabel" type="Label" parent="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription"]
+margin_right = 306.0
+margin_bottom = 471.0
+size_flags_horizontal = 3
+size_flags_vertical = 7
+text = "Gamemode description:
+
+The default gameplay of Cruelty Squad. Eliminate all mission targets, then reach the exit.\\n\\nThis is the only mode that can save campaign progress."
+align = 1
+autowrap = true
+
+[node name="Button" type="Button" parent="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription"]
+margin_top = 471.0
+margin_right = 306.0
+margin_bottom = 497.0
+text = "Play"
+
+[node name="Implants" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+script = SubResource( 13 )
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CenterContainer/TabContainer/Implants"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+alignment = 1
+
+[node name="ImplantsController" type="VBoxContainer" parent="CenterContainer/TabContainer/Implants/HBoxContainer"]
+margin_right = 431.0
+margin_bottom = 497.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+alignment = 2
+
+[node name="AllowedImplantsLabel" type="Label" parent="CenterContainer/TabContainer/Implants/HBoxContainer/ImplantsController"]
+margin_right = 431.0
+margin_bottom = 26.0
+text = "Allowed implants:"
+align = 1
+
+[node name="AllowedImplantsList" type="ScrollContainer" parent="CenterContainer/TabContainer/Implants/HBoxContainer/ImplantsController"]
+margin_top = 26.0
+margin_right = 431.0
+margin_bottom = 497.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+scroll_horizontal_enabled = false
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Implants/HBoxContainer"]
+margin_left = 431.0
+margin_top = 235.0
+margin_right = 446.0
+margin_bottom = 261.0
+text = " "
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Implants/HBoxContainer"]
+margin_left = 446.0
+margin_right = 641.0
+margin_bottom = 497.0
+custom_constants/separation = 10
+
+[node name="Label" type="Label" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_right = 195.0
+margin_bottom = 26.0
+text = "Implant rules"
+
+[node name="LineEdit" type="LineEdit" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 36.0
+margin_right = 195.0
+margin_bottom = 62.0
+theme = ExtResource( 24 )
+align = 1
+placeholder_text = "Preset name"
+
+[node name="Button" type="Button" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 72.0
+margin_right = 195.0
+margin_bottom = 98.0
+text = " Save preset "
+
+[node name="PresetSlot" type="Control" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 108.0
+margin_right = 195.0
+margin_bottom = 134.0
+rect_min_size = Vector2( 195, 26 )
+
+[node name="PresetPicker" type="OptionButton" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/PresetSlot"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource( 24 )
+text = "Select preset"
+clip_text = true
+
+[node name="DeletePreset" type="Button" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 144.0
+margin_right = 195.0
+margin_bottom = 170.0
+text = "Delete preset"
+
+[node name="Button3" type="Button" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 144.0
+margin_right = 195.0
+margin_bottom = 170.0
+text = "Ban all"
+
+[node name="Button4" type="Button" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+margin_top = 180.0
+margin_right = 195.0
+margin_bottom = 206.0
+text = "Allow all"
+
+[node name="StatusSlot" type="Control" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer"]
+rect_min_size = Vector2( 195, 26 )
+
+[node name="StatusLabel" type="Label" parent="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/StatusSlot"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+clip_text = true
+
+[node name="Equip" type="AudioStreamPlayer" parent="CenterContainer/TabContainer/Implants"]
+stream = SubResource( 14 )
+
+[node name="Unequip" type="AudioStreamPlayer" parent="CenterContainer/TabContainer/Implants"]
+stream = ExtResource( 26 )
+
+[node name="Chat" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+theme = ExtResource( 1 )
+script = ExtResource( 13 )
+__meta__ = {
+"_edit_use_anchors_": true
+}
+in_game_chat = false
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer/TabContainer/Chat"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+custom_constants/separation = 3
+
+[node name="PanelContainer" type="PanelContainer" parent="CenterContainer/TabContainer/Chat/VBoxContainer"]
+margin_right = 641.0
+margin_bottom = 468.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_styles/panel = ExtResource( 11 )
+
+[node name="RichTextLabel" type="RichTextLabel" parent="CenterContainer/TabContainer/Chat/VBoxContainer/PanelContainer"]
+margin_left = 10.0
+margin_top = 5.0
+margin_right = 631.0
+margin_bottom = 463.0
+custom_fonts/normal_font = SubResource( 27 )
+bbcode_enabled = true
+bbcode_text = "Welcome to CruS Online"
+text = "Welcome to CruS Online"
+scroll_following = true
+
+[node name="LineEdit" type="LineEdit" parent="CenterContainer/TabContainer/Chat/VBoxContainer"]
+margin_top = 471.0
+margin_right = 641.0
+margin_bottom = 497.0
+theme = ExtResource( 24 )
+custom_constants/minimum_spaces = 0
+custom_fonts/font = SubResource( 28 )
+selecting_enabled = false
+deselect_on_focus_loss_enabled = false
+placeholder_text = " / to type"
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="CenterContainer/TabContainer/Chat"]
+stream = SubResource( 29 )
+pitch_scale = 1.28
+
+[node name="Credits" type="PanelContainer" parent="CenterContainer/TabContainer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 7.0
+margin_top = 39.0
+margin_right = -7.0
+margin_bottom = -7.0
+script = SubResource( 24 )
+
+[node name="RichTextLabel" type="RichTextLabel" parent="CenterContainer/TabContainer/Credits"]
+margin_left = 3.0
+margin_top = 3.0
+margin_right = 644.0
+margin_bottom = 500.0
+bbcode_enabled = true
+bbcode_text = ""
+text = ""
+
+[node name="HTTPRequest" type="HTTPRequest" parent="CenterContainer/TabContainer/Credits"]
+
+[node name="ErrorHandler" type="WindowDialog" parent="."]
+visible = true
+margin_top = 21.0
+margin_right = 388.0
+margin_bottom = 71.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = ExtResource( 1 )
+custom_colors/title_color = Color( 1, 0, 0, 1 )
+custom_styles/panel = SubResource( 19 )
+window_title = "Cruelty Squad Online"
+script = SubResource( 21 )
+
+[node name="Panel" type="Panel" parent="ErrorHandler"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_styles/panel = SubResource( 20 )
+__meta__ = {
+"_edit_use_anchors_": true
+}
+
+[node name="MarginContainer" type="MarginContainer" parent="ErrorHandler/Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 15.0
+margin_top = 5.0
+margin_right = -15.0
+margin_bottom = -5.0
+__meta__ = {
+"_edit_use_anchors_": true
+}
+
+[node name="RichTextLabel" type="RichTextLabel" parent="ErrorHandler/Panel/MarginContainer"]
+margin_right = 358.0
+margin_bottom = 40.0
+rect_min_size = Vector2( 358, 0 )
+rect_clip_content = false
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+bbcode_text = "[center]Unknow error[/center]"
+text = "Unknow error"
+fit_content_height = true
+__meta__ = {
+"_edit_use_anchors_": true
+}
+
+[node name="LobbyCodeInput" type="WindowDialog" parent="."]
+unique_name_in_owner = true
+margin_top = 21.0
+margin_right = 388.0
+margin_bottom = 90.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = ExtResource( 1 )
+custom_colors/title_color = Color( 1, 0, 0, 1 )
+custom_styles/panel = SubResource( 19 )
+window_title = "Cruelty Squad Online"
+script = ExtResource( 29 )
+
+[node name="Panel" type="Panel" parent="LobbyCodeInput"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_styles/panel = SubResource( 20 )
+__meta__ = {
+"_edit_use_anchors_": true
+}
+
+[node name="MarginContainer" type="MarginContainer" parent="LobbyCodeInput/Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = 10.0
+margin_right = -10.0
+__meta__ = {
+"_edit_use_anchors_": true
+}
+
+[node name="RichTextLabel" type="VBoxContainer" parent="LobbyCodeInput/Panel/MarginContainer"]
+margin_right = 368.0
+margin_bottom = 69.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="LobbyCodeInput/Panel/MarginContainer/RichTextLabel"]
+margin_right = 368.0
+margin_bottom = 26.0
+text = "Enter Lobby Code"
+align = 1
+
+[node name="CodeEdit" type="LineEdit" parent="LobbyCodeInput/Panel/MarginContainer/RichTextLabel"]
+margin_top = 26.0
+margin_right = 368.0
+margin_bottom = 62.0
+rect_min_size = Vector2( 0, 36 )
+theme = ExtResource( 24 )
+align = 1
+secret = false
+
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer/HBoxContainer/LAN" to="CenterContainer/TabContainer/Main/Select" method="lan_selected"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Select/CenterContainer/VBoxContainer/HBoxContainer/Steam" to="CenterContainer/TabContainer/Main/Select" method="steam_selected"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons/Join" to="." method="join"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons/Host" to="." method="host"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/LAN/VBoxContainer/IpPort/Buttons/Leave" to="." method="leave"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/LAN/VBoxContainer/BackContainer/Back" to="CenterContainer/TabContainer/Main/LAN" method="back_to_menu"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/Leave" to="CenterContainer/TabContainer/Main/Steam" method="leave_lobby"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/DirectJoin" to="CenterContainer/TabContainer/Main/Steam" method="direct_join"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/Refresh" to="CenterContainer/TabContainer/Main/Steam" method="get_lobbies"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/Join" to="CenterContainer/TabContainer/Main/Steam" method="join_lobby"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/Create" to="CenterContainer/TabContainer/Main/Steam" method="create_lobby"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/Buttons/Test" to="CenterContainer/TabContainer/Main/Steam" method="_rpc_test"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Main/Steam/VBoxContainer/BackContainer/Back" to="CenterContainer/TabContainer/Main/Steam" method="back_to_menu"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Host/Save" to="." method="save_host"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Host/Save" to="CenterContainer/TabContainer/Host/Save" method="button_pressed"]
+[connection signal="timeout" from="CenterContainer/TabContainer/Host/Save/Timer" to="CenterContainer/TabContainer/Host/Save" method="button_reset"]
+[connection signal="focus_exited" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Red" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="focus_exited"]
+[connection signal="text_entered" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Red" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="r_change"]
+[connection signal="focus_exited" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Green" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="focus_exited"]
+[connection signal="text_entered" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Green" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="g_change"]
+[connection signal="focus_exited" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Blue" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="focus_exited"]
+[connection signal="text_entered" from="CenterContainer/TabContainer/Player/VBoxContainer/Color/Blue" to="CenterContainer/TabContainer/Player/VBoxContainer/Color" method="b_change"]
+[connection signal="item_selected" from="CenterContainer/TabContainer/Player/VBoxContainer/Skin/ItemList" to="CenterContainer/TabContainer/Player/VBoxContainer/Skin" method="_skin_selected"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Player/Save" to="." method="save_player"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Player/Save" to="CenterContainer/TabContainer/Player/Save" method="button_pressed"]
+[connection signal="timeout" from="CenterContainer/TabContainer/Player/Save/Timer" to="CenterContainer/TabContainer/Player/Save" method="button_reset"]
+[connection signal="item_selected" from="CenterContainer/TabContainer/Modes/HBoxContainer/LevelController/GamemodeList" to="CenterContainer/TabContainer/Modes" method="_gamemode_select"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Modes/HBoxContainer/GamemodeDescription/Button" to="CenterContainer/TabContainer/Modes" method="play_button_pressed"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/Button3" to="CenterContainer/TabContainer/Implants" method="ban_all"]
+[connection signal="pressed" from="CenterContainer/TabContainer/Implants/HBoxContainer/VBoxContainer/Button4" to="CenterContainer/TabContainer/Implants" method="allow_all"]
+[connection signal="text_entered" from="CenterContainer/TabContainer/Chat/VBoxContainer/LineEdit" to="CenterContainer/TabContainer/Chat" method="_text_entered"]
+[connection signal="meta_clicked" from="CenterContainer/TabContainer/Credits/RichTextLabel" to="CenterContainer/TabContainer/Credits" method="meta_clicked"]
+[connection signal="text_entered" from="LobbyCodeInput/Panel/MarginContainer/RichTextLabel/CodeEdit" to="LobbyCodeInput" method="code_submitted"]

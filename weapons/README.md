@@ -1,62 +1,73 @@
-# CruS Online weapons
+﻿# Custom weapons
 
-Weapons in this folder are part of CruS Online. `tools/build_mod.py` packages
-them into the main `CruS Online/mod.zip`. `catalog.json` lists the weapon
-definitions and their Qodot map entities. `WeaponRegistry.gd` reads it during
-startup, adds each weapon after the 29 vanilla weapons, and tells the weapon
-menu which entries to show.
+CruS Online loads weapon packages from `user://weapons/<folder>/weapon.zip`,
+alongside the game's `levels` and `campaigns` folders. Each archive contains
+`CUSTOM_WEAPONS/<folder>/weapon.json` and the weapon's definition, models,
+textures, sounds, optional projectile, behavior, and map entities. Folder
+names are sorted before registration. The editable F2500 example is in
+`examples/weapons/herschel_f2500/`; its files are not part of the Online mod.
 
-To create another weapon using this prototype:
+## Make an ordinary gun
 
-1. Copy `herschel_f2500` to a new folder and rename its files and resource
-   paths. Give the definition resource a unique namespaced `weapon_id`, such
-   as `your_name:weapon_name`. Use `F2500.tres` as the example for its displayed
-   name, descriptions, rifle ammunition, damage, weight, unlock state,
-   `behavior` script, icon, world/view/remote models and fire sounds. Saved
-   custom unlocks use this ID
-2. Write a behavior script extending `Reference`. Its `fire_primary(gun)`
-   handles normal fire. Its optional `fire_secondary(gun)` handles the
-   **Shoot Secondary** action, which defaults to middle mouse and can be
-   rebound in Settings. The weapon script calls these methods on the equipped
-   behavior instead of adding another vanilla weapon ID case
-3. If the weapon fires a projectile, keep its scene and script in the same
-   folder. The F2500 behavior shows how to create and replicate one; its
-   grenade script handles collision, explosion and shrapnel
-4. Put the weapon's mesh, texture, menu icon and sounds inside
-   its own `assets` directory. The F2500 copies Godot-imported game resources
-   as initial stand-ins; replace them with your own imported resources for
-   original art and audio. `F2500World.tscn` is used for pickups and menu
-   previews, `F2500Remote.tscn` for other players, and `F2500View.tscn` supplies
-   mesh and material to the animated first-person weapon node. The common
-   first-person arms, animation player, muzzle-flash effect and explosion
-   behavior still belong to the base game. Keep a `MeshInstance` root on each
-   model scene. A remote model puts its muzzle flash first, primary sound
-   second and secondary sound third so multiplayer playback can address them
-5. Append its definition path to `catalog.json`. For map placement, make an
-   inherited pickup scene and a Qodot point-class resource like the F2500
-   examples, then list the point class in the same catalog entry
-6. Build CruS Online normally with `tools/build_mod.py`, then test the weapon
-   in a mission and with another player
+1. Copy `examples/weapons/herschel_f2500/` to a new folder and replace its assets. You need a
+   menu icon, a world model for pickups/previews, a first-person view model,
+   a remote model for other players, and a fire sound. A remote model may have
+   children named `Muzzleflash` and `FireSound`; their order does not matter.
+2. Create a Godot resource using `weapons/weapon_definition.gd`, or edit the copied
+   `.tres`. Give it a unique namespaced `weapon_id` such as
+   `your_name:your_gun`. Set the display text, magazine and reserve sizes,
+   damage, accuracy, reload time, fire intervals, icon, models, sound, and
+   animation names. `armor_piercing` affects the default hitscan attack when
+   the target supports piercing damage. Leave `behavior` empty for a normal
+   hitscan gun: `weapons/weapon_actions.gd` supplies firing, damage, decals, ammo use,
+   audiovisual feedback, and multiplayer playback.
+3. Add `weapon.json` beside the definition. It names the definition resource
+   and any optional Qodot point-class resources:
 
-The F2500 specifies its animation names and first-person view slot directly;
-it does not use `borrowed_model_index`. Its model, texture, icon and sounds are
-local resources, including its grenade mesh. It uses the game's common bullet
-decal and animation rig, which are shared weapon-system effects. The example
-pickup and SWAT scenes currently
-specify runtime weapon slot 29; the next catalog weapon will
-use slot 30, so its map scenes must use 30. Keep catalog entries in the same
-order, and ensure every player in a multiplayer lobby has the same catalog.
-This is the present limit of the
-prototype, not a finished third-party weapon packaging format.
+   ```json
+   {
+     "definition": "my_gun.tres",
+     "point_classes": ["my_gun_pickup_point_class.tres"]
+   }
+   ```
 
-`herschel_f2500` demonstrates the layout. Its primary attack is an automatic
-15-damage rifle with 30 loaded and 135 spare rounds, capped at 200 total
-rounds from pickups. Shoot Secondary fires its launcher: one grenade
-is loaded, three are spare, and the loaded chamber is refilled from reserve
-after two seconds. Collecting another F2500 replenishes one launcher grenade,
-up to six held at once. The impact grenade uses a piercing explosion and 32
-damaging shrapnel rays. The blast and shrapnel can hurt the shooter. The Load
-Bearing Vest changes starting reserves to 180 rifle rounds and four grenades.
+   Paths here are relative to the weapon folder. Resource paths inside the
+   Godot scenes and resources use `res://CUSTOM_WEAPONS/<folder>/...`.
+4. To place a pickup or give the gun to an enemy, make an inherited scene like
+   `f2500_pickup.tscn` or `f2500_swat.tscn`. Add a `weapons/weapon_id_binder.gd` child to
+   its weapon node and set `weapon_id` to the definition's ID. The binder
+   resolves the runtime slot before the weapon initializes, so the scene does
+   not contain a numbered weapon index. Put the scene in a Qodot point-class
+   resource and name that resource in `weapon.json`.
+5. Build the weapon archive with
+   `python development/tools/build_weapon.py examples/weapons/<folder> development/artifacts/<folder>/weapon.zip`.
+   Copy `weapon.zip` to the game's `user://weapons/<folder>/` directory. Restart
+   the game, try the gun in a mission, and test it with a second player. Every
+   player must have the same weapon packages and definitions.
 
-`Herschel_F2500` and `Herschel_F2500_SWAT` are Qodot point
-entities for a pickup and a Cult of Order SWAT enemy armed with the launcher.
+## Secondary attacks and unusual weapons
+
+For a projectile secondary attack, set `launcher_magazine_size`, its reserve
+and maximum values, `launcher_reload_time`, `secondary_projectile`, and
+`secondary_projectile_speed` on the definition. The default `weapons/weapon_actions.gd`
+uses Shoot Secondary, tracks ammunition separately for each equipped custom
+weapon, and asks the host to spawn the projectile. Its scene script controls
+movement, collision, explosions, and other effects. The F2500 grenade is an
+example. The host accepts only a projectile scene named by a registered
+weapon, and checks the requesting player's equipped weapon, position, speed,
+and fire interval.
+
+For mechanics beyond the defaults, write a `Reference` script extending
+`weapons/weapon_actions.gd` and override `fire_primary(gun)` or
+`fire_secondary(gun)`. Set it as the definition's `behavior`. You can call the
+inherited methods when only part of an attack is different. Custom world
+changes still need a synchronized, host-validated implementation; the
+projectile helper covers the common projectile case, not every possible
+weapon effect. The F2500's behavior script is deliberately just an extension
+of the shared defaults.
+
+The built-in weapon system still uses runtime slots internally. Stable IDs
+are used for saving, map placement, and custom projectile selection, while
+other weapon replication uses slots. Registration order therefore has to be
+identical on every peer. Installed weapon folders are sorted automatically;
+all lobby members must have matching content.

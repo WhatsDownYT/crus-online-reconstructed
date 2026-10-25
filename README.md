@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="crus_online_logo.png" width="600" alt="Cruelty Squad Online logo">
+<img src="assets/interface/crus_online_logo.png" width="600" alt="Cruelty Squad Online logo">
 
 English | [Русский](README_RU.md) 
 

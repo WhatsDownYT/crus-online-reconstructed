@@ -1,0 +1,2650 @@
+extends Container
+
+onready var Multiplayer = Global.get_node("Multiplayer")
+
+func multiplayer_exit():
+	visible = true
+	in_game = false
+	menu[START].show()
+
+	
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+func multiplayer_enter():
+	_hide_online_navigation()
+	if is_instance_valid(goals_screen):
+		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
+	visible = false
+	in_game = true
+	menu[START].hide()
+
+	$Hover_Panel.hide()
+	
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+enum {UP, RIGHT, DOWN, LEFT}
+enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY}
+enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS, NEWS}
+var confirmed = false
+var cancel = false
+enum {B_START, B_SETTINGS, B_QUIT, B_LEVEL, B_MISSION_START, 
+	B_WEAPON_1, B_WEAPON_2, B_CHARACTER, B_STOCKS, B_W_PISTOL, B_W_SMG, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, 
+	B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_TRANQ, B_W_BLACKJACK, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT, B_EX_MENU, B_EX_LEVEL_SELECT, B_RETURN, B_RETRY, B_BONUS,
+	B_MULTIPLAYER_MENU, B_PREV_LEVELS, B_NEXT_LEVELS, B_GOALS, B_STATS, B_NEWS}
+const BUTTON_TEXTURES:Array = [preload("res://Textures/Menu/start_normal.png"), 
+									preload("res://Textures/Menu/settings_normal.png"), 
+									preload("res://Textures/Menu/OS_normal.png"), 
+									preload("res://Textures/Menu/implant_menu_button.png"), 
+									preload("res://Textures/Menu/mission_start.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Menu/implant_menu_button.png"), 
+									preload("res://Textures/Menu/stock.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Pistol.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/SMG.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Shotgun.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/RL.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Sniper.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/AR.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/S_SMG.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Nambu.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Gas_Launcher.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/MG3.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Autoshotgun.png"), 
+									preload("res://Textures/Menu/Weapon_Buttons/Mauser.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/Bore.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/MKR.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/radgun.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/tranq.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/baton.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/flashlight.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/zippy.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/AN94.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/vag72.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/steyr.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/dna.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/rod.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/flamethrower.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/SKS.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/nailer.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/shockwave.png"), 
+								preload("res://Textures/Menu/Weapon_Buttons/light.png"), 
+									preload("res://Textures/Menu/exit_menu_normal.png"), 
+									preload("res://Textures/Menu/exit_level_normal.png"), 
+									preload("res://Textures/Menu/return_normal.png"), 
+									preload("res://Textures/Menu/retry_normal.png"), 
+									preload("res://Textures/Menu/retry_normal.png"),
+									preload("res://Textures/Menu/retry_normal.png"),
+									preload("res://MOD_CONTENT/CruS Online/assets/interface/icon.png")
+								]
+const WEAPON_PROFILES:Array = [preload("res://Textures/Menu/Weapon_Profiles/Pistol.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/Shotgun.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/RL.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/Sniper.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/AR.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png"), 
+								preload("res://Textures/Menu/Weapon_Profiles/S_SMG.png")]
+const BUTTON_TEXTURES_H:Array = [preload("res://Textures/Menu/hover.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+								]
+const BUTTON_TEXTURES_P:Array = [preload("res://Textures/Menu/hover.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+									preload("res://Textures/Items/medkit1.png"), 
+								]
+const BUTTON_TEXTURES_D:Array = [preload("res://Textures/Menu/Disabled_Button/1.png"), 
+								preload("res://Textures/Menu/Disabled_Button/2.png"), 
+								preload("res://Textures/Menu/Disabled_Button/3.png"), 
+								preload("res://Textures/Menu/Disabled_Button/4.png")]
+const MYSTERY = preload("res://Textures/Menu/mystery.png")
+enum {W_PISTOL, W_SMG, W_TRANQ, W_BLACKJACK, W_SHOTGUN, W_RL, W_SNIPER, W_AR, W_S_SMG, W_NAMBU, W_GAS_LAUNCHER, W_MG3, W_AUTOSHOTGUN, W_MAUSER, W_BORE, W_MKR, W_RADIATOR, W_FLASHLIGHT, W_ZIPPY, W_AN94, W_VAG72, W_STEYR, W_CANCER, W_ROD, W_FLAMETHROWER, W_SKS, W_NAILER, W_SHOCK, W_LIGHT}
+const RESOLUTIONS:Array = [Vector2(1920, 1080), Vector2(1600, 900), Vector2(1366, 768), Vector2(1280, 720), Vector2(3840, 2160), Vector2(2560, 1440), Vector2(3840, 2400), Vector2(2560, 1600), Vector2(1920, 1200), Vector2(1680, 1050), Vector2(1440, 900), Vector2(3440, 1440), Vector2(2880, 1200), Vector2(2560, 1080), Vector2(1920, 800), Vector2(1600, 1200), Vector2(1440, 1080), Vector2(1024, 768), Vector2(800, 600), Vector2(640, 480), Vector2(1080, 1080)]
+const RANK_LETTERS:Array = [preload("res://Textures/rank_letters/C.png"), 
+preload("res://Textures/rank_letters/B.png"), 
+preload("res://Textures/rank_letters/A.png"), 
+preload("res://Textures/rank_letters/S.png"), 
+preload("res://Textures/rank_letters/N.png")]
+var LEVEL_NAMES:Array = ["Training Facility", "Headquarters", "Suburb", "Spaceport", "PD", "Mall", "Apartment", "Ship", "Swamp", "Casino", "Castle", "Office", "Archon Grid", "NEED", "HELP", "END", "PAIN", "NOW", "AAAAAA"]
+
+const HANDLER_FRAMES:Array = [preload("res://Textures/Menu/Handler/1.png"), 
+								preload("res://Textures/Menu/Handler/2.png"), 
+								preload("res://Textures/Menu/Handler/3.png"), 
+								preload("res://Textures/Menu/Handler/4.png")]
+var key_pressed
+var wait_for_key = false
+var menu_dir:Array = [2, 
+								1, 
+								0, 
+								3, 
+								2, 
+								1, 
+								1, 
+						2, 
+						3, 
+						3, 
+						3
+						]
+var level_select_dir:Array = [2, 
+								2, 
+								1, 
+								2, 
+								3, 
+								2, 
+								1, 
+						1, 
+						1, 
+						1, 
+						2, 
+						3, 
+						3, 
+						3, 
+						3, 
+						2, 
+						1, 
+						1, 
+						1, 
+						1, 
+						2, 
+						3, 
+						3, 
+						3, 
+						3
+						]
+var menu:Array = []
+var active_menus:Array = []
+var active_element:Control
+var level_buttons:Array = []
+var all_level_buttons:Array = []
+var level_page_start = 0
+var level_page_history:Array = []
+var page_buttons:Array = []
+var campaign_pages = []
+var campaign_page = 0
+var campaign_label:Label = null
+var level_select_origin = Vector2(100, 100)
+const CUSTOM_LEVEL_PAGE_SIZE = 20
+const CUSTOM_LEVEL_BASE = 19
+var current_menu = 0
+var current_weapon_select = 0
+var weapon_1 = 0
+var weapon_2 = 1
+var weapon_select_buttons:Array = []
+var weapon_menu_panel:Panel = null
+var weapon_menu_slot_buttons:Array = []
+var weapon_menu_slot_outlines:Array = []
+var weapon_menu_name:Label = null
+var weapon_menu_description:Label = null
+var weapon_menu_portrait:TextureRect = null
+var weapon_grid_buttons:Array = []
+var weapon_page_buttons:Array = []
+var weapon_page_label:Label = null
+var weapon_page = 0
+var custom_weapon_buttons:Array = []
+var weapon_stat_labels:Array = []
+var weapon_stat_source = null
+const WEAPON_MENU_COLUMNS = 7
+const WEAPON_MENU_ORIGIN = Vector2(160, 256)
+var previous_menu = 0
+var menu_button:Array = []
+var button_size = Vector2(64, 64)
+var b_position = Vector2(100, 100)
+var dir = 0
+var in_game = false
+var online_pause_settings = false
+
+var resolution_list:ItemList
+var time = 0
+var all_buttons:Array
+var hover_info
+var menu_creation_level_index:int = 0
+var menu_changing = false
+var counterop_locked_levels = {}
+var online_navigation_active = false
+var online_navigation_transitioning = false
+var online_sidebar_was_visible = false
+var online_sidebar_position = Vector2.ZERO
+var online_navigation_generation = 0
+const ONLINE_NAVIGATION_STEPS = 12
+const GRID_STEP_SECONDS = 1.0 / 120.0
+onready var clear_button = $Settings / GridContainer / PanelContainer6 / VBoxContainer3 / ClearSave
+class Menu extends Control:
+	var buttons:Array
+	var elements:Array
+
+func _physics_process(delta):
+	if Multiplayer.NetworkBridge.check_connection() and Multiplayer.Flow.result_active and Input.get_mouse_mode() != Input.MOUSE_MODE_VISIBLE:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	_update_waiting_menu()
+	if not menu_changing and not online_navigation_active and not active_menus.empty() and active_menus.back() == menu[START]:
+		_refresh_start_buttons()
+	_apply_counterop_level_lock()
+	_apply_competitive_start_gate()
+	_apply_online_level_lock()
+	var modloader_version = get_node_or_null("ModLoaderVersion")
+	if modloader_version != null:
+		modloader_version.visible = not in_game and not Global.cutscene and not active_menus.empty() and active_menus.back() == menu[START]
+	time += delta
+	
+	if in_game or Global.cutscene:
+		clear_button.hide()
+	else :
+		clear_button.show()
+	
+	
+	
+	
+	
+	
+	hover_info.get_parent().rect_global_position = get_global_mouse_position() + Vector2(50, 20)
+	hover_info.get_parent().rect_global_position.y = clamp(hover_info.get_parent().rect_global_position.y, 0, (720 - hover_info.get_parent().rect_size.y - 100) * rect_scale.x)
+	hover_info.get_parent().rect_global_position.x = clamp(hover_info.get_parent().rect_global_position.x, 0, (1280 - hover_info.get_parent().rect_size.x - 100) * rect_scale.y)
+	
+	
+	
+	
+	for button in all_buttons:
+		for b in level_buttons:
+			if button == b:
+				return 
+		if button.disabled and button.get_parent() != menu[WEAPON_SELECT] and not (button.has_meta("competitive_start_locked") and button.get_meta("competitive_start_locked")):
+			button.texture_disabled = BUTTON_TEXTURES_D[int(sin(button.get_index() + time * 3.0) * 3) % 3]
+
+func get_key_index(action):
+	if action is InputEventKey:
+		return [action.scancode, "KEY"]
+	elif action is InputEventMouseButton:
+		return [action.button_index, "MOUSE"]
+func get_scancodes():
+	ensure_secondary_weapon_action()
+	var key_scancodes:Array = [get_key_index(InputMap.get_action_list("movement_forward")[0]), 
+	get_key_index(InputMap.get_action_list("movement_left")[0]), 
+	get_key_index(InputMap.get_action_list("movement_right")[0]), 
+	get_key_index(InputMap.get_action_list("movement_backward")[0]), 
+	get_key_index(InputMap.get_action_list("mouse_1")[0]), 
+	get_key_index(InputMap.get_action_list("movement_jump")[0]), 
+	get_key_index(InputMap.get_action_list("crouch")[0]), 
+	get_key_index(InputMap.get_action_list("reload")[0]), 
+	get_key_index(InputMap.get_action_list("zoom")[0]), 
+	get_key_index(InputMap.get_action_list("Use")[0]), 
+	get_key_index(InputMap.get_action_list("kick")[0]), 
+	get_key_index(InputMap.get_action_list("Lean_Left")[0]), 
+	get_key_index(InputMap.get_action_list("Lean_Right")[0]), 
+	get_key_index(InputMap.get_action_list("weapon1")[0]), 
+	get_key_index(InputMap.get_action_list("weapon2")[0]), 
+	get_key_index(InputMap.get_action_list("switch_weapon")[0]), 
+	get_key_index(InputMap.get_action_list("Tertiary_Weapon")[0]), 
+	get_key_index(InputMap.get_action_list("drop")[0]), 
+	get_key_index(InputMap.get_action_list("Suicide")[0]), 
+	get_key_index(InputMap.get_action_list("Stocks")[0]),
+	get_key_index(InputMap.get_action_list("Shoot_Secondary")[0])]
+	return key_scancodes
+
+func ensure_secondary_weapon_action():
+	if not InputMap.has_action("Shoot_Secondary"):
+		InputMap.add_action("Shoot_Secondary")
+	if InputMap.get_action_list("Shoot_Secondary").empty():
+		var middle_mouse = InputEventMouseButton.new()
+		middle_mouse.button_index = BUTTON_MIDDLE
+		InputMap.action_add_event("Shoot_Secondary", middle_mouse)
+
+func _ready():
+	ensure_secondary_weapon_action()
+	if Global.ending_3:
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.show()
+	else :
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.hide()
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Timer.pressed = Global.timer
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Highperformance.pressed = Global.high_performance
+	Global.screenmat.set_shader_param("gamma", Global.gamma)
+	$Settings / GridContainer / PanelContainer / VBoxContainer / GAMMALABEL.text = "Gamma: " + str(Global.gamma)
+	$"Settings/GridContainer/PanelContainer/VBoxContainer/Camera Sway".pressed = Global.camera_sway
+	
+	$Settings / GridContainer / PanelContainer5 / CheckBox.pressed = Global.full_screen
+	if Global.full_screen:
+		get_tree().set_screen_stretch(SceneTree.STRETCH_MODE_VIEWPORT, SceneTree.STRETCH_ASPECT_KEEP, Vector2(Global.resolution[0], Global.resolution[1]))
+	$ConfirmationDialog.get_cancel().connect("pressed", self, "_on_Cancel_Pressed")
+	$Settings / GridContainer / PanelContainer / VBoxContainer / InvertYAxis.pressed = Global.invert_y
+	for level in range(Global.LEVELS.size()):
+		var meta_file = File.new()
+		var parsed_level_meta:Dictionary = {}
+		if typeof(Global.LEVEL_META[level]) == TYPE_DICTIONARY:
+			parsed_level_meta = Global.LEVEL_META[level]
+		else:
+			meta_file.open(Global.LEVEL_META[level], File.READ)
+			parsed_level_meta = parse_json(meta_file.get_as_text())
+		if level >= LEVEL_NAMES.size():
+			LEVEL_NAMES.append(parsed_level_meta.get("name"))
+		else:
+			LEVEL_NAMES[level] = parsed_level_meta.get("name")
+		meta_file.close()
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Reflections.pressed = Global.reflections
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Draw_Label.text = "Draw Distance:\n" + str(Global.draw_distance)
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Drawslider.value = Global.draw_distance
+	_on_Civslider_value_changed(Global.civilian_reduction)
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Civslider.value = Global.civilian_reduction
+	$Level_Info_Grid / Level_Info_Vbox / Weapons_Vbox / TextureRect.texture = $Weapon1_Viewport.get_texture()
+	$Level_Info_Grid / Level_Info_Vbox / Weapons_Vbox / TextureRect2.texture = $Weapon2_Viewport.get_texture()
+	var keylist = $Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List
+	keylist.add_item("Forward: " + InputMap.get_action_list("movement_forward")[0].as_text())
+	keylist.add_item("Left: " + InputMap.get_action_list("movement_left")[0].as_text())
+	keylist.add_item("Right: " + InputMap.get_action_list("movement_right")[0].as_text())
+	keylist.add_item("Back: " + InputMap.get_action_list("movement_backward")[0].as_text())
+	keylist.add_item("Shoot: " + InputMap.get_action_list("mouse_1")[0].as_text())
+	keylist.add_item("Shoot Secondary: " + InputMap.get_action_list("Shoot_Secondary")[0].as_text())
+	keylist.add_item("Jump: " + InputMap.get_action_list("movement_jump")[0].as_text())
+	keylist.add_item("Crouch: " + InputMap.get_action_list("crouch")[0].as_text())
+	keylist.add_item("Reload: " + InputMap.get_action_list("reload")[0].as_text())
+	keylist.add_item("Zoom: " + InputMap.get_action_list("zoom")[0].as_text())
+	keylist.add_item("Use: " + InputMap.get_action_list("Use")[0].as_text())
+	keylist.add_item("Kick: " + InputMap.get_action_list("kick")[0].as_text())
+	keylist.add_item("Lean Left: " + InputMap.get_action_list("Lean_Left")[0].as_text())
+	keylist.add_item("Lean Right: " + InputMap.get_action_list("Lean_Right")[0].as_text())
+	keylist.add_item("Weapon 1: " + InputMap.get_action_list("weapon1")[0].as_text())
+	keylist.add_item("Weapon 2: " + InputMap.get_action_list("weapon2")[0].as_text())
+	keylist.add_item("Last Weapon: " + InputMap.get_action_list("switch_weapon")[0].as_text())
+	keylist.add_item("Tertiary Weapon: " + InputMap.get_action_list("Tertiary_Weapon")[0].as_text())
+	keylist.add_item("Throw Weapon: " + InputMap.get_action_list("drop")[0].as_text())
+	keylist.add_item("Suicide: " + InputMap.get_action_list("Suicide")[0].as_text())
+	keylist.add_item("Stock Market: " + InputMap.get_action_list("Stocks")[0].as_text())
+	$MyWork.rect_global_position.x = 170
+	$MyWork.rect_global_position.y = 248
+	hover_info = $Hover_Panel / Hover_Info
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	$Title_Screen.rect_size = Vector2(512, 512)
+	$Title_Screen.rect_global_position = Vector2(720, 128)
+	$Level_Info_Grid.rect_size = Vector2(720, 720)
+	$Level_Info_Grid.rect_global_position = Vector2(512, 0)
+	
+	$Character_Menu.rect_size = Vector2(1024, 512)
+	$Character_Menu / Character_Container / TextureRect.rect_size = Vector2(384, 384)
+	$Character_Menu.rect_global_position = Vector2(128, 128)
+	$Character_Menu / Character_Container.rect_global_position = Vector2(256, 192)
+	$Character_Menu / Character_Container / Equip_Grid.rect_size = Vector2(384, 384)
+	$Character_Menu / Character_Container / TextureRect / Head_Button.rect_size = Vector2(48, 48)
+	$Character_Menu / Character_Container / TextureRect / Head_Button.rect_position = Vector2(168, - 8)
+	$Character_Menu / Character_Container / TextureRect / Torso_Button.rect_size = Vector2(48, 48)
+	$Character_Menu / Character_Container / TextureRect / Torso_Button.rect_position = Vector2(168, 64)
+	$Character_Menu / Character_Container / TextureRect / Leg_Button.rect_size = Vector2(48, 48)
+	$Character_Menu / Character_Container / TextureRect / Leg_Button.rect_position = Vector2(64, 256)
+	$Character_Menu / Character_Container / TextureRect / Arm_Button.rect_size = Vector2(48, 48)
+	$Character_Menu / Character_Container / TextureRect / Arm_Button.rect_position = Vector2(64, 128)
+	
+	$Stock_Menu.rect_size = Vector2(1024, 512)
+	$Stock_Menu / Character_Container / TextureRect.rect_size = Vector2(384, 384)
+	$Stock_Menu.rect_global_position = Vector2(128, 128)
+	$Stock_Menu / Character_Container.rect_global_position = Vector2(256, 192)
+	$Stock_Menu / Character_Container.stocklist.rect_size = Vector2(384, 384)
+	
+	
+	for button in $Level_End_Grid / Level_Info_Vbox.get_children():
+		if button.get_class() == "TextureButton":
+			button.connect("mouse_entered", self, "_on_mouse_entered", [0, button])
+			button.connect("mouse_exited", self, "_on_mouse_exited", [0, button])
+	
+	for button in $Character_Menu / Character_Container / Equip_Grid.get_children():
+		button.rect_size = Vector2(10, 10)
+	
+	for element in $Level_Info_Grid.get_children():
+		element.rect_size = Vector2(240, 240)
+	
+	$Settings / GridContainer / PanelContainer / VBoxContainer / M_Sensitivity.value = Global.mouse_sensitivity * 100
+	$Settings / GridContainer / PanelContainer3 / VBoxContainer2 / Master_Volume.value = Global.master_volume
+	$Settings / GridContainer / PanelContainer3 / VBoxContainer2 / Music_Volume.value = Global.music_volume
+	$Settings / GridContainer / PanelContainer / VBoxContainer / FOV.value = Global.FOV
+	$Settings / GridContainer / PanelContainer / VBoxContainer / FOVLABEL.text = "FOV: " + str(Global.FOV)
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / SkipIntro.pressed = Global.skip_intro
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / Blood_Color_Rect.color = Global.blood_color
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer / R.value = Global.blood_color.r
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer2 / G.value = Global.blood_color.g
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer3 / B.value = Global.blood_color.b
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer4 / A.value = Global.blood_color.a
+	
+	resolution_list = $Settings / GridContainer / PanelContainer5 / Resolution_List
+	for r in RESOLUTIONS:
+		resolution_list.add_item(str(r.x) + "x" + str(r.y))
+	for i in range(11):
+		var new_menu = Menu.new()
+		add_child(new_menu)
+		menu.append(new_menu)
+
+
+
+	
+	menu[START].buttons = [B_START, B_SETTINGS, B_RETRY, B_EX_LEVEL_SELECT, B_EX_MENU, B_QUIT, B_NEWS]
+	menu[SETTINGS].buttons = [B_RETURN]
+	menu[GOALS].buttons = [B_RETURN]
+	menu[STATS].buttons = [B_RETURN]
+	menu[NEWS].buttons = [B_RETURN]
+	menu[LEVEL_SELECT].buttons = [B_RETURN, B_MULTIPLAYER_MENU, B_GOALS, B_STATS, B_WEAPON_1, B_CHARACTER, B_STOCKS, B_MISSION_START]
+	for level in range(min(CUSTOM_LEVEL_BASE, Global.LEVELS.size())):
+		menu[LEVEL_SELECT].buttons.append(B_LEVEL)
+	
+		
+	menu[WEAPON_SELECT].buttons = [B_WEAPON_1, B_WEAPON_2, B_W_PISTOL, B_W_SMG, B_W_TRANQ, B_W_BLACKJACK, B_W_SHOTGUN, B_W_RL, B_W_SNIPER, B_W_AR, B_W_S_SMG, B_W_NAMBU, B_W_GAS_LAUNCHER, B_W_MG3, B_W_AUTOSHOTGUN, B_W_MAUSER, B_W_BORE, B_W_MKR, B_W_RADGUN, B_W_FLASHLIGHT, B_W_ZIPPY, B_W_AN94, B_W_VAG72, B_W_STEYR, B_W_CANCER, B_W_ROD, B_W_FLAMETHROWER, B_W_SKS, B_W_NAILER, B_W_SHOCK, B_W_LIGHT]
+	menu[CHARACTER].buttons = [B_RETURN]
+	menu[STOCKS].buttons = [B_RETURN]
+	
+	active_menus.append(menu[START])
+	
+	for m in range(menu.size()):
+		create_buttons(m)
+	weapon_grid_buttons = menu[WEAPON_SELECT].get_children().slice(2, menu[WEAPON_SELECT].get_child_count() - 1)
+	weapon_page_buttons.append(create_button(WEAPON_SELECT, "Previous weapons", "_on_Weapon_Prev_Page_Pressed", B_PREV_LEVELS))
+	weapon_page_buttons.append(create_button(WEAPON_SELECT, "Next weapons", "_on_Weapon_Next_Page_Pressed", B_NEXT_LEVELS))
+	weapon_stat_source = load("res://Scripts/weapon.gd").new()
+	_create_weapon_menu_panel()
+	_refresh_weapon_menu_icons()
+	var custom_registry = Global.get_node_or_null("WeaponRegistry")
+	if custom_registry != null:
+		custom_registry.connect("catalog_changed", self, "_register_custom_weapon_buttons")
+		_register_custom_weapon_buttons()
+	campaign_label = Label.new()
+	campaign_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campaign_label.align = Label.ALIGN_CENTER
+	campaign_label.valign = Label.VALIGN_CENTER
+	campaign_label.add_color_override("font_color", Color(0, 1, 0))
+	var campaign_font = DynamicFont.new()
+	campaign_font.font_data = load("res://Fonts/MingLiU-ExtB-01.ttf")
+	campaign_font.size = 18
+	campaign_label.add_font_override("font", campaign_font)
+	add_child(campaign_label)
+	campaign_label.hide()
+	goals_screen = load("res://MOD_CONTENT/CruS Online/achievements/goals_screen.gd").new()
+	add_child(goals_screen)
+	move_child(goals_screen, menu[START].get_index())
+	statistics_screen = load("res://MOD_CONTENT/CruS Online/interface/statistics_screen.gd").new()
+	add_child(statistics_screen)
+	move_child(statistics_screen, menu[START].get_index())
+	news_panel = load("res://MOD_CONTENT/CruS Online/interface/news_screen.gd").new()
+	add_child(news_panel)
+	move_child(news_panel, menu[START].get_index())
+	for child in menu[START].get_children():
+		child.show()
+		child.set_position(b_position)
+		b_position.x += button_size.x
+	_refresh_start_buttons()
+	update_level_info()
+	
+	
+
+	set_res(Global.resolution[0], Global.resolution[1])
+	_connect_settings_autosave($Settings)
+	call_deferred("_align_startup_window")
+
+func _connect_settings_autosave(control):
+	if control is Range:
+		control.connect("value_changed", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is BaseButton:
+		control.connect("toggled", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is OptionButton:
+		control.connect("item_selected", self, "_settings_changed", [], CONNECT_DEFERRED)
+	if control is ItemList and control == resolution_list:
+		control.connect("item_activated", self, "_settings_changed", [], CONNECT_DEFERRED)
+	for child in control.get_children():
+		_connect_settings_autosave(child)
+
+func _settings_changed(_value = null):
+	Global.save_settings()
+
+func _align_startup_window():
+	if Global.full_screen:
+		return
+	yield(get_tree(), "idle_frame")
+	yield(get_tree(), "idle_frame")
+	if not Global.full_screen:
+		OS.set_window_position(Vector2.ZERO)
+	
+	
+func _ensure_counterop_overlay():
+	if not Multiplayer.NetworkBridge.check_connection() or not is_instance_valid(Multiplayer.CounterOp):
+		return
+	if not is_instance_valid(Multiplayer.CounterOp.overlay) or Multiplayer.CounterOp.menu_ref != self:
+		Multiplayer.CounterOp.attach_menu(self)
+
+func _counterop_level_locked(index):
+	if not is_instance_valid(Multiplayer.CounterOp) or not Multiplayer.CounterOp.is_active() or index < 0 or index >= Global.LEVELS.size():
+		return false
+	var level_path = str(Global.LEVELS[index])
+	return _counterop_restricted_path(level_path)
+
+func _counterop_restricted_path(level_path):
+	return level_path == "res://Levels/Training_Level.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+
+func _restore_level_disabled_visual(index, button):
+	button.modulate = Color(1, 1, 1, 1)
+	button.hint_tooltip = ""
+	if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
+		var bonus_index = index - Global.L_PUNISHMENT - 1
+		var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
+		button.texture_disabled = BUTTON_TEXTURES_D[0] if unlocked else MYSTERY
+	elif button.has_meta("default_disabled_texture"):
+		button.texture_disabled = button.get_meta("default_disabled_texture")
+	else:
+		button.texture_disabled = BUTTON_TEXTURES_D[0]
+
+func _apply_counterop_level_lock():
+	var on_level_select = not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	var should_lock = on_level_select and Multiplayer.NetworkBridge.check_connection() and is_instance_valid(Multiplayer.CounterOp) and Multiplayer.CounterOp.is_active()
+	for index in range(level_buttons.size()):
+		if index < 0 or index >= Global.LEVELS.size():
+			continue
+		var level_path = str(Global.LEVELS[index])
+		var blocked = _counterop_restricted_path(level_path)
+		if not blocked:
+			continue
+		var button = level_buttons[index]
+		if should_lock and button.visible:
+			var mystery_locked = false
+			if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
+				var bonus_index = index - Global.L_PUNISHMENT - 1
+				mystery_locked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) == -1
+			button.disabled = true
+			button.texture_disabled = MYSTERY if mystery_locked else button.texture_normal
+			button.modulate = Color.white if mystery_locked else Color(1, 0.2, 0.2, 1)
+			button.hint_tooltip = "" if mystery_locked else "This mission is unavailable in Counter-Opps."
+			counterop_locked_levels[index] = true
+		elif counterop_locked_levels.has(index):
+			_restore_level_disabled_visual(index, button)
+			if index > Global.L_PUNISHMENT and index < CUSTOM_LEVEL_BASE:
+				var bonus_index = index - Global.L_PUNISHMENT - 1
+				var unlocked = bonus_index >= 0 and bonus_index < Global.BONUS_LEVELS.size() and Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[bonus_index]) != -1
+				button.disabled = index == Global.CURRENT_LEVEL or not unlocked
+			else:
+				button.disabled = index == Global.CURRENT_LEVEL
+			counterop_locked_levels.erase(index)
+
+func _competitive_start_reason():
+	if not Multiplayer.NetworkBridge.check_connection() or Multiplayer.NetworkBridge.is_world_authority() == false:
+		return ""
+	if Global.CURRENT_LEVEL >= CUSTOM_LEVEL_BASE and Global.CURRENT_LEVEL < Global.LEVEL_META.size() and Global.LEVEL_META[Global.CURRENT_LEVEL] is Dictionary and Global.LEVEL_META[Global.CURRENT_LEVEL].get("local_debug", false):
+		return "Modbase development maps are available in singleplayer only."
+	if is_instance_valid(Multiplayer.Content) and not Multiplayer.Content.host_offers.empty():
+		return "Wait for players to finish installing the host's mods and missions."
+	if Multiplayer.players.size() < 2:
+		return "At least two players are needed to start an Online mission."
+	var mode = Multiplayer.hostSettings.get("gameMode", "cruelty")
+	if mode == "counter_op" and not Multiplayer.CounterOp.has_opposing_teams():
+		return "Counter-Opps needs at least one Operative and one Counter-Operative."
+	return ""
+
+func _apply_competitive_start_gate():
+	if active_menus.empty():
+		return
+	var button = menu[LEVEL_SELECT].get_child(7)
+	if active_menus.back() != menu[LEVEL_SELECT] or online_navigation_active:
+		if button.disabled:
+			button.texture_disabled = BUTTON_TEXTURES_D[0]
+			button.modulate = Color.white
+		return
+	if not button.visible or not Multiplayer.NetworkBridge.is_world_authority():
+		return
+	var reason = _competitive_start_reason()
+	if reason != "":
+		button.disabled = true
+		button.texture_disabled = button.texture_normal
+		button.modulate = Color(1, 0.2, 0.2, 1)
+		button.hint_tooltip = reason
+		button.set_meta("competitive_start_locked", true)
+	elif button.has_meta("competitive_start_locked"):
+		button.disabled = false
+		button.texture_disabled = BUTTON_TEXTURES_D[0]
+		button.modulate = Color.white
+		button.hint_tooltip = ""
+		button.remove_meta("competitive_start_locked")
+
+func hide_buttons(m:Menu, a:int, b:int):
+	for ab in range(a, b + 1):
+		m.get_child(ab).hide()
+	var s = m.get_children().size()
+	for i in range(1, s):
+		if m.get_child(i - 1).visible == false:
+			for k in range(i, s):
+				m.get_child(k).rect_position.x -= button_size.x
+
+func show_buttons(m:Menu, a:int, b:int):
+	var s = m.get_children().size()
+	for i in range(0, s - 1):
+		if m.get_child(i).visible == false:
+			for k in range(i + 1, s):
+				m.get_child(k).rect_position.x += button_size.x
+	for ab in range(a, b + 1):
+		m.get_child(ab).show()
+
+func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
+	if online_navigation_active:
+		request_close_online_navigation()
+		return
+	if active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT]:
+		return
+	online_navigation_generation += 1
+	var generation = online_navigation_generation
+	online_navigation_active = true
+	online_navigation_transitioning = true
+	for level_button in menu[LEVEL_SELECT].get_children():
+		level_button.disabled = true
+	button_id.disabled = false
+	button_id.set_meta("display_name", "Return")
+	button_id.texture_normal = BUTTON_TEXTURES[B_RETURN]
+	_apply_online_level_lock()
+	online_sidebar_was_visible = $Level_Info_Grid.visible
+	if online_sidebar_was_visible:
+		online_sidebar_position = $Level_Info_Grid.rect_position
+		var hiding = _animate_level_sidebar(false, generation)
+		if hiding is GDScriptFunctionState:
+			yield (hiding, "completed")
+	if generation != online_navigation_generation or not online_navigation_active:
+		return
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	var opening = online_menu.enable_menu()
+	if opening is GDScriptFunctionState:
+		yield (opening, "completed")
+	if generation != online_navigation_generation or not online_navigation_active:
+		return
+	online_navigation_transitioning = false
+
+func register_custom_levels():
+	while level_buttons.size() < Global.LEVELS.size():
+		var index = level_buttons.size()
+		var button = create_button(LEVEL_SELECT, LEVEL_NAMES[index], "_on_Level_Pressed", B_LEVEL)
+		button.set_meta("level_index", index)
+		level_buttons.append(button)
+	all_level_buttons = level_buttons.duplicate()
+	if campaign_pages.empty():
+		campaign_pages = [{"name": "Cruelty Squad", "indices": range(min(CUSTOM_LEVEL_BASE, level_buttons.size()))}]
+		if level_buttons.size() > CUSTOM_LEVEL_BASE:
+			campaign_pages.append({"name": "Custom Missions", "indices": range(CUSTOM_LEVEL_BASE, level_buttons.size())})
+	show_level_page()
+
+func register_campaigns(definitions):
+	campaign_pages.clear()
+	var custom_missions = null
+	for definition in definitions:
+		var indices = definition.get("indices", [])
+		if not indices is Array:
+			continue
+		if str(definition.get("id", "")) == "custom_missions":
+			custom_missions = definition
+			continue
+		if indices.empty():
+			continue
+		for start in range(0, indices.size(), 19):
+			campaign_pages.append({"name": str(definition.get("name", "Campaign")), "indices": indices.slice(start, min(start + 18, indices.size() - 1))})
+	if custom_missions != null:
+		var indices = custom_missions.get("indices", [])
+		if not indices.empty():
+			for start in range(0, indices.size(), 19):
+				campaign_pages.append({"name": "Custom Missions", "indices": indices.slice(start, min(start + 18, indices.size() - 1))})
+	campaign_page = clamp(campaign_page, 0, max(0, campaign_pages.size() - 1))
+	show_level_page()
+
+func _level_cell(offset):
+	if offset < 4:
+		return Vector2(1 + offset, 3)
+	var row = 4 + int((offset - 4) / 5)
+	var column = (offset - 4) % 5
+	return Vector2(4 - column if row % 2 == 0 else column, row)
+
+func _level_select_position(button):
+	var kind = button.get_meta("menu_button_type")
+	var cells = {B_RETURN: Vector2(0, 0), B_MULTIPLAYER_MENU: Vector2(0, 1), B_GOALS: Vector2(1, 1), B_STATS: Vector2(2, 1), B_WEAPON_1: Vector2(0, 1), B_CHARACTER: Vector2(1, 1), B_STOCKS: Vector2(2, 1), B_MISSION_START: Vector2(0, 2), B_NEXT_LEVELS: Vector2(4, 7), B_PREV_LEVELS: Vector2(0, 7)}
+	var cell = cells.get(kind, Vector2.ZERO)
+	if kind == B_LEVEL and not campaign_pages.empty():
+		var offset = campaign_pages[campaign_page].indices.find(int(button.get_meta("level_index")))
+		cell = _level_cell(max(0, offset))
+	cell.y += 1
+	if kind in [B_WEAPON_1, B_CHARACTER, B_STOCKS, B_MISSION_START]:
+		cell.y += 1
+	return level_select_origin + Vector2(cell.x * button_size.x, cell.y * button_size.y)
+
+func _weapon_menu_position(button):
+	if button == weapon_page_buttons[0]:
+		return Vector2(160, 576)
+	if button == weapon_page_buttons[1]:
+		return Vector2(544, 576)
+	if button in custom_weapon_buttons:
+		var custom_index = custom_weapon_buttons.find(button)
+		return WEAPON_MENU_ORIGIN + Vector2(custom_index % WEAPON_MENU_COLUMNS, int(custom_index / WEAPON_MENU_COLUMNS)) * button_size
+	var index = menu[WEAPON_SELECT].get_children().find(button)
+	if index < 2:
+		return Vector2(160 + index * 205, 140)
+	index -= 2
+	return WEAPON_MENU_ORIGIN + Vector2(index % WEAPON_MENU_COLUMNS, int(index / WEAPON_MENU_COLUMNS)) * button_size
+
+func _weapon_button_for_index(index):
+	if index < 0:
+		return null
+	if index < weapon_grid_buttons.size():
+		return weapon_grid_buttons[index]
+	var custom_index = index - weapon_grid_buttons.size()
+	return custom_weapon_buttons[custom_index] if custom_index < custom_weapon_buttons.size() else null
+
+func _register_custom_weapon_buttons():
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	if registry == null or weapon_menu_panel == null:
+		return
+	for index in range(registry.VANILLA_COUNT + custom_weapon_buttons.size(), registry.VANILLA_COUNT + registry.indices.size()):
+		var definition = registry.definition_for(index)
+		if definition == null:
+			continue
+		var button = create_button(WEAPON_SELECT, definition.display_name, "_on_Custom_Weapon_Pressed", B_W_AR)
+		button.set_meta("custom_weapon_index", index)
+		button.hint_tooltip = definition.description
+		if definition.icon != null:
+			button.texture_normal = definition.icon
+			button.set_meta("custom_icon", definition.icon)
+		elif not definition.icon_path.empty():
+			var image = Image.new()
+			if image.load(definition.icon_path) == OK:
+				var texture = ImageTexture.new()
+				texture.create_from_image(image)
+				button.texture_normal = texture
+				button.set_meta("custom_icon", texture)
+		custom_weapon_buttons.append(button)
+		button.rect_position = _weapon_menu_position(button)
+		button.hide()
+	for preview in [$Weapon1_Viewport/Weapon, $Weapon2_Viewport/Weapon]:
+		if preview.has_method("ensure_custom_models"):
+			preview.ensure_custom_models()
+
+func _on_Custom_Weapon_Pressed(_menu_index, button):
+	if not button.has_meta("custom_weapon_index"):
+		return
+	var index = int(button.get_meta("custom_weapon_index"))
+	if index >= Global.WEAPONS_UNLOCKED.size() or not Global.WEAPONS_UNLOCKED[index]:
+		return
+	set_weapon(index)
+	_on_weapon_equipped(button)
+
+func _refresh_weapon_menu_icons():
+	if weapon_select_buttons.empty():
+		return
+	for slot in range(weapon_menu_slot_buttons.size()):
+		var preview = $Weapon1_Viewport if slot == 0 else $Weapon2_Viewport
+		weapon_menu_slot_buttons[slot].texture_normal = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_hover = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_pressed = preview.get_texture()
+		weapon_menu_slot_buttons[slot].texture_disabled = preview.get_texture()
+		weapon_menu_slot_buttons[slot].modulate = Color.white
+		if slot < weapon_menu_slot_outlines.size():
+			weapon_menu_slot_outlines[slot].material.set_shader_param("selected", current_weapon_select == slot + 1)
+
+func _weapon_detail_button(button):
+	if not is_instance_valid(weapon_menu_name):
+		return
+	var weapon_index = weapon_grid_buttons.find(button)
+	if weapon_index < 0 and button in custom_weapon_buttons:
+		weapon_index = weapon_grid_buttons.size() + custom_weapon_buttons.find(button)
+	if weapon_index < 0 or weapon_index >= Global.WEAPONS_UNLOCKED.size() or not Global.WEAPONS_UNLOCKED[weapon_index]:
+		weapon_menu_name.text = "???"
+		weapon_menu_description.text = ""
+		weapon_menu_portrait.texture = MYSTERY
+		for label in weapon_stat_labels:
+			label.text = ""
+			label.rect_scale.x = 1
+		return
+	weapon_menu_name.text = button.name
+	weapon_menu_description.text = button.hint_tooltip
+	weapon_menu_portrait.texture = button.texture_normal
+	var stat_values = _weapon_stats(weapon_index)
+	for stat_index in range(weapon_stat_labels.size()):
+		var label = weapon_stat_labels[stat_index]
+		label.text = stat_values[stat_index]
+		label.rect_scale.x = min(1.0, label.rect_size.x / max(1.0, label.get_font("font").get_string_size(label.text).x))
+
+func _weapon_stats(index):
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	var custom_definition = registry.definition_for(index) if registry != null else null
+	if custom_definition != null:
+		var launcher_ammo = ""
+		if custom_definition.launcher_magazine_size > 0:
+			launcher_ammo = "Ammo Secondary: %d/%d (%d total)" % [custom_definition.launcher_magazine_size, custom_definition.launcher_starting_reserve, custom_definition.launcher_maximum_total]
+		return ["Type: " + custom_definition.weapon_type, "Ammo: %d/%d (%d total)" % [custom_definition.magazine_size, custom_definition.starting_reserve, custom_definition.maximum_total_rounds], launcher_ammo, "Ammunition: " + custom_definition.ammunition_name, "Damage: " + str(custom_definition.damage), "Weight: " + custom_definition.weight_name, "Armor Piercing: " + ("Yes" if custom_definition.armor_piercing else "No")]
+	var types = ["Pistol", "Submachine Gun", "Sedative Pistol", "Melee", "Shotgun", "Rocket Launcher", "Sniper Rifle", "Assault Rifle", "Submachine Gun", "Pistol", "Grenade Launcher", "Machine Gun", "Shotgun", "Rifle", "Special", "Carbine", "Special", "Utility", "Pistol", "Assault Rifle", "Rifle", "Rifle", "Special", "Melee", "Flamethrower", "Rifle", "Nail Gun", "Shotgun", "Special"]
+	var weight_names = ["Light", "Medium", "Heavy", "Very Heavy"]
+	var magazine = int(weapon_stat_source.magazine_ammo[index])
+	var reserve = int(weapon_stat_source.ammo[index])
+	var ammunition = weapon_stat_source.W_NAMES[index]
+	var damage = weapon_stat_source.damage[index]
+	var weight = int(weapon_stat_source.weight[index])
+	return [
+		"Type: " + types[index],
+		"Ammo: %d/%d (%d)" % [magazine, reserve, magazine + reserve],
+		"",
+		"Ammunition: " + (str(ammunition) if ammunition != null and str(ammunition).to_lower() != "null" else "None"),
+		"Damage: " + (str(damage) if damage != null else "N/A"),
+		"Weight: " + weight_names[clamp(weight, 0, weight_names.size() - 1)],
+		"Armor Piercing: " + ("Yes" if index in [W_STEYR, W_SNIPER, W_MAUSER] else "No")
+	]
+
+func _make_weapon_label(text, position, size, font_size, color):
+	var label = Label.new()
+	label.text = text
+	label.rect_position = position
+	label.rect_size = size
+	label.autowrap = true
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_color_override("font_color", color)
+	var font = DynamicFont.new()
+	font.font_data = load("res://Fonts/MingLiU-ExtB-01.ttf")
+	font.size = font_size
+	label.add_font_override("font", font)
+	weapon_menu_panel.add_child(label)
+	return label
+
+func _create_weapon_menu_panel():
+	weapon_menu_panel = Panel.new()
+	weapon_menu_panel.name = "WeaponMenuBackground"
+	weapon_menu_panel.rect_position = Vector2(128, 128)
+	weapon_menu_panel.rect_size = Vector2(1024, 512)
+	weapon_menu_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	weapon_menu_panel.add_stylebox_override("panel", $Character_Menu.get_stylebox("panel").duplicate())
+	add_child(weapon_menu_panel)
+	move_child(weapon_menu_panel, menu[WEAPON_SELECT].get_index())
+	for slot in range(2):
+		var outline = TextureRect.new()
+		outline.rect_position = Vector2(32 + slot * 205, 12)
+		outline.rect_size = Vector2(185, 79)
+		outline.texture = $Weapon1_Viewport.get_texture() if slot == 0 else $Weapon2_Viewport.get_texture()
+		outline.expand = true
+		outline.stretch_mode = TextureRect.STRETCH_SCALE
+		outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var outline_material = ShaderMaterial.new()
+		outline_material.shader = load("res://MOD_CONTENT/CruS Online/effects/statistics_outline.shader")
+		outline_material.set_shader_param("outline_width", 1.25)
+		outline.material = outline_material
+		weapon_menu_panel.add_child(outline)
+		weapon_menu_slot_outlines.append(outline)
+	weapon_menu_portrait = TextureRect.new()
+	weapon_menu_portrait.rect_position = Vector2(568, 108)
+	weapon_menu_portrait.rect_size = Vector2(152, 152)
+	weapon_menu_portrait.expand = true
+	weapon_menu_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	weapon_menu_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	weapon_menu_panel.add_child(weapon_menu_portrait)
+	weapon_menu_name = _make_weapon_label("", Vector2(568, 266), Vector2(398, 50), 21, Color(0, 1, 0))
+	for stat_index in range(7):
+		var stat_label = _make_weapon_label("", Vector2(728, 104 + stat_index * 22), Vector2(238, 21), 14, Color.white)
+		stat_label.autowrap = false
+		weapon_stat_labels.append(stat_label)
+	weapon_menu_description = _make_weapon_label("", Vector2(568, 320), Vector2(398, 190), 14, Color.white)
+	weapon_page_label = _make_weapon_label("Cruelty Squad", Vector2(96, 448), Vector2(320, 64), 18, Color(0, 1, 0))
+	weapon_page_label.align = Label.ALIGN_CENTER
+	weapon_page_label.valign = Label.VALIGN_CENTER
+	weapon_menu_panel.hide()
+
+func _show_weapon_page():
+	if custom_weapon_buttons.empty():
+		weapon_page = 0
+	weapon_page_label.text = "Cruelty Squad" if weapon_page == 0 else "Custom"
+	weapon_page_label.visible = not custom_weapon_buttons.empty()
+	for button in weapon_page_buttons:
+		button.visible = not custom_weapon_buttons.empty() and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
+	var showing_weapons = weapon_page == 0 and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
+	for button in weapon_grid_buttons:
+		button.visible = showing_weapons
+	for button in custom_weapon_buttons:
+		button.visible = weapon_page == 1 and not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_1 if current_weapon_select == 1 else weapon_2))
+	else:
+		weapon_menu_name.text = ""
+		weapon_menu_description.text = ""
+		weapon_menu_portrait.texture = null
+		for label in weapon_stat_labels:
+			label.text = ""
+			label.rect_scale.x = 1
+	$Hover_Panel.hide()
+
+func _on_Weapon_Prev_Page_Pressed(_menu_index, _button):
+	if custom_weapon_buttons.empty():
+		return
+	weapon_page = (weapon_page + 1) % 2
+	$SFX / Close.play()
+	_show_weapon_page()
+
+func _on_Weapon_Next_Page_Pressed(_menu_index, _button):
+	if custom_weapon_buttons.empty():
+		return
+	weapon_page = (weapon_page + 1) % 2
+	$SFX / Close.play()
+	_show_weapon_page()
+
+func show_level_page():
+	for button in page_buttons:
+		menu[LEVEL_SELECT].remove_child(button)
+		all_buttons.erase(button)
+		button.queue_free()
+	page_buttons.clear()
+	for button in all_level_buttons:
+		if button.get_parent() == menu[LEVEL_SELECT]:
+			menu[LEVEL_SELECT].remove_child(button)
+	if campaign_pages.empty():
+		return
+	var page = campaign_pages[campaign_page]
+	menu[LEVEL_SELECT].buttons = menu[LEVEL_SELECT].buttons.slice(0, 7)
+	if campaign_pages.size() > 1:
+		page_buttons.append(create_button(LEVEL_SELECT, "Previous campaign", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
+		menu[LEVEL_SELECT].buttons.append(B_PREV_LEVELS)
+	for index in page.indices:
+		if index >= 0 and index < all_level_buttons.size():
+			menu[LEVEL_SELECT].add_child(all_level_buttons[index])
+			menu[LEVEL_SELECT].buttons.append(B_LEVEL)
+	if campaign_pages.size() > 1:
+		page_buttons.append(create_button(LEVEL_SELECT, "Next campaign", "_on_Next_Levels_Button_Pressed", B_NEXT_LEVELS))
+		menu[LEVEL_SELECT].buttons.append(B_NEXT_LEVELS)
+	if is_instance_valid(campaign_label):
+		campaign_label.text = page.name
+		campaign_label.rect_position = level_select_origin + Vector2(button_size.x, button_size.y * 8)
+		campaign_label.rect_size = Vector2(button_size.x * 3, button_size.y)
+		campaign_label.visible = campaign_pages.size() > 1 and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]:
+		for button in menu[LEVEL_SELECT].get_children():
+			button.rect_position = _level_select_position(button)
+			button.show()
+		$Hover_Panel.hide()
+		button_state()
+		_apply_online_level_lock()
+
+func _on_Next_Levels_Button_Pressed(_menu_index, _button):
+	if online_navigation_active or campaign_pages.empty():
+		return
+	campaign_page = (campaign_page + 1) % campaign_pages.size()
+	$SFX / Close.play()
+	show_level_page()
+
+func _on_Prev_Levels_Button_Pressed(_menu_index, _button):
+	if online_navigation_active or campaign_pages.empty():
+		return
+	campaign_page = (campaign_page - 1 + campaign_pages.size()) % campaign_pages.size()
+	$SFX / Close.play()
+	show_level_page()
+
+func create_buttons(m:int):
+	var level = 0
+	var bonus = 0
+	for i in range(menu[m].buttons.size()):
+		match menu[m].buttons[i]:
+			B_RETRY:
+				create_button(m, "Retry", "_on_Retry_Button_Pressed", menu[m].buttons[i])
+			B_START:
+				create_button(m, "Start", "_on_Start_Button_Pressed", menu[m].buttons[i])
+			B_GOALS:
+				create_button(m, "Goals", "_on_Goals_Button_Pressed", menu[m].buttons[i])
+			B_STATS:
+				create_button(m, "Statistics", "_on_Statistics_Button_Pressed", menu[m].buttons[i])
+			B_NEWS:
+				var news_button = create_button(m, "News", "_on_News_Button_Pressed", menu[m].buttons[i])
+				news_button.hint_tooltip = "Coming soon!"
+			B_LEVEL:
+				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
+				level_button.set_meta("level_index", level)
+				level_buttons.append(level_button)
+				level += 1
+			
+			B_MULTIPLAYER_MENU:
+				create_button(m, "Online", "_on_Multiplayer_Button_Pressed", B_MULTIPLAYER_MENU)
+			
+			B_SETTINGS:
+				create_button(m, "Settings", "_on_Settings_Button_Pressed", menu[m].buttons[i])
+			B_QUIT:
+				create_button(m, "Quit", "_on_Quit_Button_Pressed", menu[m].buttons[i])
+			B_EX_MENU:
+				create_button(m, "Exit to Menu", "_on_Exit_Menu_Pressed", menu[m].buttons[i])
+			B_EX_LEVEL_SELECT:
+				create_button(m, "Exit to Level Select", "_on_Exit_Level_Select_Pressed", menu[m].buttons[i])
+			B_RETURN:
+				create_button(m, "Return", "_on_Return_Button_Pressed", menu[m].buttons[i])
+			B_WEAPON_1:
+				if m == WEAPON_SELECT:
+					weapon_menu_slot_buttons.append(create_button(m, "Weapon Slot 1", "_on_Weapon_Menu_Slot_1_Pressed", menu[m].buttons[i]))
+				else:
+					weapon_select_buttons.append(create_button(m, "Weapons", "_on_Weapon_1_Pressed", menu[m].buttons[i]))
+			B_WEAPON_2:
+				weapon_menu_slot_buttons.append(create_button(m, "Weapon Slot 2", "_on_Weapon_Menu_Slot_2_Pressed", menu[m].buttons[i]))
+			B_CHARACTER:
+				create_button(m, "Equipment & Implants", "_on_Implants_Button_Pressed", menu[m].buttons[i])
+			B_STOCKS:
+				create_button(m, "Stock Market", "_on_Stocks_Button_Pressed", menu[m].buttons[i])
+			B_W_PISTOL:
+				var wep = create_button(m, "Parasonic D2 Silenced Pistol", "_on_Pistol_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Uses special 10mm subsonic ammunition for extremely silent operation. Popular among high-end private security and wetworks services, as well as tactical wannabes."
+			B_W_SMG:
+				var wep = create_button(m, "K&H R5", "_on_SMG_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "One of the most widely used submachine guns since the 80s. Unmatched reliability and ease of operation."
+			B_W_S_SMG:
+				var wep = create_button(m, "Minato M9", "_on_S_SMG_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Imported in great quantities by people of taste after being featured in the anime Haato no DokiDoki: Zankokudan."
+			B_W_SHOTGUN:
+				var wep = create_button(m, "Balotelli Hypernova", "_on_Shotgun_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Following the rapid proliferation of advanced high quality body armor and the subsequent move from traditional buckshot to more effective flechette based shells, Belatelli Hypernova has proven to be the most cost effective solution."
+			B_W_RL:
+				var wep = create_button(m, "Security Systems Anti-Armor Device", "_on_RL_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "At some point arms manufacturer Security Systems managed to convince the world that it was absolutely necessary for corporate security to possess military-grade rocket launchers."
+			B_W_SNIPER:
+				var wep = create_button(m, "Stern AWS 3000", "_on_Sniper_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "The AWS 3000 uses a special sabot round with a 30 cm long depleted uranium penetrator. It is of course designed to counter armored targets but when it hits something soft it often tumbles and leaves more wound channel than target."
+			B_W_AR:
+				var wep = create_button(m, "K&H X20", "_on_AR_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "The Karl & Heinrich X20 immediately became a huge hit with elite security. It fires extremely accurate 3 round rapid fire bursts with very manageable recoil. The rounds are completely caseless meaning it can hold a large amount of ammunition without becoming cumbersome to carry, and doesn't leave behind as much evidence."
+			B_W_NAMBU:
+				var wep = create_button(m, "New Safety M62", "_on_Nambu_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Standard police issue handgun for more than a hundred years. While more efficient options exist the cops have decided to stick with this due to masculine associations created by the film industry."
+			B_W_GAS_LAUNCHER:
+				var wep = create_button(m, "Riot Pacifier", "_on_Gas_Launcher_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Fires a grenade filled with corrosive gas. Eats through almost everything. Hasn't seen much use since the food riots of the early 00s."
+			B_W_MG3:
+				var wep = create_button(m, "AMG4", "_on_MG3_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Traditionally a weapon of the highly augmented military grunt, it has recently seen increasing use in the corporate setting. Extremely high rate of fire and good armor penetration thanks to the DU rounds it usually comes with."
+			B_W_AUTOSHOTGUN:
+				var wep = create_button(m, "Precise Industries AS15", "_on_Autoshotgun_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A fully automatic shotgun capable of tearing almost everything into shreds up close. Complete overkill but popular with killers emotionally dulled by battle drugs."
+			B_W_MAUSER:
+				var wep = create_button(m, "Mowzer SP99", "_on_Mauser_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Accurate and extremely silent bolt-action sniper rifle. Perfect for covert and illegal operations. An important symbol of the swamp cultist who claim to receive divine messages from them."
+			B_W_BORE:
+				var wep = create_button(m, "Security Systems Cerebral Bore", "_on_Bore_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Security Systems have done it once again. This incredibly high tech vat grown bioweapon is itself a small biobreeder, capable of creating a small burrower flesh orb that goes for the target's head and empties it on the floor. For energy it sucks some life force out of the user. Neat huh?"
+			B_W_MKR:
+				var wep = create_button(m, "Spectacular Dynamics MCR Carbine", "_on_MKR_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A futuristic microcaliber platform that never reached a huge popularity despite many advantages. Uses strange factory sealed disposable magazines and proprietary caseless ammunition."
+			B_W_RADGUN:
+				var wep = create_button(m, "Bolt ACR", "_on_Radgun_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "The goal of the Advanced Combat Rifle program was to create an energy weapon that wouldn't need to be reloaded at all. One of the results was this unfortunate portable gamma radiation emitter. Though often said to be illegal due to international agreements regarding radiation based weapons (no such agreements exist), the reason it never got much use is that most of the test subjects ended up accidentally killing themselves."
+			B_W_TRANQ:
+				var wep = create_button(m, "SNOOZEFEST Animal Control Pistol", "_on_Tranq_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "As the cost of human life is low, there has been no real attempt to create a tranquilizer gun for security or military needs. Some have however adopted these animal control pistols as a less messy way to get past overly vigilant security."
+			B_W_BLACKJACK:
+				var wep = create_button(m, "Expandable Baton", "_on_Blackjack_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A standard device for knocking people out cold. The design has been the same since the early middle ages, only the materials have been improved."
+			B_W_FLASHLIGHT:
+				var wep = create_button(m, "Flashlight", "_on_Flashlight_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A simple flashlight, not very useful. Or is it?"
+			B_W_ZIPPY:
+				var wep = create_button(m, "Zippy 3000", "_on_Zippy_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "The ultimate weapon, in ejection failures and misfires. You'll be lucky to get two shots out of this thing without blowing off your fingers."
+			B_W_AN94:
+				var wep = create_button(m, "BN-99", "_on_AN94_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A mysterious weapon lost to time. Made out of an accursed alloy. Has a unique two shot burst firing mechanism."
+			B_W_VAG72:
+				var wep = create_button(m, "BAG-82", "_on_VAG72_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Strange experimental caseless pistol created by an ancient civilization. Foul odour, who knows where this has been."
+			B_W_STEYR:
+				var wep = create_button(m, "Stern M17", "_on_Steyr_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Winner of the advanced combat rifle program. Has widely replaced most other rifles in elite military use. Rapid three round burst of flechette rounds significantly increases hit probability."
+			B_W_CANCER:
+				var wep = create_button(m, "Parasonic C3 DNA Scrambler", "_on_DNA_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "High value targets often have immediate access to body reconstruction services and as such it has become a popular choice to mangle their genetic makeup beyond all repair with a hi-tech weapon like the Parasonic C3."
+			B_W_ROD:
+				var wep = create_button(m, "Fiberglass Fishing Rod", "_on_Rod_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Enter the World of Fish and become who you were meant to be."
+			B_W_FLAMETHROWER:
+				var wep = create_button(m, "RPO-80 Sanitization System", "_on_FT_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Janitorial work in the age of bioprinters and homebrew infectious disease follows these simple rules: Contain, Purify, Control."
+			B_W_SKS:
+				var wep = create_button(m, "ZKZ Transactional Rifle", "_on_SKS_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Primordial weapon attuned to the beating heart of the financial system."
+			B_W_NAILER:
+				var wep = create_button(m, "Parasonic MP-1 Nailer", "_on_Nailer_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Parasonic's new personal defense weapon provides never before seen firepower in a compact form factor. Fires ultra high velocity depleted uranium nails from a high-capacity helical magazine."
+			B_W_SHOCK:
+				var wep = create_button(m, "Raymond Shocktroop Tactical", "_on_Shock_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "A compact but powerful semi-automatic shotgun, popular in the law enforcement business for clearing out regenerative art communes."
+			B_W_LIGHT:
+				var wep = create_button(m, "Abscess Ironworks Lux ff374f727ce9d6d6e93be0793733c321", "_on_Light_Pressed", menu[m].buttons[i])
+				wep.hint_tooltip = "Bask in the golden light of your radiant path."
+			B_MISSION_START:
+				create_button(m, "Start Mission", "_on_Mission_Start_Pressed", menu[m].buttons[i])
+			_:
+				print("BUTTON ERROR")
+
+func _load_mod_texture(filename):
+	var image = Image.new()
+	if image.load("res://MOD_CONTENT/CruS Online/" + filename) != OK:
+		return null
+	var texture = ImageTexture.new()
+	texture.create_from_image(image, 0)
+	return texture
+
+func create_button(m:int, n:String, connection:String, b:int):
+	var new_button = TextureButton.new()
+	menu[m].add_child(new_button)
+	new_button.name = n
+	new_button.set_meta("menu_button_type", b)
+	if b == B_PREV_LEVELS or b == B_NEXT_LEVELS:
+		var page_image = Image.new()
+		var page_path = "res://MOD_CONTENT/CruS Online/assets/interface/modbase_prev.png" if b == B_PREV_LEVELS else "res://MOD_CONTENT/CruS Online/assets/interface/modbase_next.png"
+		if page_image.load(page_path) == OK:
+			var page_texture = ImageTexture.new()
+			page_texture.create_from_image(page_image, 0)
+			new_button.texture_normal = page_texture
+	elif b == B_MULTIPLAYER_MENU:
+		new_button.texture_normal = BUTTON_TEXTURES.back()
+	elif b == B_GOALS:
+		new_button.texture_normal = _load_mod_texture("assets/interface/goals.png")
+	elif b == B_STATS:
+		new_button.texture_normal = _load_mod_texture("assets/interface/stats.png")
+	elif b == B_NEWS:
+		new_button.texture_normal = _load_mod_texture("assets/interface/news.png")
+	else:
+		new_button.texture_normal = BUTTON_TEXTURES[b]
+	new_button.texture_hover = BUTTON_TEXTURES_H[0]
+	new_button.texture_disabled = BUTTON_TEXTURES_D[randi() % 3]
+	if b == B_LEVEL:
+		
+		var level_index = level_buttons.size()
+		if level_index > Global.L_PUNISHMENT and level_index < CUSTOM_LEVEL_BASE:
+			new_button.texture_disabled = MYSTERY
+		if Global.LEVEL_IMAGES.size() - 1 >= level_index:
+			new_button.texture_normal = Global.LEVEL_IMAGES[level_index]
+		new_button.set_meta("default_disabled_texture", new_button.texture_disabled)
+	if b == B_WEAPON_1:
+		new_button.texture_normal = _load_mod_texture("assets/interface/weapons.png") if m == LEVEL_SELECT else BUTTON_TEXTURES[B_W_PISTOL + weapon_1]
+	if b == B_WEAPON_2:
+		new_button.texture_normal = BUTTON_TEXTURES[B_W_PISTOL + weapon_2]
+	
+	new_button.expand = true
+	new_button.set_position(b_position)
+	new_button.rect_size = button_size
+	new_button.connect("pressed", self, connection, [m, new_button])
+	new_button.connect("mouse_exited", self, "_on_mouse_exited", [m, new_button])
+	new_button.connect("mouse_entered", self, "_on_mouse_entered", [m, new_button])
+	new_button.hide()
+	all_buttons.append(new_button)
+	return new_button
+func _on_mouse_entered(m, button):
+	if m == WEAPON_SELECT:
+		if button in weapon_grid_buttons or button in custom_weapon_buttons:
+			_weapon_detail_button(button)
+			hover_info.get_parent().hide()
+		return
+	if button.get_meta("menu_button_type") in [B_PREV_LEVELS, B_NEXT_LEVELS]:
+		hover_info.get_parent().hide()
+		return
+	if button.disabled and button.hint_tooltip == "":
+		return 
+	hover_info.get_node("Image").hide()
+	hover_info.get_parent().raise()
+	hover_info.get_node("Name").text = button.get_meta("display_name") if button.has_meta("display_name") else button.name
+	hover_info.get_node("Hint").text = ""
+	hover_info.get_parent().rect_size = Vector2(0, 0)
+	if button.hint_tooltip != "":
+		hover_info.get_node("Hint").show()
+		hover_info.get_node("Hint").text = button.hint_tooltip
+	else :
+		hover_info.get_node("Hint").hide()
+	if button.has_method("_get_name_override"):
+		hover_info.get_node("Name").text = button._get_name_override()
+	hover_info.get_parent().show()
+func _on_mouse_exited(m, button):
+	hover_info.get_parent().hide()
+	hover_info.get_parent().rect_size = Vector2(0, 0)
+	
+
+func _on_Implants_Button_Pressed(m:int, button_id:TextureButton):
+	goto_menu(m, CHARACTER, button_id)
+	active_element = $Character_Menu
+	$Character_Menu / Character_Container.update_buttons()
+	$Character_Menu / Character_Container / TextureRect / Money.text = "$" + str(Global.money)
+	$Character_Menu.raise()
+	$Character_Menu.show()
+	
+	
+	
+	
+	
+
+func _on_Stocks_Button_Pressed(m:int, button_id:TextureButton):
+	goto_menu(m, STOCKS, button_id)
+	active_element = $Stock_Menu
+	
+	
+	$Stock_Menu.raise()
+	$Stock_Menu.show()
+	
+	
+	
+	
+	
+
+
+func _on_Start_Button_Pressed(m:int, button_id:TextureButton):
+	_close_online_panel()
+	_ensure_counterop_overlay()
+	if not in_game and Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
+		goto_menu(m, LEVEL_SELECT, button_id)
+		_update_waiting_menu()
+		return
+	Global.save_settings()
+	if ( not in_game):
+		goto_menu(m, LEVEL_SELECT, button_id)
+		active_element = $Level_Info_Grid
+		$Level_Info_Grid.rect_position.x = 512
+		$Level_Info_Grid.rect_position.y = 40
+		$Level_Info_Grid.come()
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.visible_characters = 0
+		for i in range(20):
+			yield (get_tree(), "idle_frame")
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech()
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = false
+	else :
+		toggle_menu()
+
+func _on_Goals_Button_Pressed(m:int, button_id:TextureButton):
+	if in_game or menu_changing:
+		return
+	_close_online_panel()
+	goto_menu(m, GOALS, button_id)
+	active_element = goals_screen
+	goals_screen.open()
+	menu[GOALS].raise()
+
+func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
+	if in_game or menu_changing:
+		return
+	_close_online_panel()
+	goto_menu(m, STATS, button_id)
+	active_element = statistics_screen
+	statistics_screen.open()
+	menu[STATS].raise()
+
+func _on_News_Button_Pressed(m:int, button_id:TextureButton):
+	pass
+
+func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
+	goto_menu(m, SETTINGS, button_id)
+	active_element = $Settings
+	$Settings.rect_position.x = 320
+	$Settings.raise()
+	$Settings.come()
+	menu[SETTINGS].raise()
+
+func level_end():
+	if is_instance_valid(campaign_label):
+		campaign_label.hide()
+	if Multiplayer.NetworkBridge.check_connection():
+		_hide_online_navigation()
+	active_element = $Level_End_Grid
+	$Level_End_Grid.rect_position.x = 512
+	$Level_End_Grid.come()
+	$Level_End_Grid.set_performance_info()
+	menu[START].hide()
+
+func _on_Quit_Button_Pressed(m:int, button_id:TextureButton):
+	get_tree().quit()
+
+func _on_Weapon_1_Pressed(m:int, button_id:TextureButton):
+	current_weapon_select = 1
+	_refresh_weapon_menu_icons()
+	_weapon_detail_button(_weapon_button_for_index(weapon_1))
+	weapon_menu_panel.show()
+	weapon_menu_panel.raise()
+	goto_menu(m, WEAPON_SELECT, button_id)
+	button_state()
+
+func _on_Weapon_2_Pressed(m:int, button_id:TextureButton):
+	current_weapon_select = 2
+	goto_menu(m, WEAPON_SELECT, button_id)
+	button_state()
+
+func _on_Weapon_Menu_Slot_1_Pressed(_m:int, _button_id:TextureButton):
+	current_weapon_select = 1
+	_refresh_weapon_menu_icons()
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_1))
+
+func _on_Weapon_Menu_Slot_2_Pressed(_m:int, _button_id:TextureButton):
+	current_weapon_select = 2
+	_refresh_weapon_menu_icons()
+	if weapon_page == 0:
+		_weapon_detail_button(_weapon_button_for_index(weapon_2))
+
+func _on_weapon_equipped(button_id):
+	_refresh_weapon_menu_icons()
+	button_state()
+	_weapon_detail_button(button_id)
+	$Character_Menu / Character_Container / Equip.play()
+	Global.save_game()
+
+
+func _on_Rod_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_ROD)
+	_on_weapon_equipped(button_id)
+
+func _on_SKS_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_SKS)
+	_on_weapon_equipped(button_id)
+
+func _on_Nailer_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_NAILER)
+	_on_weapon_equipped(button_id)
+
+func _on_DNA_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_CANCER)
+	_on_weapon_equipped(button_id)
+func _on_Pistol_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_PISTOL)
+	_on_weapon_equipped(button_id)
+func _on_SMG_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_SMG)
+	_on_weapon_equipped(button_id)
+func _on_S_SMG_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_S_SMG)
+	_on_weapon_equipped(button_id)
+func _on_Shotgun_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_SHOTGUN)
+	_on_weapon_equipped(button_id)
+func _on_Shock_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_SHOCK)
+	_on_weapon_equipped(button_id)
+func _on_RL_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_RL)
+	_on_weapon_equipped(button_id)
+func _on_Sniper_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_SNIPER)
+	_on_weapon_equipped(button_id)
+func _on_Steyr_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_STEYR)
+	_on_weapon_equipped(button_id)
+func _on_AR_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_AR)
+	_on_weapon_equipped(button_id)
+func _on_AN94_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_AN94)
+	_on_weapon_equipped(button_id)
+func _on_MKR_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_MKR)
+	_on_weapon_equipped(button_id)
+func _on_Nambu_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_NAMBU)
+	_on_weapon_equipped(button_id)
+func _on_Gas_Launcher_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_GAS_LAUNCHER)
+	_on_weapon_equipped(button_id)
+func _on_MG3_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_MG3)
+	_on_weapon_equipped(button_id)
+func _on_Autoshotgun_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_AUTOSHOTGUN)
+	_on_weapon_equipped(button_id)
+func _on_Mauser_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_MAUSER)
+	_on_weapon_equipped(button_id)
+func _on_Bore_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_BORE)
+	_on_weapon_equipped(button_id)
+func _on_Radgun_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_RADIATOR)
+	_on_weapon_equipped(button_id)
+func _on_Tranq_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_TRANQ)
+	_on_weapon_equipped(button_id)
+func _on_Blackjack_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_BLACKJACK)
+	_on_weapon_equipped(button_id)
+func _on_Flashlight_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_FLASHLIGHT)
+	_on_weapon_equipped(button_id)
+func _on_Zippy_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_ZIPPY)
+	_on_weapon_equipped(button_id)
+func _on_VAG72_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_VAG72)
+	_on_weapon_equipped(button_id)
+func _on_FT_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_FLAMETHROWER)
+	_on_weapon_equipped(button_id)
+func _on_Light_Pressed(m:int, button_id:TextureButton):
+	set_weapon(W_LIGHT)
+	_on_weapon_equipped(button_id)
+
+func set_weapon(w_index:int):
+	match current_weapon_select:
+		1:
+			$Weapon1_Viewport.get_node("Weapon").MESH[weapon_1].hide()
+			weapon_1 = w_index
+			$Weapon1_Viewport.get_node("Weapon").MESH[weapon_1].show()
+		2:
+			$Weapon2_Viewport.get_node("Weapon").MESH[weapon_2].hide()
+			weapon_2 = w_index
+			$Weapon2_Viewport.get_node("Weapon").MESH[weapon_2].show()
+	for w in range(Global.CURRENT_WEAPONS.size()):
+		if w == weapon_1 or w == weapon_2:
+			Global.CURRENT_WEAPONS[w] = true
+		else :
+			Global.CURRENT_WEAPONS[w] = false
+	_refresh_weapon_menu_icons()
+
+func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
+	if menu_changing:
+		return
+	if active_menus.size() > 1 and active_menus.back() != menu[LEVEL_SELECT]:
+		go_back(m, button_id)
+		return
+	if online_navigation_active:
+		request_close_online_navigation()
+		return
+	go_back(m, button_id)
+
+	get_tree().get_nodes_in_group("MultiplayerMenu")[0].disable_menu()
+
+	if menu[m] == menu[LEVEL_SELECT]:
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+
+func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
+	if online_navigation_active:
+		return
+	if _counterop_level_locked(Global.CURRENT_LEVEL) or _competitive_start_reason() != "":
+		return
+	if Multiplayer.NetworkBridge.check_connection():
+		if not Multiplayer.NetworkBridge.is_world_authority():
+			return
+		Global.STOCKS.save_stocks("user://stocks.save")
+		Global.stock_mode = weapon_1 <= 3 and weapon_2 <= 3
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+		Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL])
+		return
+	if Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL]):
+		Global.STOCKS.save_stocks("user://stocks.save")
+		goto_menu(m, START, button_id)
+		toggle_menu()
+		show_buttons(menu[START], 2, 4)
+		$Hover_Panel.hide()
+		in_game = true
+		if weapon_1 <= 3 and weapon_2 <= 3:
+			Global.stock_mode = true
+		else :
+			Global.stock_mode = false
+		print(Global.stock_mode)
+		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+
+func _on_Level_Pressed(m:int, button_id:TextureButton):
+	if online_navigation_active:
+		return
+	var level_index = button_id.get_meta("level_index") if button_id.has_meta("level_index") else button_id.get_index() - 6
+	if is_instance_valid(Multiplayer.Extensions) and not Multiplayer.Extensions.stage_unlocked(level_index):
+		return
+	if _counterop_level_locked(level_index):
+		return
+	Global.CURRENT_LEVEL = level_index
+	if Global.LEVEL_PUNISHED[Global.CURRENT_LEVEL]:
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(1, 1, 1, 1)
+	else :
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(0.7, 0, 0, 1)
+	update_level_info()
+	for button in range(level_buttons.size()):
+		if button == Global.CURRENT_LEVEL:
+			level_buttons[button].disabled = true
+		else :
+			level_buttons[button].disabled = false
+		if button > Global.L_PUNISHMENT and button < CUSTOM_LEVEL_BASE:
+			if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1 and button != Global.CURRENT_LEVEL:
+				level_buttons[button].show()
+				level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
+				level_buttons[button].disabled = false
+			else :
+				level_buttons[button].show()
+				if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1:
+					level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
+				else :
+					level_buttons[button].texture_disabled = MYSTERY
+				level_buttons[button].disabled = true
+
+	$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.visible_characters = 0
+
+
+	$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech()
+	button_state()
+	
+	
+	
+func go_back(m:int, b_id:TextureButton):
+	_navigation_generation += 1
+	var generation = _navigation_generation
+	
+	Global.STOCKS.save_stocks("user://stocks.save")
+	var counter = 0
+	var closing_weapon_menu = active_menus.back() == menu[WEAPON_SELECT]
+	menu_changing = true
+	for child in active_menus[active_menus.size() - 1].get_children():
+		child.disabled = true
+	if active_element != null:
+		if (active_menus[active_menus.size() - 1] != menu[WEAPON_SELECT]):
+			active_element.go()
+		if active_element == $Character_Menu or active_element == $Stock_Menu:
+			active_element = $Level_Info_Grid
+	b_position = b_id.rect_position
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_step = 0
+	for child in range(active_menus[active_menus.size() - 1].get_children().size() - 1, - 1, - 1):
+		counter += 1
+		if fmod(counter, 2) - 1 == 0:
+			$SFX / Close.pitch_scale = 1 + rand_range( - 0.3, 0.3)
+			$SFX / Close.play()
+		var to_pos = b_position
+		if closing_weapon_menu:
+			active_menus.back().get_child(child).hide()
+			active_menus.back().get_child(child).rect_position = to_pos
+		else:
+			active_menus.back().get_child(child).rect_position = to_pos
+			hover_info.get_parent().hide()
+			active_menus.back().get_child(child).hide()
+		animation_step += 1
+		while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step * GRID_STEP_SECONDS:
+			yield (get_tree(), "idle_frame")
+			if generation != _navigation_generation:
+				return
+	
+	for child in active_menus[active_menus.size() - 2].get_children():
+		child.disabled = false
+	
+	active_menus.pop_back()
+	if is_instance_valid(weapon_menu_panel):
+		weapon_menu_panel.hide()
+	if active_menus.back() == menu[LEVEL_SELECT] and active_element in [goals_screen, statistics_screen, news_panel]:
+		active_element = $Level_Info_Grid
+	if active_menus.back() == menu[START]:
+		_refresh_start_buttons()
+		menu[START].raise()
+		if online_pause_settings:
+			online_pause_settings = false
+			visible = false
+			menu[START].hide()
+			Global.get_node("Multiplayer/Menu").show_menu()
+	if is_instance_valid(campaign_label):
+		campaign_label.visible = campaign_pages.size() > 1 and active_menus.back() == menu[LEVEL_SELECT]
+	button_state()
+	hover_info.get_parent().hide()
+	menu_changing = false
+
+
+
+
+
+
+
+
+
+	
+
+func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
+	_navigation_generation += 1
+	var generation = _navigation_generation
+	Global.STOCKS.save_stocks("user://stocks.save")
+	if Global.LEVEL_PUNISHED[Global.CURRENT_LEVEL]:
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(1, 1, 1, 1)
+	else :
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(0.7, 0, 0, 1)
+	menu_changing = true
+	if active_menus.find(menu[to_menu]) != - 1 and active_menus.size() > 1:
+		
+		for m in active_menus:
+			if m != menu[to_menu]:
+				for child in m.get_children():
+					child.hide()
+					child.disabled = true
+					child.set_position(m.get_children()[0].rect_position)
+			else :
+				for child in m.get_children():
+					child.disabled = false
+		active_menus.pop_back()
+		if is_instance_valid(active_element):
+			active_element.go()
+		menu_changing = false
+		return 
+	active_menus.append(menu[to_menu])
+	menu[to_menu].raise()
+	
+	b_position = menu[START].get_child(0).rect_position if from_menu == START and not in_game else b.rect_position
+	if to_menu == LEVEL_SELECT:
+		level_select_origin = b_position
+		for level_select_button in menu[LEVEL_SELECT].get_children():
+			level_select_button.rect_position = _level_select_position(level_select_button)
+		if is_instance_valid(campaign_label) and campaign_pages.size() > 1:
+			campaign_label.text = campaign_pages[campaign_page].name
+			campaign_label.rect_position = level_select_origin + Vector2(button_size.x, button_size.y * 8)
+			campaign_label.rect_size = Vector2(button_size.x * 3, button_size.y)
+			campaign_label.show()
+	elif is_instance_valid(campaign_label):
+		campaign_label.hide()
+	if to_menu == WEAPON_SELECT:
+		for weapon_button in menu[WEAPON_SELECT].get_children():
+			weapon_button.rect_position = b.rect_position
+	var level_reveal_visibility = {}
+	if to_menu == LEVEL_SELECT:
+		button_state()
+		for level_button in menu[LEVEL_SELECT].get_children():
+			if level_button.get_meta("menu_button_type") == B_LEVEL:
+				level_reveal_visibility[level_button] = level_button.visible
+			level_button.hide()
+	
+	var wep_dir = 1
+	for child in menu[from_menu].get_children():
+		child.disabled = true
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_step = 0
+	for child in menu[to_menu].get_children():
+		if to_menu == LEVEL_SELECT and _client_mission_button(child):
+			if child.get_meta("menu_button_type") == B_MISSION_START:
+				child.rect_position = b_position + Vector2(0, button_size.y)
+			child.hide()
+			child.disabled = true
+			continue
+		child.disabled = true
+		if fmod(menu[to_menu].get_children().find(child), 3) == 0:
+			$SFX / Open.pitch_scale = 0.43 + rand_range( - 0.3, 0.1)
+			$SFX / Open.play()
+		
+		child.rect_size = Vector2(185, 79) if to_menu == WEAPON_SELECT and menu[to_menu].get_children().find(child) < 2 else button_size
+		dir = menu_dir[from_menu]
+		if menu[to_menu].get_children().find(child) >= 5:
+			
+			
+			
+			
+				dir = (dir + 2) % 3
+		if to_menu == LEVEL_SELECT:
+			var level_child_index = menu[to_menu].get_children().find(child)
+			dir = level_select_dir[level_child_index] if level_child_index < level_select_dir.size() else 1
+		if to_menu == WEAPON_SELECT:
+			dir = wep_dir
+			if menu[to_menu].get_children().find(child) == 6:
+				dir = 2
+				wep_dir = 3
+			if menu[to_menu].get_children().find(child) == 12:
+				dir = 2
+				wep_dir = 1
+			if menu[to_menu].get_children().find(child) == 18:
+				dir = 2
+				wep_dir = 3
+			if menu[to_menu].get_children().find(child) == 24:
+				dir = 2
+				wep_dir = 1
+		
+		
+		
+		
+		
+		
+		match dir:
+			UP:
+				b_position.y -= button_size.y
+			RIGHT:
+				b_position.x += button_size.x
+				
+			DOWN:
+				b_position.y += button_size.y
+			LEFT:
+				b_position.x -= button_size.x
+				
+		if (to_menu != WEAPON_SELECT or (not child in weapon_page_buttons and (weapon_page == 0 or not child in weapon_grid_buttons))) and (to_menu != LEVEL_SELECT or child.get_meta("menu_button_type") != B_LEVEL or level_reveal_visibility.get(child, false)):
+			child.show()
+		if to_menu == LEVEL_SELECT and child.get_meta("menu_button_type") == B_MISSION_START:
+			_apply_competitive_start_gate()
+		var to_pos = b_position
+		if to_menu == LEVEL_SELECT:
+			to_pos = _level_select_position(child)
+			b_position = to_pos
+		elif to_menu == WEAPON_SELECT:
+			to_pos = _weapon_menu_position(child)
+			b_position = to_pos
+		elif from_menu in [START, LEVEL_SELECT] and child.get_meta("menu_button_type") == B_RETURN and to_menu in [GOALS, STATS, SETTINGS, NEWS]:
+			to_pos = b.rect_position + Vector2(0, button_size.y) if from_menu == START and to_menu in [SETTINGS, NEWS] else b.rect_position
+			b_position = to_pos
+		if to_menu == SETTINGS and b.get_meta("menu_button_type") == B_MULTIPLAYER_MENU:
+			to_pos = b.rect_position + Vector2(button_size.x, 0)
+			b_position = to_pos
+		if to_menu != LEVEL_SELECT:
+			button_state()
+		child.disabled = true
+		child.rect_position = to_pos
+		animation_step += 1
+		while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_step * GRID_STEP_SECONDS:
+			yield (get_tree(), "idle_frame")
+			if generation != _navigation_generation:
+				return
+		child.disabled = false
+		if to_menu != LEVEL_SELECT:
+			button_state()
+		if to_menu == LEVEL_SELECT:
+			_apply_competitive_start_gate()
+		
+		update_level_info()
+	if to_menu == LEVEL_SELECT:
+		button_state()
+		_apply_competitive_start_gate()
+	if to_menu == WEAPON_SELECT:
+		_show_weapon_page()
+	menu_changing = false
+
+func _input(event):
+	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.result_active:
+		return
+	if in_game and Multiplayer.NetworkBridge.check_connection() and not online_pause_settings:
+		return
+	var cancel_pressed = event.is_action_pressed("ui_cancel")
+	if cancel_pressed and not menu_changing and active_menus.size() > 1:
+		var top_menu = active_menus.back()
+		if top_menu == menu[CHARACTER] or top_menu == menu[STOCKS] or top_menu == menu[WEAPON_SELECT]:
+			go_back(active_menus.size() - 1, weapon_select_buttons[0] if top_menu == menu[WEAPON_SELECT] else top_menu.get_child(0))
+			get_tree().set_input_as_handled()
+			return
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	if cancel_pressed and online_navigation_active:
+		request_close_online_navigation()
+		get_tree().set_input_as_handled()
+		return
+	if cancel_pressed and online_menu.get_node("CenterContainer").visible:
+		online_menu.close_menu()
+		get_tree().set_input_as_handled()
+		return
+	if menu_changing:
+		return 
+	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed() and wait_for_key:
+		key_pressed = event
+		wait_for_key = false
+		get_tree().set_input_as_handled()
+		return
+	if Global.cutscene:
+		return 
+	if event is InputEventMouseButton and not in_game:
+		if event.pressed and not visible:
+			toggle_menu()
+			return 
+	if event is InputEventKey:
+		if event.pressed and not visible and not in_game:
+			toggle_menu()
+			return 
+		if Input.is_action_just_pressed("ui_cancel"):
+			if in_game:
+				if is_instance_valid(Global.player):
+					if Global.player.died:
+						return 
+			if (active_menus.size() != 1):
+				if active_menus.size() > 0:
+					if active_element != $Character_Menu:
+						$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
+					go_back(active_menus.size() - 1, active_menus[active_menus.size() - 1].get_children()[0])
+			else :
+				toggle_menu()
+
+func button_state():
+	if active_menus.size() <= 0:
+		return 
+	if active_menus[active_menus.size() - 1] == menu[LEVEL_SELECT]:
+		if Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
+			for button in menu[LEVEL_SELECT].get_children():
+				if _client_mission_button(button):
+					button.hide()
+					button.disabled = true
+			return
+		for button in range(level_buttons.size()):
+			if button <= Global.LEVELS_UNLOCKED or button >= CUSTOM_LEVEL_BASE:
+				level_buttons[button].show()
+			else :
+				level_buttons[button].hide()
+
+			if button == Global.CURRENT_LEVEL:
+				level_buttons[button].disabled = true
+			else :
+				level_buttons[button].disabled = false
+			if button >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
+				var stage_locked = not Multiplayer.Extensions.stage_unlocked(button)
+				level_buttons[button].disabled = stage_locked or button == Global.CURRENT_LEVEL
+				if stage_locked:
+					var stage = Multiplayer.Extensions.campaign_stages.get(button, {})
+					if stage.get("secret", false):
+						level_buttons[button].show()
+						level_buttons[button].texture_disabled = MYSTERY
+					else:
+						level_buttons[button].hide()
+					level_buttons[button].hint_tooltip = ""
+				else:
+					level_buttons[button].modulate = Color.white
+					level_buttons[button].hint_tooltip = ""
+					level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
+			if button > Global.L_PUNISHMENT and button < CUSTOM_LEVEL_BASE:
+				if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1 and button != Global.CURRENT_LEVEL:
+					level_buttons[button].show()
+					level_buttons[button].disabled = false
+				elif button:
+					level_buttons[button].show()
+					if Global.BONUS_UNLOCK.find(Global.BONUS_LEVELS[button - Global.L_PUNISHMENT - 1]) != - 1:
+						level_buttons[button].texture_disabled = BUTTON_TEXTURES_D[0]
+					else :
+						level_buttons[button].texture_disabled = MYSTERY
+					level_buttons[button].disabled = true
+	if active_menus[active_menus.size() - 1] == menu[WEAPON_SELECT]:
+		for button in range(0, Global.WEAPONS_UNLOCKED.size()):
+			var weapon_button = _weapon_button_for_index(button)
+			if not is_instance_valid(weapon_button):
+				continue
+			if not weapon_button.has_meta("weapon_name"):
+				weapon_button.set_meta("weapon_name", weapon_button.name)
+				weapon_button.set_meta("weapon_description", weapon_button.hint_tooltip)
+			if Global.WEAPONS_UNLOCKED[button]:
+				weapon_button.name = weapon_button.get_meta("weapon_name")
+				weapon_button.hint_tooltip = weapon_button.get_meta("weapon_description")
+				var registry = Global.get_node_or_null("WeaponRegistry")
+				var definition = registry.definition_for(button) if registry != null else null
+				weapon_button.texture_normal = weapon_button.get_meta("custom_icon") if definition != null and weapon_button.has_meta("custom_icon") else BUTTON_TEXTURES[weapon_button.get_meta("menu_button_type")]
+				weapon_button.texture_disabled = weapon_button.texture_normal
+				weapon_button.modulate = Color(0.55, 0.55, 0.55) if Global.CURRENT_WEAPONS[button] else Color.white
+				weapon_button.disabled = Global.CURRENT_WEAPONS[button]
+			else:
+				weapon_button.hint_tooltip = ""
+				weapon_button.texture_normal = MYSTERY
+				weapon_button.texture_disabled = MYSTERY
+				weapon_button.modulate = Color.white
+				weapon_button.disabled = true
+	
+
+
+func _on_Resolution_List_item_activated(index):
+	var full = false
+	if Global.full_screen:
+		full = true
+		_on_Full_Screen_toggled(false)
+	OS.set_window_size(RESOLUTIONS[index])
+	Global.resolution = [RESOLUTIONS[index].x, RESOLUTIONS[index].y]
+	OS.set_window_position(OS.get_screen_size() * 0.5 - OS.window_size * 0.5)
+	OS.window_position.y = clamp(OS.window_position.y, 0, 30000)
+	OS.window_position.x = clamp(OS.window_position.x, 0, 30000)
+	rect_scale.x = Global.resolution[0] / 1280
+	rect_scale.y = Global.resolution[1] / 720
+	if full:
+		_on_Full_Screen_toggled(true)
+	
+	
+
+func _set_res(x, y):
+	OS.set_window_size(Vector2(x, y))
+	Global.resolution = [x, y]
+	OS.set_window_position(Vector2(0, 0))
+	
+	rect_scale.x = x / 1280
+	rect_scale.y = y / 720
+
+func set_res(x, y):
+	var full = false
+	if Global.full_screen:
+		full = true
+		_on_Full_Screen_toggled(false)
+	OS.set_window_size(Vector2(x, y))
+	Global.resolution = [x, y]
+	OS.set_window_position(OS.get_screen_size() * 0.5 - OS.window_size * 0.5)
+	OS.window_position.y = clamp(OS.window_position.y, 0, 30000)
+	OS.window_position.x = clamp(OS.window_position.x, 0, 30000)
+	rect_scale.x = Global.resolution[0] / 1280
+	rect_scale.y = Global.resolution[1] / 720
+	if full:
+		_on_Full_Screen_toggled(true)
+
+
+func update_level_info()->void :
+	var meta_file = File.new()
+	var parsed_level_meta:Dictionary = {}
+	if typeof(Global.LEVEL_META[Global.CURRENT_LEVEL]) == TYPE_DICTIONARY:
+		parsed_level_meta = Global.LEVEL_META[Global.CURRENT_LEVEL]
+	else:
+		if not meta_file.file_exists(Global.LEVEL_META[Global.CURRENT_LEVEL]):
+			return
+		meta_file.open(Global.LEVEL_META[Global.CURRENT_LEVEL], File.READ)
+		parsed_level_meta = parse_json(meta_file.get_as_text())
+	var level_name = parsed_level_meta.get("name")
+	var objectives = parsed_level_meta.get("objectives")
+	var description = parsed_level_meta.get("description")
+	var level_info = $Level_Info_Grid / HBoxContainer / Description_Scroll / Description
+	
+	level_info.text = ""
+	$Level_Info_Grid / HBoxContainer / VBoxContainer / Objective_Panel / Objectives.text = ""
+	for objective in objectives:
+		$Level_Info_Grid / HBoxContainer / VBoxContainer / Objective_Panel / Objectives.text += objective + "\n"
+	if Global.hope_discarded:
+		$Level_Info_Grid / HBoxContainer / VBoxContainer / Objective_Panel / Objectives.text += "???"
+	level_info.text += str(description) if description != null else ""
+	var level_time = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Time
+	var level_stime = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_STime
+	var level_hell_time = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Hell_Time
+	var level_hell_stime = $Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Hell_STime
+	if Global.ending_3:
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.show()
+	else :
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.hide()
+	if not Global.hell_discovered:
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.hide()
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.hide()
+		level_hell_time.hide()
+		level_hell_stime.hide()
+		
+	else :
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.show()
+		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.show()
+		level_hell_time.show()
+		level_hell_stime.show()
+	if Global.LEVEL_TIMES[Global.CURRENT_LEVEL] != null:
+		level_time.text = Global.LEVEL_TIMES[Global.CURRENT_LEVEL]
+		level_stime.text = Global.LEVEL_STIMES[Global.CURRENT_LEVEL]
+		if Global.LEVEL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_RANK_S[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Rank_Image.texture = RANK_LETTERS[3]
+		elif Global.LEVEL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_RANK_A[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Rank_Image.texture = RANK_LETTERS[2]
+		elif Global.LEVEL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_RANK_B[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Rank_Image.texture = RANK_LETTERS[1]
+		elif Global.LEVEL_TIMES_RAW[Global.CURRENT_LEVEL] != 99999999:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Rank_Image.texture = RANK_LETTERS[0]
+		else :
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Rank_Image.texture = RANK_LETTERS[4]
+
+	if Global.HELL_TIMES[Global.CURRENT_LEVEL] != null:
+		level_hell_time.text = Global.HELL_TIMES[Global.CURRENT_LEVEL]
+		if Global.HELL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_RANK_S[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.texture = RANK_LETTERS[3]
+		elif Global.HELL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_RANK_A[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.texture = RANK_LETTERS[2]
+		elif Global.HELL_TIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_RANK_B[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.texture = RANK_LETTERS[1]
+		elif Global.HELL_TIMES_RAW[Global.CURRENT_LEVEL] != 99999999:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.texture = RANK_LETTERS[0]
+		else :
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.texture = RANK_LETTERS[4]
+
+	if Global.HELL_STIMES[Global.CURRENT_LEVEL] != null:
+		level_hell_stime.text = Global.HELL_STIMES[Global.CURRENT_LEVEL]
+		
+			
+		
+		if Global.HELL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_SRANK_S[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.texture = RANK_LETTERS[3]
+		elif Global.HELL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_RANK_A[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.texture = RANK_LETTERS[2]
+		elif Global.HELL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.HELL_RANK_B[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.texture = RANK_LETTERS[1]
+		elif Global.HELL_STIMES_RAW[Global.CURRENT_LEVEL] != 99999999:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.texture = RANK_LETTERS[0]
+		else :
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.texture = RANK_LETTERS[4]
+
+
+	if Global.LEVEL_STIMES[Global.CURRENT_LEVEL] != null:
+		if Global.LEVEL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_TIMES_RAW[Global.CURRENT_LEVEL]:
+			level_time.text = Global.LEVEL_STIMES[Global.CURRENT_LEVEL]
+		if Global.LEVEL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_SRANK_S[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / SRank_Image.texture = RANK_LETTERS[3]
+		elif Global.LEVEL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_RANK_A[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / SRank_Image.texture = RANK_LETTERS[2]
+		elif Global.LEVEL_STIMES_RAW[Global.CURRENT_LEVEL] < Global.LEVEL_RANK_B[Global.CURRENT_LEVEL]:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / SRank_Image.texture = RANK_LETTERS[1]
+		elif Global.LEVEL_STIMES_RAW[Global.CURRENT_LEVEL] != 99999999:
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / SRank_Image.texture = RANK_LETTERS[0]
+		else :
+			$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / SRank_Image.texture = RANK_LETTERS[4]
+	meta_file.close()
+	$Level_Info_Grid / Level_Info_Vbox / Level_Image.texture = Global.LEVEL_IMAGES[Global.CURRENT_LEVEL]
+
+func toggle_menu():
+	_refresh_start_buttons()
+	if (active_menus[active_menus.size() - 1] == menu[START] and active_element != $Level_End_Grid):
+		visible = not visible
+		if (Input.get_mouse_mode() == Input.MOUSE_MODE_VISIBLE):
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		else :
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		if in_game and not Multiplayer.NetworkBridge.check_connection():
+			get_tree().paused = visible
+
+func _on_Master_Volume_value_changed(value):
+	Global.set_game_volume(value)
+	Global.master_volume = value
+
+
+func _on_Music_Volume_value_changed(value):
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), value)
+	Global.music_volume = value
+
+
+func _on_M_Sensitivity_value_changed(value):
+	Global.mouse_sensitivity = value * 0.01
+
+
+func _on_FOV_value_changed(value):
+	Global.FOV = value
+	$Settings / GridContainer / PanelContainer / VBoxContainer / FOVLABEL.text = "FOV: " + str(Global.FOV)
+
+func _on_Character_Speak():
+	$Level_Info_Grid / HBoxContainer / VBoxContainer / Portrait.texture = HANDLER_FRAMES[randi() % 3]
+
+
+
+func _on_Full_Screen_toggled(button_pressed):
+	if button_pressed:
+		OS.window_borderless = true
+		OS.window_fullscreen = true
+		Global.full_screen = true
+		get_tree().set_screen_stretch(SceneTree.STRETCH_MODE_VIEWPORT, SceneTree.STRETCH_ASPECT_KEEP, Vector2(Global.resolution[0], Global.resolution[1]))
+	else :
+		OS.window_borderless = true
+		OS.window_fullscreen = false
+		Global.full_screen = false
+		get_tree().set_screen_stretch(SceneTree.STRETCH_MODE_VIEWPORT, SceneTree.STRETCH_ASPECT_KEEP, Vector2(Global.resolution[0], Global.resolution[1]))
+		get_tree().set_screen_stretch(SceneTree.STRETCH_MODE_DISABLED, SceneTree.STRETCH_ASPECT_KEEP, Vector2(Global.resolution[0], Global.resolution[1]))
+		
+		
+
+
+func _on_Exit_Menu_Pressed(m:int, b:BaseButton):
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.Flow.exit_to_menu(false)
+		return
+	get_tree().paused = false
+	$Hover_Panel.hide()
+	get_node("Soul_Rended").hide()
+	
+	for w in range(Global.CURRENT_WEAPONS.size()):
+		if w == weapon_1 or w == weapon_2:
+			Global.CURRENT_WEAPONS[w] = true
+		else :
+			Global.CURRENT_WEAPONS[w] = false
+	Global.goto_scene(Multiplayer.get_menu_scene())
+	in_game = false
+	menu[START].show()
+
+	if active_element:
+		active_element.hide()
+		active_element.go()
+	hide_buttons(menu[START], 2, 4)
+
+func _on_Exit_Level_Select_Pressed(m:int, b:BaseButton):
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.Flow.exit_to_menu(true)
+		return
+	get_tree().paused = false
+	$Hover_Panel.hide()
+	get_node("Soul_Rended").hide()
+	Global.objective_complete = false
+	Global.objectives = 0
+	for w in range(Global.CURRENT_WEAPONS.size()):
+		if w == weapon_1 or w == weapon_2:
+			Global.CURRENT_WEAPONS[w] = true
+		else :
+			Global.CURRENT_WEAPONS[w] = false
+	Global.goto_scene(Multiplayer.get_menu_scene())
+	in_game = false
+	menu[START].show()
+
+	if active_element:
+		active_element.hide()
+		active_element.go()
+	hide_buttons(menu[START], 2, 4)
+	_on_Start_Button_Pressed(START, menu[START].get_child(0))
+
+
+func _on_exls():
+	if $Level_End_Grid/Level_Info_Vbox/Next_Level.visible and Global.CURRENT_LEVEL >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
+		var next_level = Multiplayer.Extensions.next_campaign_level(Global.CURRENT_LEVEL)
+		if next_level >= 0:
+			Global.CURRENT_LEVEL = next_level
+	_on_Exit_Level_Select_Pressed(START, menu[START].get_child(0))
+	$Hover_Panel.hide()
+func _on_exmm():
+	_on_Exit_Menu_Pressed(START, menu[START].get_child(0))
+	
+func _on_rb():
+	_on_Retry_Button_Pressed(START, menu[START].get_child(0))
+	
+func _on_qb():
+	_on_Quit_Button_Pressed(START, menu[START].get_child(0))
+
+func _on_Retry_Button_Pressed(m:int, b:TextureButton):
+	if not Multiplayer.NetworkBridge.check_connection():
+		_retry_solo(m, b)
+	else:
+		Multiplayer.Flow.restart_mission()
+
+func _on_Key_List_item_activated(index):
+	var list_index = index
+	if index == KEY_SHOOT + 1:
+		index = KEY_SECONDARY
+	elif index > KEY_SHOOT + 1:
+		index -= 1
+	wait_for_key = true
+	while wait_for_key:
+		$Key_Popup / PanelContainer.rect_size.x = 240
+		$Key_Popup / PanelContainer.rect_size.y = 240
+		$Key_Popup.popup_centered(Vector2(240, 240))
+		yield (get_tree(), "idle_frame")
+	$Key_Popup.hide()
+	match index:
+		KEY_LEFT:
+			set_inputs("movement_left")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Left: " + key_pressed.as_text())
+		KEY_RIGHT:
+			set_inputs("movement_right")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Right: " + key_pressed.as_text())
+		KEY_FORWARD:
+			set_inputs("movement_forward")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Forward: " + key_pressed.as_text())
+		KEY_BACK:
+			set_inputs("movement_backward")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Back: " + key_pressed.as_text())
+		KEY_JUMP:
+			set_inputs("movement_jump")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Jump: " + key_pressed.as_text())
+		KEY_SHOOT:
+			set_inputs("mouse_1")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot: " + key_pressed.as_text())
+		KEY_USE:
+			set_inputs("Use")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Use: " + key_pressed.as_text())
+		KEY_KICK:
+			set_inputs("kick")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Kick: " + key_pressed.as_text())
+		KEY_RELOAD:
+			set_inputs("reload")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Reload: " + key_pressed.as_text())
+		KEY_LEAN_LEFT:
+			set_inputs("Lean_Left")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Lean Left: " + key_pressed.as_text())
+		KEY_LEAN_RIGHT:
+			set_inputs("Lean_Right")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Lean Right: " + key_pressed.as_text())
+		KEY_ZOOM:
+			set_inputs("zoom")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Zoom: " + key_pressed.as_text())
+		KEY_WEAPON1:
+			set_inputs("weapon1")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Weapon 1: " + key_pressed.as_text())
+		KEY_WEAPON2:
+			set_inputs("weapon2")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Weapon 2: " + key_pressed.as_text())
+		KEY_LAST_WEAPON:
+			set_inputs("switch_weapon")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Last Weapon: " + key_pressed.as_text())
+		KEY_CROUCH:
+			set_inputs("crouch")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Crouch: " + key_pressed.as_text())
+		KEY_TERTIARY:
+			set_inputs("Tertiary_Weapon")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Tertiary Weapon: " + key_pressed.as_text())
+		KEY_THROW_WEAPON:
+			set_inputs("drop")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Throw Weapon: " + key_pressed.as_text())
+		KEY_SUICIDE:
+			set_inputs("Suicide")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Suicide: " + key_pressed.as_text())
+		KEY_STOCKS:
+			set_inputs("Stocks")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Stock Market: " + key_pressed.as_text())
+		KEY_SECONDARY:
+			set_inputs("Shoot_Secondary")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot Secondary: " + key_pressed.as_text())
+	Global.save_settings()
+func set_inputs(action):
+	InputMap.action_erase_events(action)
+	InputMap.action_add_event(action, key_pressed)
+
+
+func _on_color_value_changed(value):
+	Global.blood_color = Color($Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer / R.value, $Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer2 / G.value, $Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer3 / B.value, $Settings / GridContainer / PanelContainer4 / VBoxContainer3 / HBoxContainer4 / A.value)
+	$Settings / GridContainer / PanelContainer4 / VBoxContainer3 / Blood_Color_Rect.color = Global.blood_color
+
+
+func _on_Skip_Intro_toggled(value):
+	Global.skip_intro = value
+
+
+func _on_Civslider_value_changed(value):
+	if value != 101:
+		$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Civcount_Label.text = "Civilians: " + str(value - 1) + "%"
+		Global.civilian_reduction = int(value)
+	else :
+		$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Civcount_Label.text = "Civilians: MAX"
+		Global.civilian_reduction = int(value)
+	
+
+
+func _on_Drawslider_value_changed(value):
+	Global.draw_distance = value
+	$Settings / GridContainer / PanelContainer6 / VBoxContainer3 / Draw_Label.text = "Draw Distance:\n" + str(value)
+
+
+func _on_Reflections_toggled(value):
+	Global.reflections = value
+
+
+func _on_InvertY_toggled(value):
+	Global.invert_y = value
+
+
+func _reset_level_progression():
+
+	$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
+	$ConfirmationDialog.dialog_text = "Reset level progression?"
+	while confirmed == false:
+		yield (get_tree(), "idle_frame")
+	confirmed = false
+	if cancel == true:
+		cancel = false
+		return 
+	Global.LEVELS_UNLOCKED = 1
+	Global.CURRENT_LEVEL = 0
+	if Global.implants.purchased_implants.find("House") != - 1:
+		Global.implants.purchased_implants.remove(Global.implants.purchased_implants.find("House"))
+	Global.BONUS_UNLOCK = []
+	if is_instance_valid(Multiplayer.Extensions):
+		Multiplayer.Extensions.reset_campaign_progress()
+	button_state()
+
+func _on_ClearSave_pressed():
+	confirmed = false
+	cancel = false
+	$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
+	$ConfirmationDialog.dialog_text = "This will reset all of your progress. Are you sure?"
+	while confirmed == false and cancel == false:
+		yield (get_tree(), "idle_frame")
+	confirmed = false
+	if cancel == true:
+		cancel = false
+		return 
+	$ConfirmationDialog.hide()
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.leave_server()
+	Global.campaign_save.set_mode(Global, "cruelty")
+	Global.money = 0
+	Global.play_time = 0
+	Global.total_kills = 0
+	Global.total_deaths = 0
+	Global.BONUS_UNLOCK = []
+	Global.implants.purchased_implants = []
+	$Character_Menu / Character_Container.clear_equips()
+	Global.LEVEL_TIMES = []
+	Global.LEVEL_TIMES_RAW = []
+	Global.LEVEL_STIMES = []
+	Global.LEVEL_STIMES_RAW = []
+	Global.HELL_TIMES = []
+	Global.HELL_TIMES_RAW = []
+	Global.HELL_STIMES = []
+	Global.HELL_STIMES_RAW = []
+	Global.LEVEL_PUNISHED = []
+	Global.DEAD_CIVS = []
+	Global.ending_1 = false
+	Global.ending_3 = false
+	Global.hope_discarded = false
+	Global.hell_discovered = false
+	Global.ending_2 = false
+	Global.ending_2 = false
+	Global.death = false
+	Global.water_material.set_shader_param("albedoTex", Global.blue_water)
+	Global.character_mat.set_shader_param("albedoTex", load("res://Textures/Misc/mainguy_clothes.png"))
+	$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellRank_Image.hide()
+	$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / HellSRank_Image.hide()
+	$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Hell_Time.hide()
+	$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Best_Hell_STime.hide()
+	Global.set_soul()
+	for level in range(Global.LEVELS.size()):
+		Global.LEVEL_TIMES.append("N/A")
+		Global.LEVEL_TIMES_RAW.append(99999999)
+		Global.LEVEL_PUNISHED.append(false)
+		Global.LEVEL_STIMES.append("N/A")
+		Global.LEVEL_STIMES_RAW.append(99999999)
+		Global.HELL_TIMES.append("N/A")
+		Global.HELL_TIMES_RAW.append(99999999)
+		Global.HELL_STIMES.append("N/A")
+		Global.HELL_STIMES_RAW.append(99999999)
+	for weapon in range(Global.WEAPONS_UNLOCKED.size()):
+		if weapon > 3:
+			Global.WEAPONS_UNLOCKED[weapon] = false
+		if weapon > 1:
+			Global.CURRENT_WEAPONS[weapon] = false
+	current_weapon_select = 1
+	set_weapon(W_PISTOL)
+	current_weapon_select = 2
+	set_weapon(W_SMG)
+	Global.LEVELS_UNLOCKED = 1
+	Global.CURRENT_LEVEL = 0
+	button_state()
+	for stock in Global.STOCKS.stocks:
+		stock.price = stock.starting_price
+		stock.last_price = stock.starting_price
+		stock.trend = stock.starting_trend
+		stock.owned = 0
+		stock.market_state = 0
+		stock.market_state_time = 0.0
+		stock.market_impulse = 0.0
+		stock.market_impulse_time = 0.0
+		stock.market_collapse_time = 0.0
+		stock.market_collapse_start_price = 0.0
+		stock.permanently_bankrupt = false
+		stock.values.clear()
+	Global.MONEY_ITEMS = []
+	Global.STOCKS.FISH_FOUND = []
+	Global.STOCKS.ORGANS_FOUND = []
+	Global.STOCKS.market_events_applied.clear()
+	Global.STOCKS.save_stocks("user://stocks.save")
+	var goals = Global.get_node_or_null("AchievementGoals")
+	if goals != null:
+		goals.clear_progress()
+	var online_stats = Global.get_node_or_null("Multiplayer/OnlineStats")
+	if online_stats != null:
+		online_stats.clear()
+	if is_instance_valid(Multiplayer.Extensions):
+		Multiplayer.Extensions.reset_campaign_progress()
+	Global.save_game()
+	var empty_marker = File.new()
+	if empty_marker.open(Global.slot_path("crus_online_empty.marker"), File.WRITE) == OK:
+		empty_marker.close()
+	Global.save_slot_selected = false
+	Global.force_save_selector = true
+	get_tree().paused = false
+	Global.goto_scene("res://Cutscenes/Cutscene1.tscn")
+
+
+func _on_ConfirmationDialog_confirmed():
+	confirmed = true
+func _on_Cancel_Pressed():
+	cancel = true
+
+
+func _on_CameraSway_toggled(value):
+	Global.camera_sway = value
+
+
+func _on_Gamma_value_changed(value):
+	Global.screenmat.set_shader_param("gamma", value)
+	Global.gamma = value
+	$Settings / GridContainer / PanelContainer / VBoxContainer / GAMMALABEL.text = "Gamma: " + str(value)
+
+
+func _on_Hiperf_toggled(value):
+	Global.high_performance = value
+	if value:
+		Engine.iterations_per_second = 15
+	else :
+		Engine.iterations_per_second = 30
+
+
+func _on_Timer_toggled(value):
+	Global.timer = value
+
+
+func _on_ResetTimer_pressed():
+	Global.play_time = 0
+
+func _retry_solo(m:int, b:TextureButton):
+	Global.STOCKS.save_stocks("user://stocks.save")
+	$Hover_Panel.hide()
+	get_node("Soul_Rended").hide()
+	if active_element == $Level_End_Grid:
+		active_element.hide()
+		active_element = null
+		if ( not Global.objective_complete and not Global.player.died) or Global.objective_complete:
+			if Global.CURRENT_LEVEL < Global.L_PUNISHMENT:
+				Global.CURRENT_LEVEL -= 1
+		else :
+			get_tree().paused = true
+	menu[START].show()
+	Global.objective_complete = false
+	Global.objectives = 0
+	toggle_menu()
+
+	for w in range(Global.CURRENT_WEAPONS.size()):
+		if w == weapon_1 or w == weapon_2:
+			Global.CURRENT_WEAPONS[w] = true
+		else :
+			Global.CURRENT_WEAPONS[w] = false
+	get_tree().paused = false
+	Multiplayer.game_init(Global.LEVELS[Global.CURRENT_LEVEL])
+
+func _refresh_start_buttons():
+	var buttons = menu[START].get_children()
+	var order = [0, 1, 2, 3, 4, 5] if in_game else [0, 6, 1, 5]
+	var origin = buttons[0].rect_position
+	buttons[0].name = "Unpause" if in_game else "Start"
+	for index in range(buttons.size()):
+		buttons[index].visible = order.has(index)
+	for index in range(order.size()):
+		var button = buttons[order[index]]
+		var cell = Vector2(index, 0)
+		button.rect_position = origin + Vector2(button_size.x * cell.x, button_size.y * cell.y)
+
+func _apply_online_level_lock():
+	if not online_navigation_active or active_menus.empty() or active_menus.back() != menu[LEVEL_SELECT]:
+		return
+	for index in range(level_buttons.size()):
+		var button = level_buttons[index]
+		if button.visible:
+			_restore_level_disabled_visual(index, button)
+			button.disabled = true
+	var start_button = menu[LEVEL_SELECT].get_child(7)
+	if start_button.visible:
+		start_button.disabled = true
+		start_button.texture_disabled = BUTTON_TEXTURES_D[0]
+		start_button.modulate = Color.white
+	for button in page_buttons:
+		if is_instance_valid(button) and button.visible:
+			if not button.has_meta("online_page_disabled_texture"):
+				button.set_meta("online_page_disabled_texture", button.texture_disabled)
+			button.disabled = true
+			button.texture_disabled = BUTTON_TEXTURES_D[0]
+
+func _restore_online_page_buttons():
+	for button in page_buttons:
+		if is_instance_valid(button):
+			button.disabled = false
+			if button.has_meta("online_page_disabled_texture"):
+				button.texture_disabled = button.get_meta("online_page_disabled_texture")
+				button.remove_meta("online_page_disabled_texture")
+
+func _animate_level_sidebar(showing, generation):
+	var panel = $Level_Info_Grid
+	panel.rect_pivot_offset = Vector2(panel.rect_size.x * 0.5, 0)
+	var start_scale = panel.rect_scale.y
+	var target_scale = 1.0 if showing else 0.05
+	if showing:
+		panel.rect_position = online_sidebar_position
+		panel.rect_scale = Vector2(1, 0.05)
+		start_scale = 0.05
+		panel.show()
+	var animation_start_msec = OS.get_ticks_msec()
+	var animation_seconds = ONLINE_NAVIGATION_STEPS * GRID_STEP_SECONDS
+	while (OS.get_ticks_msec() - animation_start_msec) / 1000.0 < animation_seconds:
+		if generation != online_navigation_generation:
+			return
+		var amount = min(1.0, (OS.get_ticks_msec() - animation_start_msec) / (animation_seconds * 1000.0))
+		panel.rect_scale.y = lerp(start_scale, target_scale, amount)
+		yield (get_tree(), "idle_frame")
+	if generation != online_navigation_generation:
+		return
+	panel.rect_scale.y = target_scale
+	if showing:
+		panel.rect_scale = Vector2(1, 1)
+	else:
+		panel.hide()
+		panel.rect_scale = Vector2(1, 1)
+
+func request_close_online_navigation():
+	if not online_navigation_active:
+		return false
+	close_online_navigation()
+	return true
+
+func close_online_navigation():
+	if not online_navigation_active:
+		return
+	online_navigation_generation += 1
+	var generation = online_navigation_generation
+	online_navigation_transitioning = true
+	var online_menu = get_tree().get_nodes_in_group("MultiplayerMenu")[0]
+	var center = online_menu.get_node("CenterContainer")
+	if center.visible or online_menu.menu_animating:
+		var closing = online_menu.disable_menu()
+		if closing is GDScriptFunctionState:
+			yield (closing, "completed")
+	else:
+		online_menu.disable_menu(true)
+	if generation != online_navigation_generation:
+		return
+	if online_sidebar_was_visible:
+		active_element = $Level_Info_Grid
+		var showing = _animate_level_sidebar(true, generation)
+		if showing is GDScriptFunctionState:
+			yield (showing, "completed")
+	if generation != online_navigation_generation:
+		return
+	online_navigation_active = false
+	online_navigation_transitioning = false
+	online_sidebar_was_visible = false
+	for level_button in menu[LEVEL_SELECT].get_children():
+		level_button.disabled = false
+	var online_button = menu[LEVEL_SELECT].get_child(1)
+	if online_button.has_meta("display_name"):
+		online_button.remove_meta("display_name")
+	online_button.texture_normal = BUTTON_TEXTURES.back()
+	_refresh_start_buttons()
+	button_state()
+	_restore_online_page_buttons()
+	var start_button = menu[LEVEL_SELECT].get_child(7)
+	if not _client_mission_button(start_button):
+		start_button.disabled = false
+	_apply_counterop_level_lock()
+	_apply_competitive_start_gate()
+
+func _reset_online_navigation_state():
+	online_navigation_generation += 1
+	online_navigation_active = false
+	online_navigation_transitioning = false
+	online_sidebar_was_visible = false
+	var online_button = menu[LEVEL_SELECT].get_child(1)
+	if online_button.has_meta("display_name"):
+		online_button.remove_meta("display_name")
+	online_button.texture_normal = BUTTON_TEXTURES.back()
+	_restore_online_page_buttons()
+	$Level_Info_Grid.rect_scale = Vector2(1, 1)
+
+func open_online_destination(level_select):
+	_hide_online_navigation()
+	if is_instance_valid(goals_screen):
+		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
+	if level_select:
+		_ensure_counterop_overlay()
+	_close_online_panel()
+	if active_element != null:
+		active_element.hide()
+	active_element = null
+	menu_changing = false
+	in_game = false
+	for entry in menu:
+		entry.show()
+		for button in entry.get_children():
+			button.hide()
+	menu[START].show()
+	active_menus = [menu[START]]
+	for button in menu[START].get_children():
+		button.disabled = false
+	_refresh_start_buttons()
+	show()
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if level_select:
+		_on_Start_Button_Pressed(START, menu[START].get_child(0))
+
+var _waiting_label
+var goals_screen
+var statistics_screen
+var news_panel
+
+func _close_online_panel():
+	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
+		panel.disable_menu()
+
+func _update_waiting_menu():
+	var waiting = Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and not in_game and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if is_instance_valid(campaign_label):
+		campaign_label.visible = campaign_pages.size() > 1 and not waiting and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if not is_instance_valid(_waiting_label):
+		if not waiting:
+			return
+		_waiting_label = Label.new()
+		_waiting_label.name = "WaitingForHost"
+		_waiting_label.text = "Waiting for the host\nto start a mission"
+		_waiting_label.align = Label.ALIGN_CENTER
+		_waiting_label.valign = Label.VALIGN_CENTER
+		_waiting_label.rect_size = Vector2(800, 120)
+		_waiting_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var font = DynamicFont.new()
+		font.font_data = load("res://Fonts/gamefont(1).ttf")
+		font.size = 20
+		_waiting_label.add_font_override("font", font)
+		add_child(_waiting_label)
+	var online_open = online_navigation_active
+	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
+		if panel.is_visible_in_tree():
+			online_open = true
+			break
+	_waiting_label.visible = waiting and not online_open
+	if waiting:
+		_waiting_label.rect_position = (get_viewport_rect().size / rect_scale - _waiting_label.rect_size) * 0.5
+		$Level_Info_Grid.hide()
+		for button in menu[LEVEL_SELECT].get_children():
+			if _client_mission_button(button):
+				button.hide()
+
+var _navigation_generation = 0
+
+func _client_mission_button(button):
+	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START, B_PREV_LEVELS, B_NEXT_LEVELS]
+
+func _hide_online_navigation():
+	_navigation_generation += 1
+	_reset_online_navigation_state()
+	menu_changing = false
+	for entry in menu:
+		entry.hide()
+	for panel in [$Level_Info_Grid, $Character_Menu, $Stock_Menu, $Settings, $Hover_Panel]:
+		panel.hide()
+	if is_instance_valid(goals_screen):
+		goals_screen.go()
+	if is_instance_valid(statistics_screen):
+		statistics_screen.go()
+	if is_instance_valid(news_panel):
+		news_panel.go()
+	if is_instance_valid(_waiting_label):
+		_waiting_label.hide()
+	active_element = null
+	active_menus = [menu[START]]

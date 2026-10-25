@@ -1,0 +1,4 @@
+{
+  "definition": "f2500.tres",
+  "point_classes": ["f2500_point_class.tres", "f2500_swat_point_class.tres"]
+}

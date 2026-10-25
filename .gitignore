@@ -1,2 +1,3 @@
-dist/
+development/artifacts/
+development/backups/
 __pycache__/

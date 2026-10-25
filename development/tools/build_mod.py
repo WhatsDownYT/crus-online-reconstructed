@@ -1,0 +1,107 @@
+import argparse
+import json
+from pathlib import Path
+import re
+import zipfile
+import subprocess
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--base-package', type=Path, required=True)
+parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--debug', action='store_true')
+args = parser.parse_args()
+root = Path(__file__).resolve().parents[2]
+subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(root / 'development/tools/build_discord.ps1')], check=True)
+prefix = 'MOD_CONTENT/CruS Online/'
+excluded = {'.git', 'development', 'docs', 'examples', '__pycache__'}
+runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.mesh', '.stex', '.sample', '.json', '.png', '.jpg', '.jpeg', '.webp', '.svg',
+                    '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader'}
+if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
+    raise SystemExit('Choose an output folder separate from the installed mod.')
+with zipfile.ZipFile(args.base_package) as base:
+    entries = {name: base.read(name) for name in base.namelist()
+               if not name.endswith('/') and not name.startswith(prefix)
+               and not name.startswith(('.import/greyface1.png-', '.import/greyface2.png-'))}
+    entries.pop('Menu/Main_Menu.tscn.remap', None)
+    entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remapped/Switch.gd"\n'
+    for script in (root / 'compatibility/modbase').glob('*.gd'):
+        if script.name == 'Settings_Grid.gd':
+            continue
+        entries['MOD_CONTENT/CruS Mod Base/scripts/' + script.name + '.remap'] = ('[remap]\npath="res://' + prefix + 'compatibility/modbase/' + script.name + '"\n').encode()
+    entries['Menu/Settings_Grid.gd.remap'] = ('[remap]\npath="res://' + prefix + 'compatibility/modbase/Settings_Grid.gd"\n').encode()
+    for source, target in [('sky_rotator.gd', 'sky_rotator.gd'), ('Night_Cycle.gd', 'Night_Cycle.gd')]:
+        entries['MOD_CONTENT/CruS Mod Base/scripts/' + source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remapped/' + target + '"\n').encode()
+    for source, target in [('Menu/Character_interface/Menu.gd', 'Character_interface/Menu.gd'), ('Stocks.gd', 'Stocks.gd'), ('Scripts/Implants.gd', 'Implants.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+        entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remapped/' + target + '"\n').encode()
+    for path in root.rglob('*'):
+        relative = path.relative_to(root)
+        if not path.is_file() or any(part in excluded for part in relative.parts):
+            continue
+        if relative.parts[0] == 'maps' and relative.name not in ('crus_online_lobby.tscn', 'respawn_point.tscn'):
+            continue
+        if path.suffix.lower() in runtime_suffixes or relative.as_posix() == 'discord/CruSDiscord.exe':
+            entries[prefix + relative.as_posix()] = path.read_bytes()
+    # Base-game remaps can still point at paths from an earlier source layout.
+    # Resolve those targets against the runtime files in this package.
+    by_name = {}
+    for name in entries:
+        if name.startswith(prefix):
+            by_name.setdefault(Path(name).name.lower(), []).append(name)
+    for name, data in list(entries.items()):
+        if not name.endswith('.remap'):
+            continue
+        value = data.decode('utf-8-sig')
+        for target in re.findall(r'path="res://([^"]+)"', value):
+            if target.startswith(prefix) and target not in entries:
+                matches = by_name.get(Path(target).name.lower(), [])
+                if len(matches) == 1:
+                    value = value.replace(target, matches[0])
+        entries[name] = value.encode()
+    for name, data in entries.items():
+        if name.endswith('.remap'):
+            for target in re.findall(r'path="res://([^"]+)"', data.decode('utf-8-sig')):
+                if target.startswith(prefix) and target not in entries:
+                    raise SystemExit(f'Missing remap target: {name} -> {target}')
+    for path in root.rglob('*.import'):
+        relative = path.relative_to(root)
+        if any(part in excluded for part in relative.parts):
+            continue
+        if relative.parts[0] == 'maps':
+            continue
+        archive_name = prefix + relative.as_posix()
+        original_name = archive_name.removesuffix('.import')
+        if archive_name not in base.namelist():
+            former = prefix + path.name
+            if former in base.namelist():
+                original = base.read(former).decode('utf-8')
+                entries[archive_name] = re.sub(r'^source_file="[^"]+"', 'source_file="res://' + original_name + '"', original, flags=re.MULTILINE).encode()
+        if original_name in base.namelist() and original_name in entries:
+            if base.read(original_name) != entries[original_name]:
+                raise SystemExit(f'Asset changed and needs reimporting: {original_name}')
+        if archive_name in base.namelist():
+            entries[archive_name] = base.read(archive_name)
+        for imported in re.findall(r'^path(?:\.s3tc)?="res://(\.import/[^"]+)"', entries[archive_name].decode('utf-8'), re.MULTILINE):
+            if imported not in entries:
+                raise SystemExit(f'Missing imported asset: {archive_name} -> {imported}')
+entries[prefix + 'core/build_flags.gd'] = ('extends Reference\n\nconst DEBUG = ' + ('true' if args.debug else 'false') + '\n').encode()
+for required in ('branding/logo.png', 'assets/interface/crus_online_logo.png', 'assets/implants/surveillance_eyecam.png', 'assets/implants/surveillance_eyecam_plus.png'):
+    if prefix + required not in entries:
+        raise SystemExit(f'Missing required asset: {required}')
+args.output.mkdir(parents=True, exist_ok=True)
+temporary = args.output / 'mod.zip.tmp'
+with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED) as output:
+    for name, data in sorted(entries.items()):
+        output.writestr(name, data)
+with zipfile.ZipFile(temporary) as output:
+    if output.testzip() is not None:
+        raise SystemExit('Archive verification failed.')
+    for name, data in entries.items():
+        if output.read(name) != data:
+            raise SystemExit(f'Archive content mismatch: {name}')
+temporary.replace(args.output / 'mod.zip')
+version = re.search(r'var version = "([^"]+)"', (root / 'network/multiplayer.gd').read_text()).group(1)
+metadata = {'author': 'TriggeredP', 'description': 'multiplayer',
+            'init': 'res://' + prefix + 'core/multiplayer_init.gd', 'name': 'CruS Online', 'version': version + ('-debug' if args.debug else ''), 'build': 'debug' if args.debug else 'release',
+            'dependencies': ['CruS Mod Base']}
+(args.output / 'mod.json').write_text(json.dumps(metadata), encoding='utf-8')
+print(f'BUILD_RESULT files={len(entries)} output={args.output.resolve()}')

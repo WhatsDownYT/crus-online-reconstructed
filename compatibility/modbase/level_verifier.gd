@@ -23,14 +23,7 @@ func _init():
 func check_json(m: Dictionary) -> Array:
 	var errors = []
 	if m.has("required_implants"):
-		if not m.required_implants is Array:
-			errors.append("Property 'required_implants' must be an array of custom implant IDs")
-		else:
-			var registry = Global.get_node_or_null("ImplantRegistry")
-			for implant_id in m.required_implants:
-				var definition = registry.definition_for(str(implant_id)) if registry != null else null
-				if definition == null or not definition.discoverable or str(definition.source_level) != str(m.get("name", "")):
-					errors.append("Missing reciprocal discoverable implant dependency: " + str(implant_id))
+		errors.append("Custom implant dependencies are no longer supported")
 	if m.has("required_weapons"):
 		if not m.required_weapons is Array:
 			errors.append("Property 'required_weapons' must be an array of custom weapon IDs")

@@ -2,7 +2,7 @@ extends KinematicBody
 
 
 
-const Targeting = preload("res://MOD_CONTENT/CruS Online/EnemyTargeting.gd")
+const Targeting = preload("res://MOD_CONTENT/CruS Online/gameplay/enemy_targeting.gd")
 
 onready var NetworkBridge = Global.get_node("Multiplayer/NetworkBridge")
 
