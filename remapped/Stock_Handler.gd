@@ -19,7 +19,7 @@ const MARKET_IMPACT_SECONDS = 20.0
 
 # Each eligible built-in mission has disclosed stock impacts, realized once per save.
 const MISSION_MARKET_EVENTS = {
-0: {"mission": "Cruelty Squad Headquarters", "outlook": "The death of Cruelty Squad's CEO will bring new leadership, sending the company's stock soaring while Security Redefined suffers.", "effects": [
+0: {"mission": "Cruelty Squad Headquarters", "outlook": "The death of Cruelty Squad's CEO will bring new leadership, sending the company's stock soaring while Security, Redefined suffers.", "effects": [
 		{"ticker": "CRUS", "percent": 200},
 		{"ticker": "SCRD", "percent": -35}]},
 	1: {"mission": "Pharmakokinetiks", "outlook": "The internal cleanup will slightly benefit Cruelty Squad, while the biological-currency scandal prompts a small G-Tech sell-off.", "effects": [
@@ -41,19 +41,19 @@ const MISSION_MARKET_EVENTS = {
 		{"ticker": "CRUS", "percent": 18},
 		{"ticker": "CSFT", "percent": 12},
 		{"ticker": "PIHO", "percent": -8}]},
-	6: {"mission": "Apartment Atrocity", "outlook": "The GamesGames boom will end in bankruptcy. The hunt for Cruelty Squad's operative will benefit Security Redefined, while the internal conflict weighs on Cruelty Squad.", "effects": [
+	6: {"mission": "Apartment Atrocity", "outlook": "The GamesGames boom will end in bankruptcy. The hunt for Cruelty Squad's operative will benefit Security, Redefined, while the internal conflict weighs on Cruelty Squad.", "effects": [
 		{"ticker": "SCRD", "percent": 14},
 		{"ticker": "GAGA", "percent": -100},
 		{"ticker": "CRUS", "percent": -12}]},
-	7: {"mission": "Seaside Shock", "outlook": "The government contract will benefit Cruelty Squad, and removing the seasteaders will favor established shipping. Security Redefined will lose a little ground.", "effects": [
+	7: {"mission": "Seaside Shock", "outlook": "The government contract will benefit Cruelty Squad, and removing the seasteaders will favor established shipping. Security, Redefined will lose a little ground.", "effects": [
 		{"ticker": "CRUS", "percent": 18},
 		{"ticker": "PWR ", "percent": 12},
 		{"ticker": "SCRD", "percent": -8}]},
-	8: {"mission": "Bog Business", "outlook": "Safer fracking operations and supply routes will benefit Power Monger Shipping and Godhead Heavy Industries. Security Redefined will see a slight loss.", "effects": [
+	8: {"mission": "Bog Business", "outlook": "Safer fracking operations and supply routes will benefit Power Monger Shipping and Godhead Heavy Industries. Security, Redefined will see a slight loss.", "effects": [
 		{"ticker": "PWR ", "percent": 16},
 		{"ticker": "GDHD", "percent": 10},
 		{"ticker": "SCRD", "percent": -7}]},
-	9: {"mission": "Casino Catastrophe", "outlook": "The casino owner's death will cause severe losses for Fatberg Casino and a smaller loss for Security Redefined. Completing the contract will slightly benefit Cruelty Squad.", "effects": [
+	9: {"mission": "Casino Catastrophe", "outlook": "The casino owner's death will cause severe losses for Fatberg Casino and a smaller loss for Security, Redefined. Completing the contract will slightly benefit Cruelty Squad.", "effects": [
 		{"ticker": "CRUS", "percent": 8},
 		{"ticker": "FBCA", "percent": -64},
 		{"ticker": "SCRD", "percent": -8}]},
@@ -61,7 +61,7 @@ const MISSION_MARKET_EVENTS = {
 		{"ticker": "SCRD", "percent": 14},
 		{"ticker": "GDHD", "percent": -12},
 		{"ticker": "FBCA", "percent": -10}]},
-	11: {"mission": "Office", "outlook": "Destabilizing the security hierarchy will cause major losses for Cruelty Squad and Security Redefined. Pure Optics will gain as personal defense becomes more valuable.", "effects": [
+	11: {"mission": "Office", "outlook": "Destabilizing the security hierarchy will cause major losses for Cruelty Squad and Security, Redefined. Pure Optics will gain as personal defense becomes more valuable.", "effects": [
 		{"ticker": "PURE", "percent": 12},
 		{"ticker": "CRUS", "percent": -44},
 		{"ticker": "SCRD", "percent": -25}]},
@@ -69,7 +69,7 @@ const MISSION_MARKET_EVENTS = {
 		{"ticker": "ALL", "percent": 99}]},
 	13: {"mission": "Darkworld", "outlook": "Cruelty Squad will suffer a slight loss after spending resources on a redundant, unusually dangerous contract.", "effects": [
 		{"ticker": "CRUS", "percent": -6}]},
-	14: {"mission": "Alpine Hospitality", "outlook": "Removing executives of competing firms will benefit Cruelty Squad and Godhead Heavy Industries, while Security Redefined loses ground.", "effects": [
+	14: {"mission": "Alpine Hospitality", "outlook": "Removing executives of competing firms will benefit Cruelty Squad and Godhead Heavy Industries, while Security, Redefined loses ground.", "effects": [
 		{"ticker": "CRUS", "percent": 18},
 		{"ticker": "GDHD", "percent": 10},
 		{"ticker": "SCRD", "percent": -12}]},
@@ -77,7 +77,7 @@ const MISSION_MARKET_EVENTS = {
 		{"ticker": "CRUS", "percent": 8},
 		{"ticker": "PWR ", "percent": 8},
 		{"ticker": "GDHD", "percent": -42}]},
-	16: {"mission": "Neuron Activator", "outlook": "The collapse of the redevelopment venture will hurt Godhead Heavy Industries, while violence in the arcology increases demand for Security Redefined.", "effects": [
+	16: {"mission": "Neuron Activator", "outlook": "The collapse of the redevelopment venture will hurt Godhead Heavy Industries, while violence in the arcology increases demand for Security, Redefined.", "effects": [
 		{"ticker": "SCRD", "percent": 12},
 		{"ticker": "GDHD", "percent": -15}]},
 	18: {"mission": "Trauma Loop", "outlook": "???", "effects": [
@@ -292,7 +292,7 @@ func _enter_tree():
 	new_stock = stock.new()
 	new_stock.ticker = "SCRD"
 	new_stock.description = "Not much is known about this security company, the workers seem a bit off and don't seem to be able to talk. Rabid fanbase."
-	new_stock.s_name = "Security Redefined"
+	new_stock.s_name = "Security, Redefined"
 	new_stock.max_price = 320
 	new_stock.price = 153
 	new_stock.volatility = 7
@@ -1998,6 +1998,8 @@ func apply_mission_market_event(level_index:int)->void:
 	save_stocks()
 
 func implant_company_ticker(implant)->String:
+	if implant.i_name == "Surveillance Eyecam PRO MAX":
+		return "SCRD"
 	var ticker = "CSFT"
 	if implant.head:
 		ticker = "PURE"

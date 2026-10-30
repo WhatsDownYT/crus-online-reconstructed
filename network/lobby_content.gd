@@ -37,6 +37,22 @@ func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	Bridge.register_rpcs(self, [["content_offer", Bridge.PERMISSION.SERVER], ["content_request", Bridge.PERMISSION.ALL], ["content_chunk", Bridge.PERMISSION.SERVER], ["content_cancel", Bridge.PERMISSION.ALL]])
 	create_popup()
+	call_deferred("show_install_error")
+
+func show_install_error():
+	var path = "user://online-content-error.txt"
+	var file = File.new()
+	if not file.file_exists(path) or file.open(path, File.READ) != OK:
+		return
+	var message = file.get_as_text().strip_edges()
+	file.close()
+	Directory.new().remove(path)
+	print("[CruS content] ", message)
+	status_label.text = message
+	yes_button.disabled = true
+	Multiplayer.hide_connection_screen()
+	popup.popup_centered()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func create_popup():
 	var layer = CanvasLayer.new()
@@ -293,6 +309,7 @@ puppet func content_offer(sender, value):
 	progress.value = 0
 	yes_button.disabled = false
 	popup.rect_scale = Vector2(Global.resolution[0] / 1280, Global.resolution[1] / 720)
+	Multiplayer.hide_connection_screen()
 	popup.popup_centered()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -423,27 +440,6 @@ func install_content():
 			if metadata.get("name") != group.name or str(metadata.get("version", "")) != group.version:
 				fail("Downloaded mod metadata does not match the host.")
 				return
-	var moved = []
-	var backups = []
-	var directory = Directory.new()
-	for group in incoming.groups:
-		var relative = group.kind + "/" + group.folder
-		var target = "user://" + relative
-		var source = staging_root() + "/" + relative
-		var backup = staging_root() + "/previous/" + relative
-		directory.make_dir_recursive(target.get_base_dir())
-		if directory.dir_exists(target):
-			directory.make_dir_recursive(backup.get_base_dir())
-			if directory.rename(target, backup) != OK:
-				rollback(moved, backups)
-				fail("Cannot replace the installed content. No changes were kept.")
-				return
-			backups.append([backup, target])
-		if directory.rename(source, target) != OK:
-			rollback(moved, backups)
-			fail("Cannot install content. Previous files have been restored.")
-			return
-		moved.append([target, source])
 	var enabled = Multiplayer.Extensions.read_json("user://enabled_mods.json")
 	for group in incoming.groups:
 		if group.kind == "mods":
@@ -453,7 +449,6 @@ func install_content():
 	var file = File.new()
 	var enabled_path = staging_root() + "/enabled_mods.json"
 	if file.open(enabled_path, File.WRITE) != OK:
-		rollback(moved, backups)
 		fail("Cannot update the enabled mod list.")
 		return
 	file.store_string(JSON.print(enabled))
@@ -465,48 +460,49 @@ func install_content():
 		if not saved_enabled.has(name) or saved_enabled[name] != enabled[name]:
 			enabled_matches = false
 	if write_error != OK or not enabled_matches:
-		rollback(moved, backups)
 		fail("Cannot save the enabled mod list.")
 		return
-	var enabled_backup = staging_root() + "/previous-enabled-mods.json"
-	var had_enabled = File.new().file_exists("user://enabled_mods.json")
-	if had_enabled and directory.rename("user://enabled_mods.json", enabled_backup) != OK:
-		rollback(moved, backups)
-		fail("Cannot replace the enabled mod list.")
-		return
-	if directory.rename(enabled_path, "user://enabled_mods.json") != OK:
-		if had_enabled:
-			directory.rename(enabled_backup, "user://enabled_mods.json")
-		rollback(moved, backups)
-		fail("Cannot install the enabled mod list.")
-		return
-	preserve_staging = true
 	destination["created"] = OS.get_unix_time()
 	destination["fingerprint"] = JSON.print({"protocol": 1, "groups": incoming.groups}).sha256_text()
-	if file.open(RESUME_FILE, File.WRITE) != OK:
-		fail("Content installed, but automatic rejoining could not be saved. Reopen the game and join manually.")
+	if file.open(staging_root() + "/online-rejoin.json", File.WRITE) != OK:
+		fail("Cannot save the automatic rejoin details.")
 		return
 	file.store_string(JSON.print(destination))
 	file.close()
+	var helper = File.new()
+	if helper.open("res://MOD_CONTENT/CruS Online/network/install_content.ps1", File.READ) != OK:
+		fail("Cannot load the content installer.")
+		return
+	var helper_script = helper.get_as_text()
+	helper.close()
+	var helper_path = staging_root() + "/install_content.ps1"
+	if file.open(helper_path, File.WRITE) != OK:
+		fail("Cannot prepare the content installer.")
+		return
+	file.store_string(helper_script)
+	file.close()
+	var groups = []
+	for group in incoming.groups:
+		groups.append(group.kind + "/" + group.folder)
+	var job = {"pid": OS.get_process_id(), "root": ProjectSettings.globalize_path("user://"), "staging": ProjectSettings.globalize_path(staging_root()), "groups": groups, "executable": OS.get_executable_path(), "arguments": OS.get_cmdline_args()}
+	var job_path = staging_root() + "/install-job.json"
+	if file.open(job_path, File.WRITE) != OK:
+		fail("Cannot prepare the content installation job.")
+		return
+	file.store_string(JSON.print(job))
+	file.close()
+	preserve_staging = true
 	progress.value = 100
-	status_label.text = "Installed. Restarting and rejoining the lobby..."
+	status_label.text = "Verified. Restarting to install and rejoin..."
 	installing = true
 	call_deferred("restart_game")
 
-func rollback(moved, backups):
-	var directory = Directory.new()
-	moved.invert()
-	backups.invert()
-	for pair in moved:
-		directory.rename(pair[0], pair[1])
-	for pair in backups:
-		directory.rename(pair[0], pair[1])
-
 func restart_game():
-	var process = OS.execute(OS.get_executable_path(), OS.get_cmdline_args(), false)
+	var process = OS.execute("powershell.exe", ["-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ProjectSettings.globalize_path(staging_root() + "/install_content.ps1"), "-JobPath", ProjectSettings.globalize_path(staging_root() + "/install-job.json")], false)
 	if process < 0:
 		installing = false
-		fail("Content installed. Please restart the game to rejoin.")
+		preserve_staging = false
+		fail("Cannot start the content installer. Your existing files are unchanged.")
 		return
 	get_tree().quit()
 
@@ -569,10 +565,12 @@ func fail(message):
 	incoming.clear()
 	status_label.text = message
 	yes_button.disabled = true
+	Multiplayer.hide_connection_screen()
 	popup.popup_centered()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Bridge.n_rpc_id(self, Bridge.get_host_id(), "content_cancel")
 	Multiplayer.leave_server()
+	Multiplayer.hide_connection_screen()
 	popup.popup_centered()
 
 master func content_cancel(sender):

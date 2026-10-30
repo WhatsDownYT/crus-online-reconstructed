@@ -281,6 +281,8 @@ func _evaluate_global_conditions(earned):
 		changed = _award_id("suffering_for_aeons", earned) or changed
 	if _all_mastery_condition("extravagance"):
 		changed = _award_id("beauty_of_life", earned) or changed
+	if _all_mastery_condition("stripped"):
+		changed = _award_id("divestation", earned) or changed
 	if _triagons_complete():
 		changed = _award_id("the_unholy_trinity", earned) or changed
 	if _all_stock_assets_found("part"):

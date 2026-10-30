@@ -46,7 +46,7 @@ func get_type():
 	return type
 
 func player_use():
-	if not Global.hope_discarded:
+	if not Global.hope_discarded and not DoorPolicy.competitive(Global.get_node("Multiplayer")):
 		Global.player.UI.notify("zvhvhivj jidv ijvdkjaeui djvhduhekj vduihkeu", Color(1, 0, 0))
 	else:
 		NetworkBridge.request_host(self, "request_use", [DoorPolicy.capture(Global)])
@@ -56,7 +56,7 @@ master func request_use(id, spiritual_state):
 		return
 	id = NetworkBridge.request_sender(id)
 	var actor = NetworkBridge.get_peer_actor(id)
-	if actor == null or not DoorPolicy.allows(spiritual_state, "hope_discarded", actor.global_transform.origin, global_transform.origin):
+	if actor == null or not DoorPolicy.allows(spiritual_state, "hope_discarded", actor.global_transform.origin, global_transform.origin, DoorPolicy.competitive(Global.get_node("Multiplayer"))):
 		return
 
 	isDestroyed = true

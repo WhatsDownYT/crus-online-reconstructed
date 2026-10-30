@@ -7,6 +7,7 @@ static func resolve(catalog, names):
 	var slots = ["head", "torso", "arms", "legs"]
 	var result = {
 		"stealth": false,
+		"shrink": false,
 		"camo": 0.0,
 		"cursed_torch": false,
 		"multiplayer_camo": false,
@@ -30,6 +31,7 @@ static func resolve(catalog, names):
 			if implant.i_name == names[index] and implant.get(slots[index]):
 				found = true
 				if index == 0:
+					result.shrink = implant.shrink
 					result.eyecam_pro = implant.i_name == "Surveillance Eyecam PRO MAX"
 				if index == 1:
 					result.stealth = implant.stealth

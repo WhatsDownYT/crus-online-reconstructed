@@ -16,6 +16,7 @@ import wave
 parser = argparse.ArgumentParser()
 parser.add_argument('--godot', required=True)
 parser.add_argument('--lan', action='store_true', help='Also run three real ENet processes on loopback')
+parser.add_argument('--lan-only', action='store_true', help='Run only the three-process ENet check')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
@@ -27,8 +28,12 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
         shutil.copy2(library, project / library.name)
     mod = project / 'MOD_CONTENT' / 'CruS Online'
     mod.mkdir(parents=True)
+    (mod / 'core' / 'build_flags.gd').parent.mkdir(parents=True, exist_ok=True)
+    (mod / 'core' / 'build_flags.gd').write_text('extends Reference\nconst DEBUG = true\n', encoding='utf-8')
     for name in ('core/campaign_save.gd', 'gameplay/deathmatch.gd', 'gameplay/counter_op.gd', 'network/steam_network.gd', 'network/network_metrics.gd', 'network/network_snapshots.gd', 'network/network_bridge.gd', 'gameplay/friendly_fire.gd', 'gameplay/enemy_targeting.gd', 'gameplay/implant_network.gd', 'gameplay/player_collision_proxy.gd', 'network/session_flow.gd', 'network/discord_presence.gd', 'voice/voice_chat.gd', 'voice/voice_codec.gd', 'interface/voice_roster.gd', 'interface/voice_settings.gd', 'interface/difficulty_label.gd', 'gameplay/player_action_policy.gd', 'gameplay/prop_interaction_policy.gd', 'gameplay/mission_exit_policy.gd', 'core/profile_store.gd', 'interface/floating_panel.gd', 'gameplay/spiritual_door_policy.gd', 'network/cancer_segment.gd'):
-        shutil.copy2(root / name, mod / name)
+        destination = mod / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / name, destination)
 
 
     integration = ('voice/voice_chat.gd', 'gameplay/surveillance_eyecam.gd', 'gameplay/eyecam_hijack.gd', 'gameplay/eyecam_readout.gd', 'gameplay/pneumatic_merit_pump.gd', 'gameplay/merit_pump_pickup.gd', 'gameplay/merit_pump_money.gd', 'network/multiplayer.gd', 'network/multiplayer_player.gd', 'network/steam_lobby.gd', 'interface/multiplayer_menu.gd', 'network/players.gd', 'interface/Menu.gd', 'interface/Stats.gd', 'interface/chat_box.gd',
@@ -71,6 +76,17 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
                           '[resource]\nformat = 1\nmix_rate = 22050\ndata = PoolByteArray( 0, 0 )\n', encoding='utf-8')
         asset.with_name(asset.name + '.import').write_text('[remap]\nimporter="wav"\n'
             'type="AudioStreamSample"\npath="res://' + sample.relative_to(project).as_posix() + '"\n', encoding='utf-8')
+    # Pull in script dependencies added since this fixture was first written.
+    pending = list(mod.rglob('*.gd'))
+    while pending:
+        script = pending.pop()
+        for resource in re.findall(r'preload\("res://MOD_CONTENT/CruS Online/([^\"]+\.gd)"\)', script.read_text(encoding='utf-8')):
+            dependency = mod / resource
+            if dependency.exists() or not (root / resource).exists():
+                continue
+            dependency.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / resource, dependency)
+            pending.append(dependency)
     (project / 'project.godot').write_text(
         'config_version=4\n[application]\nconfig/name="CruS Transport Tests"\nrun/main_scene="res://test.tscn"\n'
         '[autoload]\nGlobal="*res://global.gd"\n'
@@ -90,15 +106,16 @@ with tempfile.TemporaryDirectory(prefix='crus-network-test-') as directory:
     (project / 'test.tscn').write_text('[gd_scene load_steps=2 format=2]\n'
         '[ext_resource path="res://test.gd" type="Script" id=1]\n'
         '[node name="Tests" type="Node"]\nscript = ExtResource( 1 )\n', encoding='utf-8')
-    result = subprocess.run([str(test_engine), '--no-window', '--path', str(project),
-                             '--quit'],
-                            capture_output=True, text=True, timeout=45)
-    output = result.stdout + result.stderr
-    print(output)
-    print('Engine exit:', result.returncode)
-    if result.returncode or 'TRANSPORT_TEST_RESULT failures=0' not in output or 'ERROR:' in output:
-        raise SystemExit(1)
-    if args.lan:
+    if not args.lan_only:
+        result = subprocess.run([str(test_engine), '--no-window', '--path', str(project),
+                                 '--quit'],
+                                capture_output=True, text=True, timeout=45)
+        output = result.stdout + result.stderr
+        print(output)
+        print('Engine exit:', result.returncode)
+        if result.returncode or 'TRANSPORT_TEST_RESULT failures=0' not in output or 'ERROR:' in output:
+            raise SystemExit(1)
+    if args.lan or args.lan_only:
         shutil.copy2(root / 'development/tests/lan_test.gd', project / 'lan_test.gd')
         (project / 'lan.tscn').write_text('[gd_scene load_steps=2 format=2]\n'
             '[ext_resource path="res://lan_test.gd" type="Script" id=1]\n'

@@ -18,16 +18,17 @@ func _ready():
 	scroll.add_child(preload("res://MOD_CONTENT/CruS Online/interface/voice_roster.gd").new())
 	hide()
 
-func set_size_ratio():
+func set_size_ratio(_ratio = 1.0):
 	sizeRatio = 20
-	
-	$VBoxContainer/PanelContainer/RichTextLabel.get_font("normal_font").size = sizeRatio
-	$VBoxContainer/Label.get_font("font").size = sizeRatio
+	for item in [[$VBoxContainer/PanelContainer/RichTextLabel, "normal_font"], [$VBoxContainer/Label, "font"]]:
+		var font = item[0].get_font(item[1]).duplicate()
+		font.size = sizeRatio
+		item[0].add_font_override(item[1], font)
 
 func open_stats(type):
 	playersList.clear()
 	show()
-	set_size_ratio()
+	set_size_ratio(get_parent().native_panel_ratio)
 	fit_in_parent()
 	$"../OpenStats".button_disable()
 	$"../CloseStats".button_enable()

@@ -98,7 +98,8 @@ func _eligible(peer, distance):
 func _center(peer):
 	var avatar = mp.players[peer].get("puppet")
 	if is_instance_valid(avatar):
-		return avatar.global_transform.origin + Vector3.UP * (0.65 if avatar.playerCrouch else 1.0)
+		var height = 1.3 if avatar.implant_state.get("golem_exosystem", false) else (0.65 if avatar.playerCrouch else 1.0)
+		return avatar.global_transform.origin + Vector3.UP * height * (0.1 if avatar.implant_state.get("shrink", false) else 1.0)
 	return bridge.get_peer_actor(peer).global_transform.origin + Vector3.UP
 
 func _visible(camera, peer):
@@ -132,15 +133,23 @@ func _bounds(camera, peer):
 	var avatar = mp.players[peer].get("puppet")
 	if not is_instance_valid(avatar):
 		return Rect2()
-	var skeleton = avatar.get_node("Puppet/PlayerModel/Armature/Skeleton")
+	var instances = []
+	if avatar.implant_state.get("golem_exosystem", false) and is_instance_valid(avatar._golem_model):
+		_collect_visible_meshes(avatar._golem_model, instances)
+	else:
+		var body = avatar.get_node("Puppet/PlayerModel/Armature/Skeleton")
+		for path in ["Head_Mesh", "Torso_Mesh", "Head/glasses"]:
+			var instance = body.get_node_or_null(path)
+			if instance != null: instances.append(instance)
 	var bounds = Rect2()
 	var found = false
-	for path in ["Head_Mesh", "Torso_Mesh", "Head/glasses"]:
-		var instance = skeleton.get_node(path)
+	for instance in instances:
 		if not instance.is_visible_in_tree() or instance.mesh == null:
 			continue
+		var skeleton = instance.get_node_or_null(instance.skeleton) if not instance.skeleton.is_empty() else null
+		if not skeleton is Skeleton: skeleton = null
 		var poses = []
-		if instance.skin != null:
+		if instance.skin != null and skeleton != null:
 			for bind in range(instance.skin.get_bind_count()):
 				var bone = instance.skin.get_bind_bone(bind)
 				if bone < 0:
@@ -171,6 +180,10 @@ func _bounds(camera, peer):
 				else:
 					bounds = bounds.expand(point)
 	return bounds.grow(RECT_PADDING) if found else Rect2()
+
+func _collect_visible_meshes(node, meshes):
+	if node is MeshInstance and node.is_visible_in_tree(): meshes.append(node)
+	for child in node.get_children(): _collect_visible_meshes(child, meshes)
 
 func _on_screen(bounds):
 	return bounds.size.x > 0 and bounds.size.y > 0 and Rect2(Vector2.ZERO, get_viewport_rect().size).intersects(bounds)
@@ -429,7 +442,7 @@ func _store_scan_data(peer, data):
 	if not typeof(data.get("money")) in [TYPE_INT, TYPE_REAL] or not typeof(data.get("health")) in [TYPE_INT, TYPE_REAL] or typeof(data.get("death_mode")) != TYPE_BOOL:
 		return false
 	for weapon_id in data.weapons:
-		if weapon_id != null and (typeof(weapon_id) != TYPE_INT or weapon_id < 0 or weapon_id > 28): return false
+		if weapon_id != null and (typeof(weapon_id) != TYPE_INT or weapon_id < 0 or weapon_id >= Global.player.weapon.MAX_MAG_AMMO.size()): return false
 	for label in data.implants:
 		if not label is String or label.length() > 128: return false
 	scan_data[peer] = data.duplicate(true)

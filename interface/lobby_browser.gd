@@ -18,10 +18,15 @@ var selected_lobby = 0
 var code_visible = false
 var connecting = false
 var code_search = false
+var browser_lobbies = []
+var lobby_details = {}
+var ping_refresh = 0.0
+var metadata_refresh = 0.0
 
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	SteamLobby.connect("lobby_list", self, "_on_match_list")
+	SteamLobby.connect("browser_lobby_updated", self, "_browser_lobby_updated")
 	SteamLobby.connect("lobby_code_result", self, "_on_code_result")
 	SteamLobby.connect("lobby_creation_failed", self, "_creation_failed")
 	for signal_name in ["player_joined_lobby", "player_left_lobby", "lobby_joined"]:
@@ -66,7 +71,7 @@ func _show_connecting(message):
 		$VBoxContainer/Buttons.get_node(name).hide()
 	$VBoxContainer/Buttons/Leave.show()
 	status.text = message
-	$VBoxContainer/Status.show()
+	$VBoxContainer/Status.visible = message != "Connecting..."
 	playersList.hide()
 	LobbyList.show()
 	LobbyInfo.hide()
@@ -128,7 +133,36 @@ func _on_code_result(lobby_id):
 		return
 	connect_lobby(lobby_id, $"%LobbyCodeInput".entered_code)
 
+func _browser_lobby_updated(lobby_id, success):
+	if browser_lobbies.has(lobby_id):
+		if not success:
+			browser_lobbies.erase(lobby_id)
+			lobby_details.erase(lobby_id)
+		_render_lobbies()
+
+func _process(delta):
+	if not is_visible_in_tree() or connecting or SteamLobby.in_lobby(): return
+	metadata_refresh += delta
+	if metadata_refresh >= 5.0:
+		metadata_refresh = 0.0
+		for lobby_id in browser_lobbies:
+			SteamInit.Steam.requestLobbyData(lobby_id)
+	ping_refresh += delta
+	if ping_refresh < 1.0: return
+	ping_refresh = 0.0
+	for row in LobbyList.get_node("Rows").get_children():
+		var ping = _lobby_ping(int(row.get_meta("lobby_id")))
+		row.get_node("Columns/Details/Ping").text = "%d ms est." % ping if ping >= 0 else "-- ms"
+
 func _on_match_list(received_lobbies):
+	# A search can omit a still-live lobby; verify known entries through Steam data
+	for lobby_id in received_lobbies:
+		if not browser_lobbies.has(lobby_id): browser_lobbies.append(lobby_id)
+	_render_lobbies()
+	for lobby_id in browser_lobbies:
+		SteamInit.Steam.requestLobbyData(lobby_id)
+
+func _render_lobbies():
 	if connecting or SteamLobby.in_lobby():
 		return
 	var rows = LobbyList.get_node("Rows")
@@ -137,26 +171,43 @@ func _on_match_list(received_lobbies):
 		child.queue_free()
 	lobbies.clear()
 	var selected_found = false
-	for lobby_id in received_lobbies:
-		if not SteamLobby.is_compatible_lobby(lobby_id) or SteamInit.Steam.getLobbyData(lobby_id, "lobby_type") != "public":
+	for lobby_id in browser_lobbies:
+		var marker = SteamInit.Steam.getLobbyData(lobby_id, "crus_online")
+		var version = SteamInit.Steam.getLobbyData(lobby_id, "version")
+		var lobby_type = SteamInit.Steam.getLobbyData(lobby_id, "lobby_type")
+		if (not marker.empty() and marker != "reconstructed") or (not version.empty() and version != SteamLobby.network_version()) or (not lobby_type.empty() and lobby_type != "public"):
+			lobby_details.erase(lobby_id)
 			continue
+		# Search filters already checked these fields; a partial data update isn't a deletion
+		var details = lobby_details.get(lobby_id, {})
 		lobbies.append(lobby_id)
 		selected_found = selected_found or selected_lobby == lobby_id
 		var lobby_name = SteamInit.Steam.getLobbyData(lobby_id, "name")
+		if lobby_name.empty(): lobby_name = details.get("name", "")
 		if lobby_name.empty() or lobby_name.to_lower() == "null":
 			lobby_name = SteamInit.Steam.getFriendPersonaName(SteamInit.Steam.getLobbyOwner(lobby_id)) + "'s lobby"
+		details.name = lobby_name
 		var mode = SteamInit.Steam.getLobbyData(lobby_id, "mode")
+		if mode.empty(): mode = details.get("mode", "cruelty")
+		details.mode = mode
+		lobby_details[lobby_id] = details
 		match mode:
 			"deathmatch": mode = "Deathmatch"
 			"counter_op": mode = "Counter-Opps"
 			_: mode = "Cruelty"
 		var count_text = "%d / %d players" % [SteamInit.Steam.getNumLobbyMembers(lobby_id), SteamInit.Steam.getLobbyMemberLimit(lobby_id)]
-		var ping = SteamLobby.lobby_ping_ms(lobby_id)
+		var ping = _lobby_ping(lobby_id)
 		var ping_text = "%d ms est." % ping if ping >= 0 else "-- ms"
 		_add_row(rows, lobby_id, lobby_name, mode, count_text, ping_text)
 	if not selected_found:
 		selected_lobby = 0
 	lobby_selected(selected_lobby)
+
+func _lobby_ping(lobby_id):
+	var ping = SteamLobby.lobby_ping_ms(lobby_id)
+	if not lobby_details.has(lobby_id): return ping
+	if ping >= 0: lobby_details[lobby_id].ping = ping
+	return lobby_details[lobby_id].get("ping", -1)
 
 func _add_row(rows, lobby_id, lobby_name, mode, count_text, ping_text):
 	var row = Button.new()
@@ -168,6 +219,7 @@ func _add_row(rows, lobby_id, lobby_name, mode, count_text, ping_text):
 	row.connect("gui_input", self, "_row_input", [lobby_id])
 	rows.add_child(row)
 	var columns = HBoxContainer.new()
+	columns.name = "Columns"
 	columns.anchor_right = 1.0
 	columns.anchor_bottom = 1.0
 	columns.margin_left = 10
@@ -176,12 +228,14 @@ func _add_row(rows, lobby_id, lobby_name, mode, count_text, ping_text):
 	row.add_child(columns)
 	for values in [[lobby_name, count_text], [mode, ping_text]]:
 		var stack = VBoxContainer.new()
+		stack.name = "Details" if columns.get_child_count() == 1 else "Name"
 		stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		columns.add_child(stack)
 		for value in values:
 			var label = Label.new()
 			label.text = value
+			if stack.name == "Details" and stack.get_child_count() == 1: label.name = "Ping"
 			label.clip_text = true
 			label.align = Label.ALIGN_RIGHT if values[0] == mode else Label.ALIGN_LEFT
 			label.mouse_filter = Control.MOUSE_FILTER_IGNORE

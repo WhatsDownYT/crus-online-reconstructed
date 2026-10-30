@@ -29,7 +29,9 @@ var counterop_bottom_shown = null
 var menu_animation_generation = 0
 var menu_animating = false
 const MENU_ANIMATION_STEPS = 12
+const SETTINGS_ROW_GAP = 6
 var counterop_settings_descriptions = {
+	"spectateOpponents": ["Spectate Opponents", "Allow dead players to spectate living opponents. Requires Spectating to be enabled."],
 	"enemyFriendlyFire": ["Enemy Friendly Fire", "Allow Counter-Operatives to damage and kill hostile NPCs and mission targets."],
 	"neutralEnemies": ["Neutral Enemies", "When a Counter-Operative attacks a friendly NPC, that NPC becomes hostile to Counter-Operatives. Requires Enemy Friendly Fire."],
 	"randomizeTeams": ["Randomize Teams", "Hide manual team selection and give every player an equal random chance of being assigned to either team when a round starts."],
@@ -38,6 +40,7 @@ var counterop_settings_descriptions = {
 var host_tooltips = {
 	"LobbyName": "The name shown for your Steam lobby. An empty or invalid name uses your Steam name.",
 	"MaxPlayers": "Maximum players in the lobby, including the host. Steam supports up to 250; LAN supports up to 4096. Large lobbies require more processing and bandwidth.",
+	"SpawnInvulnerability": "Seconds of invulnerability after spawning or being revived. Set to 0 to disable spawn protection.",
 	"DropWeaponsOnDeath": "Drop both carried weapons when a player dies so anyone in the lobby can pick them up.",
 	"LobbyType": "Public lobbies appear in the browser. Friends Only allows Steam friends to join. Private requires a code or Discord invite.",
 	"Port": "The network port used when hosting a LAN lobby.",
@@ -69,7 +72,7 @@ func _ready():
 	$CenterContainer/TabContainer.connect("tab_changed", self, "_close_credits")
 	$CenterContainer/TabContainer.connect("gui_input", self, "_mode_header_input")
 	_setup_credits_overlay()
-	_setup_credits_buttons()
+	_setup_version_branding()
 	call_deferred("_add_voice_tabs")
 	if not Multiplayer.profile_loaded:
 		var loadedPlayerData = load_data("player.save")
@@ -121,6 +124,41 @@ func _ready():
 		lobby_name_edit.text = default_lobby_name
 	lobby_name_row.add_child(lobby_name_edit)
 	var host_rows = $CenterContainer/TabContainer/Host/VBoxContainer
+	var spectating_row = HBoxContainer.new()
+	spectating_row.name = "Spectating"
+	var spectating_label = Label.new()
+	spectating_label.text = "Spectating:"
+	spectating_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spectating_row.add_child(spectating_label)
+	var spectating_toggle = CheckBox.new()
+	spectating_toggle.name = "TickEdit"
+	spectating_toggle.theme = $CrueltySettings/VBoxContainer/CanRespawn/TickEdit.theme
+	spectating_toggle.text = "<<"
+	spectating_toggle.pressed = Multiplayer.config.get("spectating", true)
+	spectating_row.add_child(spectating_toggle)
+	host_rows.add_child(spectating_row)
+	_connect_host_tooltip(spectating_row, "Allow dead players to watch living players through a third-person spectator camera.")
+	var protection_row = HBoxContainer.new()
+	protection_row.name = "SpawnInvulnerability"
+	var protection_label = Label.new()
+	protection_label.text = "Spawn invulnerability:"
+	protection_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	protection_row.add_child(protection_label)
+	var protection_time = SpinBox.new()
+	protection_time.name = "Time"
+	var capacity_input = host_rows.get_node("MaxPlayers/CountEdit")
+	protection_time.theme = capacity_input.theme
+	protection_time.align = capacity_input.align
+	protection_time.rect_min_size = capacity_input.rect_min_size
+	protection_time.max_value = 60
+	protection_time.step = 0.5
+	protection_time.value = Multiplayer.config.get("spawnInvulnerability", 10.0)
+	var input_width = max(capacity_input.get_combined_minimum_size().x, protection_time.get_combined_minimum_size().x)
+	capacity_input.rect_min_size.x = input_width
+	protection_time.rect_min_size.x = input_width
+	protection_row.add_child(protection_time)
+	host_rows.add_child(protection_row)
+	_connect_host_tooltip(protection_row, host_tooltips.SpawnInvulnerability)
 	host_rows.add_child(lobby_name_row)
 	host_rows.move_child(lobby_name_row, 1)
 	$CenterContainer/TabContainer/Host/VBoxContainer/MaxPlayers/CountEdit.value = Multiplayer.selected_player_limit()
@@ -156,9 +194,12 @@ func _ready():
 	NicknameEdit.text = Multiplayer.playerInfo.nickname
 	NicknameColor.color = Multiplayer.playerInfo.color
 	$CenterContainer/TabContainer/Player/VBoxContainer/ClientSettings.text = "PROFILE"
-	$CenterContainer/TabContainer/Player/VBoxContainer/Skin.set_texture(Multiplayer.playerInfo.skinPath)
+	var old_skin_picker = get_node_or_null("CenterContainer/TabContainer/Player/VBoxContainer/Skin")
+	if old_skin_picker != null:
+		old_skin_picker.set_texture(Multiplayer.playerInfo.skinPath)
 	$CenterContainer/TabContainer/Player/VBoxContainer/Nickname.hide()
-	$CenterContainer/TabContainer/Player/VBoxContainer/Skin.hide()
+	if old_skin_picker != null:
+		old_skin_picker.hide()
 	
 	$CenterContainer/TabContainer/Player/VBoxContainer/Color.r_change(str(NicknameColor.color.r8))
 	$CenterContainer/TabContainer/Player/VBoxContainer/Color.g_change(str(NicknameColor.color.g8))
@@ -175,6 +216,27 @@ func _ready():
 	Multiplayer.connect("connected_to_server", self, "_on_connected")
 	Multiplayer.connect("status_update", self, "status_update")
 
+
+func _setup_version_branding():
+	for page in ["Select", "LAN", "Steam"]:
+		var row = get_node_or_null("CenterContainer/TabContainer/Main/" + page + "/VBoxContainer/HBoxContainer")
+		if row == null:
+			continue
+		var version = row.get_node_or_null("Version")
+		if version == null:
+			continue
+		var title = Label.new()
+		title.name = "RevitalizedText"
+		title.text = "CruS: Revitalized"
+		title.rect_min_size = Vector2(230, 26)
+		title.valign = Label.VALIGN_CENTER
+		title.theme = load("res://Menu/menu_theme.tres")
+		title.add_color_override("font_color", Color(1, 0, 0))
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(title)
+		row.move_child(title, 0)
+		version.align = Label.ALIGN_RIGHT
+		version.size_flags_horizontal = 10
 
 func _load_runtime_texture(path):
 	var image = Image.new()
@@ -253,9 +315,9 @@ func _setup_credit_logos():
 	reconstructed_text.add_text("\nArt & Design by Chasmy\n\nSpecial Thanks\nPBF Guy: ")
 	_credit_maroon(reconstructed_text, "Idea assistance & playtesting")
 	reconstructed_text.add_text("\ncorvid12: ")
-	_credit_maroon(reconstructed_text, "Idea inspiration for Pneumatic Merit Pump")
+	_credit_maroon(reconstructed_text, "Inspiration for Pneumatic Merit Pump")
 	reconstructed_text.add_text("\nschpaceman: ")
-	_credit_maroon(reconstructed_text, "Idea inspiration for Surveillance Eyecam")
+	_credit_maroon(reconstructed_text, "Inspiration for Surveillance Eyecam")
 	reconstructed_text.pop()
 	var original = HBoxContainer.new()
 	original.name = "Original"
@@ -399,6 +461,10 @@ func save_host():
 	capacity_edit.apply()
 	Multiplayer.config.maxPlayers = int(capacity_edit.value)
 	Multiplayer.config.dropWeaponsOnDeath = $CenterContainer/TabContainer/Host/VBoxContainer/DropWeaponsOnDeath/TickEdit.pressed
+	var protection_input = $CenterContainer/TabContainer/Host/VBoxContainer/SpawnInvulnerability/Time
+	protection_input.apply()
+	Multiplayer.config.spawnInvulnerability = protection_input.value
+	Multiplayer.config.spectating = $CenterContainer/TabContainer/Host/VBoxContainer/Spectating/TickEdit.pressed
 	Multiplayer.config.hostPort = int($CenterContainer/TabContainer/Host/VBoxContainer/Port/PortEdit.text)
 	var type_select = $CenterContainer/TabContainer/Host/VBoxContainer/LobbyType/TypeSelect
 	if type_select.selected >= 0:
@@ -719,7 +785,7 @@ func _ensure_counterop_settings_tab():
 	header.align = Label.ALIGN_CENTER
 	box.add_child(header)
 	var check_theme = cruelty_settings_tab.get_node("VBoxContainer/CanRespawn/TickEdit").theme
-	for key in ["enemyFriendlyFire", "neutralEnemies", "randomizeTeams", "overrideTeams"]:
+	for key in ["enemyFriendlyFire", "neutralEnemies", "randomizeTeams", "overrideTeams", "spectateOpponents"]:
 		var row = HBoxContainer.new()
 		row.name = key
 		var label = Label.new()
@@ -753,6 +819,7 @@ func _ensure_counterop_settings_tab():
 	counterop_bottom_tab.connect("pressed", self, "_counterop_bottom_tab_pressed")
 	add_child(counterop_bottom_tab)
 	_layout_counterop_bottom_tab()
+	_normalize_settings_lists()
 
 func _layout_counterop_bottom_tab():
 	if not is_instance_valid(counterop_bottom_tab):
@@ -781,6 +848,7 @@ func _sync_counterop_settings_tab():
 		counterop_setting_boxes[key].pressed = Multiplayer.CounterOp.settings[key]
 	counterop_setting_boxes["neutralEnemies"].disabled = not Multiplayer.CounterOp.settings.enemyFriendlyFire
 	counterop_setting_boxes["randomizeTeams"].disabled = Multiplayer.CounterOp.settings.overrideTeams
+	counterop_setting_boxes["spectateOpponents"].disabled = not $CenterContainer/TabContainer/Host/VBoxContainer/Spectating/TickEdit.pressed
 	counterop_settings_syncing = false
 
 func _counterop_bottom_tab_pressed():
@@ -814,6 +882,19 @@ func _add_voice_tabs():
 	var vc = preload("res://MOD_CONTENT/CruS Online/interface/voice_settings.gd").new()
 	vc.name = "VC"
 	tabs.add_child(vc)
+	_normalize_settings_lists()
+
+func _normalize_settings_lists():
+	for path in ["CenterContainer/TabContainer/Host/VBoxContainer", "CrueltySettings/VBoxContainer", "CounterOpSettings/VBoxContainer", "DeathmatchSettings/VBoxContainer", "CenterContainer/TabContainer/VC/VBoxContainer"]:
+		var box = get_node_or_null(path)
+		if box == null: continue
+		box.add_constant_override("separation", SETTINGS_ROW_GAP)
+		box.alignment = BoxContainer.ALIGN_BEGIN
+		for row in box.get_children():
+			if not row is HBoxContainer: continue
+			row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+			for control in row.get_children():
+				if control is Control: control.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 func _ensure_cruelty_settings_tab():
 	var tabs = $CenterContainer/TabContainer
@@ -906,13 +987,19 @@ func _layout_mode_panels():
 
 func _open_mode_settings(selected):
 	_close_credits()
+	var tabs = $CenterContainer/TabContainer
+	tabs.add_stylebox_override("tab_fg", tabs.get_stylebox("tab_bg"))
+	tabs.add_color_override("font_color_fg", tabs.get_color("font_color_bg"))
 	for panel in [cruelty_settings_tab, counterop_settings_tab, deathmatch_settings_tab]:
 		if is_instance_valid(panel):
 			panel.visible = panel == selected
 	_layout_mode_panels()
 
 func _close_mode_settings(_tab = 0):
-	var current = $CenterContainer/TabContainer.get_current_tab_control()
+	var tabs = $CenterContainer/TabContainer
+	tabs.remove_stylebox_override("tab_fg")
+	tabs.remove_color_override("font_color_fg")
+	var current = tabs.get_current_tab_control()
 	if current != null:
 		current.show()
 	for panel in [cruelty_settings_tab, counterop_settings_tab, deathmatch_settings_tab]:
@@ -924,7 +1011,7 @@ func _mode_header_input(event):
 		_close_mode_settings()
 
 func _add_shared_counterop_settings(box):
-	box.add_constant_override("separation", 5)
+	box.add_constant_override("separation", SETTINGS_ROW_GAP)
 	for key in ["CanRespawn", "FriendlyFire", "ReviveTimer", "Lives"]:
 		var original = cruelty_settings_tab.get_node("VBoxContainer/" + key)
 		var copy = original.duplicate()
@@ -949,6 +1036,8 @@ func _shared_mode_setting_changed(value, key, widget, source):
 func _sync_implant_tab():
 	var tabs = $CenterContainer/TabContainer
 	var panel = tabs.get_node("Implants")
+	if tabs.get_tab_title(panel.get_index()) != "Bans":
+		tabs.set_tab_title(panel.get_index(), "Bans")
 	var in_lobby = Multiplayer.NetworkBridge.check_connection() and Multiplayer.players.has(Multiplayer.NetworkBridge.get_id())
 	var show_implants = in_lobby and Multiplayer.NetworkBridge.is_world_authority()
 	if implants_tab_shown != show_implants:

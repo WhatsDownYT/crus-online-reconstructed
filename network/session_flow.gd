@@ -13,11 +13,33 @@ var world = {}
 var personal_difficulty = {}
 var misery_transition = false
 var finishing = false
+var mission_epoch = -1
 var used_orbs = {}
 
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
-	NetworkBridge.register_rpcs(self, [["sync_difficulty", NetworkBridge.PERMISSION.SERVER], ["request_orb", NetworkBridge.PERMISSION.ALL], ["apply_orb", NetworkBridge.PERMISSION.SERVER], ["configure_world", NetworkBridge.PERMISSION.SERVER], ["show_result", NetworkBridge.PERMISSION.SERVER], ["request_wait", NetworkBridge.PERMISSION.ALL], ["sync_waiting", NetworkBridge.PERMISSION.SERVER]])
+	NetworkBridge.register_rpcs(self, [["sync_difficulty", NetworkBridge.PERMISSION.SERVER], ["request_orb", NetworkBridge.PERMISSION.ALL], ["apply_orb", NetworkBridge.PERMISSION.SERVER], ["configure_world", NetworkBridge.PERMISSION.SERVER], ["show_result", NetworkBridge.PERMISSION.SERVER], ["request_wait", NetworkBridge.PERMISSION.ALL], ["sync_waiting", NetworkBridge.PERMISSION.SERVER], ["request_ending_credits", NetworkBridge.PERMISSION.ALL], ["sync_ending_credits", NetworkBridge.PERMISSION.SERVER]])
+
+func start_ending_credits():
+	if not NetworkBridge.check_connection() or not result_active or not result_won or result_level != 18 or not Global.menu.trauma_ending_results or not result_winner_team.empty():
+		return
+	if NetworkBridge.is_world_authority():
+		if not Global.ending_3:
+			return
+		NetworkBridge.n_rpc(self, "sync_ending_credits")
+		sync_ending_credits(null)
+	else:
+		NetworkBridge.request_host(self, "request_ending_credits", [])
+
+master func request_ending_credits(id):
+	id = NetworkBridge.request_sender(id)
+	if not NetworkBridge.is_world_authority() or not Multiplayer.players.has(id):
+		return
+	start_ending_credits()
+
+puppet func sync_ending_credits(_id):
+	if result_active and result_won and result_level == 18 and is_instance_valid(Global.menu) and Global.menu.trauma_ending_results:
+		Global.menu.show_ending_credits()
 
 func difficulty():
 	return {"soul_intact": Global.soul_intact, "husk_mode": Global.husk_mode, "hope_discarded": Global.hope_discarded, "hell_discovered": Global.hell_discovered, "punishment_mode": Global.punishment_mode, "chaos_mode": Global.chaos_mode, "consecutive_deaths": Global.consecutive_deaths}
@@ -53,6 +75,7 @@ puppet func configure_world(id, state):
 		personal_difficulty.clear()
 
 func clear_result():
+	mission_epoch = -1
 	result_active = false
 	result_winner_team = ""
 	result_winner_name = ""
@@ -140,10 +163,13 @@ func finish_mission(won, winner_team = "", winner_peer = 0):
 	elif not competitive:
 		loss = lower_difficulty()
 	var state = {"won": won, "winner_team": winner_team, "winner_peer": winner_peer, "level": Global.CURRENT_LEVEL, "enemy_count": Global.enemy_count, "enemy_count_total": Global.enemy_count_total, "civ_count": Global.civ_count, "civ_count_total": Global.civ_count_total, "level_time": Global.level_time, "level_time_raw": Global.level_time_raw, "difficulty": difficulty(), "loss": loss, "ending": "" if competitive else (ending_path() if won else ""), "epoch": Multiplayer.SteamNetwork.scene_epoch + 1}
+	state["source_epoch"] = Multiplayer.SteamNetwork.scene_epoch
 	NetworkBridge.n_rpc(self, "show_result", [state])
 	show_result(null, state)
 
 puppet func show_result(id, state):
+	if int(state.get("source_epoch", state.epoch - 1)) != mission_epoch:
+		return
 	if result_active or (waiting_peers.has(NetworkBridge.get_id()) and state.ending == ""):
 		return
 	result_active = true

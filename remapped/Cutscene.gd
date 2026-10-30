@@ -146,7 +146,7 @@ puppet func show_ending_results(_id):
 	Global.menu.in_game = true
 	Global.menu.set_process_input(true)
 	Global.menu.get_node("Level_End_Grid").active = true
-	Global.menu.level_end()
+	Global.menu.level_end(filename == "res://Cutscenes/CutsceneEnd3.tscn")
 	Global.menu.get_node("Level_End_Grid").rect_size.x = 720
 	Global.menu.get_node("Level_End_Grid/Performance_Hbox/Performance_Scroll/Performance_Vbox/Time_Label").text = "Time:" + Global.level_time
 	Global.menu.show()

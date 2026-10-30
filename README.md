@@ -8,7 +8,7 @@ English | [Русский](README_RU.md)
 
 </div>
 
-CruS Revitalized builds on the original CruS Online mod. See [the full changelog](full_changelog.txt) for the current project's features and changes.
+CruS Revitalized builds on the original CruS Online mod. See [the full changelog](changelog.md) for the current project's features and changes.
 
 ## Original CruS Online documentation
 

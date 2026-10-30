@@ -35,6 +35,9 @@ func reload_players():
 func remove_players():
 	print("[CRUS ONLINE / PLAYERS]: Remove players")
 	for player in get_children():
+		player.hide()
+		player.set_process(false)
+		player.set_physics_process(false)
 		player.queue_free()
 
 func sync_players():

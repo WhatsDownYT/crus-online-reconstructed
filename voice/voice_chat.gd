@@ -647,7 +647,11 @@ func effect_mask(peer):
 	if not effects_in_mission(): return 0
 	if peers.get(peer, {}).get("dead", false):
 		if peers.get(bridge.get_id(), {}).get("dead", false) or not spatial_voice(peer, bridge.get_id()): return 0
-	return int(peers.get(peer, {}).get("effects", 0)) & Effects.ALL
+	var mask = int(peers.get(peer, {}).get("effects", 0)) & Effects.ALL
+	# Inverted listeners hear the same reversal from upright speakers.
+	if local_effect_mask & Effects.ABOMINATOR:
+		mask ^= Effects.ABOMINATOR
+	return mask
 
 func state_bytes(enabled, dead, water, mask):
 	return PoolByteArray([1 if enabled else 0, 1 if dead else 0, 1 if water else 0, mask & 255, (mask >> 8) & 255])

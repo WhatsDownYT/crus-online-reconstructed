@@ -147,7 +147,7 @@ func _build_preview():
 	for index in range(fields.size()):
 		var row_y = 4 + index * 32
 		_label(stats_background, fields[index][1], Vector2(8, row_y), Vector2(296, 24))
-		var value = _label(stats_background, "--", Vector2(318, row_y), Vector2(137, 24), Color(0, 1, 0))
+		var value = _label(stats_background, "--", Vector2(230, row_y), Vector2(225, 24), Color(0, 1, 0))
 		value.align = Label.ALIGN_RIGHT
 		value.clip_text = true
 		stats_values[fields[index][0]] = value
@@ -349,7 +349,7 @@ func _toggle_settings():
 	settings.rect_position.x = 42
 	settings.come()
 	settings.raise()
-	for control_name in ["ClearSave", "ResetTimer", "ResetLevels"]:
+	for control_name in ["ClearSave", "ResetTimer", "Credits", "SaveSlots"]:
 		var save_control = game_menu.get_node_or_null("Settings/GridContainer/PanelContainer6/VBoxContainer3/" + control_name)
 		if save_control != null:
 			settings_restore[save_control] = save_control.visible

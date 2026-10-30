@@ -15,15 +15,17 @@ subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File
 prefix = 'MOD_CONTENT/CruS Online/'
 excluded = {'.git', 'development', 'docs', 'examples', '__pycache__'}
 runtime_suffixes = {'.gd', '.tscn', '.tres', '.res', '.mesh', '.stex', '.sample', '.json', '.png', '.jpg', '.jpeg', '.webp', '.svg',
-                    '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader'}
+                    '.import', '.glb', '.gltf', '.obj', '.mtl', '.material', '.wav', '.ogg', '.ttf', '.shader', '.ps1'}
 if args.base_package.resolve() == (args.output / 'mod.zip').resolve():
     raise SystemExit('Choose an output folder separate from the installed mod.')
 with zipfile.ZipFile(args.base_package) as base:
     entries = {name: base.read(name) for name in base.namelist()
                if not name.endswith('/') and not name.startswith(prefix)
-               and not name.startswith(('.import/greyface1.png-', '.import/greyface2.png-'))}
+               and not name.startswith(('.import/greyface1.png-', '.import/greyface2.png-', '.import/bannedimplant.png-', '.import/sadbannedimplant.png-'))}
     entries.pop('Menu/Main_Menu.tscn.remap', None)
     entries['Switch.gd.remap'] = b'[remap]\npath="res://MOD_CONTENT/CruS Online/remapped/Switch.gd"\n'
+    for source, target in [('psychocamera.gd', 'psychocamera.gd'), ('snake.gd', 'snake.gd'), ('Levels/snakearea.gd', 'snakearea.gd')]:
+        entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remapped/' + target + '"\n').encode()
     for script in (root / 'compatibility/modbase').glob('*.gd'):
         if script.name == 'Settings_Grid.gd':
             continue
@@ -31,7 +33,7 @@ with zipfile.ZipFile(args.base_package) as base:
     entries['Menu/Settings_Grid.gd.remap'] = ('[remap]\npath="res://' + prefix + 'compatibility/modbase/Settings_Grid.gd"\n').encode()
     for source, target in [('sky_rotator.gd', 'sky_rotator.gd'), ('Night_Cycle.gd', 'Night_Cycle.gd')]:
         entries['MOD_CONTENT/CruS Mod Base/scripts/' + source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remapped/' + target + '"\n').encode()
-    for source, target in [('Menu/Character_interface/Menu.gd', 'Character_Menu.gd'), ('Stocks.gd', 'Stocks.gd'), ('Scripts/Implants.gd', 'Implants.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd')]:
+    for source, target in [('Menu/Character_interface/Menu.gd', 'Character_Menu.gd'), ('Stocks.gd', 'Stocks.gd'), ('Scripts/Implants.gd', 'Implants.gd'), ('Entities/Stock_Handler.gd', 'Stock_Handler.gd'), ('Entities/soulll.gd', 'soulll.gd'), ('Levels/sky_rotator.gd', 'sky_rotator.gd'), ('Scripts/Night_Cycle.gd', 'Night_Cycle.gd'), ('Menu/Level_End_Grid.gd', 'Level_End_Grid.gd'), ('Menu/Speech.gd', 'Speech.gd'), ('Scripts/speech_label.gd', 'speech_label.gd')]:
         entries[source + '.remap'] = ('[remap]\npath="res://' + prefix + 'remapped/' + target + '"\n').encode()
     for path in root.rglob('*'):
         relative = path.relative_to(root)

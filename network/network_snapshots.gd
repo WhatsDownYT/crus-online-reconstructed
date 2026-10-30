@@ -2,7 +2,9 @@ extends Reference
 
 
 var _owner
-const RPC_ARITY = {"_update_puppet": [4], "_set_transform": [1, 2],
+const RPC_ARITY = {"_update_puppet": [5], "_set_transform": [1, 2],
+	"sync_vehicle_pose": [2], "request_vehicle_pose": [2],
+	"sync_triagon_pose": [1], "sync_triagon_attack": [5],
 	"client_set_lerp_transform": [1, 2], "set_lerp_transform": [1, 2],
 	"network_set_rotation": [1], "set_mech_rotation": [1],
 	"set_puppet_transform": [2], "particle_visible": [1],
@@ -115,7 +117,7 @@ func receive(sender_id, data):
 	if member == "_update_puppet" and sender_id != network.get_server_steam_id() and str(node.name) != str(sender_id):
 		network.metrics.warn("snapshot_owner", member)
 		return
-	if member == "set_lerp_transform" and sender_id != network.get_server_steam_id():
+	if member in ["set_lerp_transform", "request_vehicle_pose"] and sender_id != network.get_server_steam_id():
 		if "physics_revision" in node and data[4].size() == 2 and data[4][1] != node.physics_revision:
 			network.metrics.count("stale_snapshots")
 			return
@@ -140,17 +142,25 @@ func receive(sender_id, data):
 
 func valid_value(member, value, is_property):
 	if is_property:
+		if member in ["health", "armor"]:
+			return number(value)
 		return PROPERTY_TYPES.has(member) and typeof(value) == PROPERTY_TYPES[member] and finite_value(value)
 	if not RPC_ARITY.has(member) or typeof(value) != TYPE_ARRAY or not value.size() in RPC_ARITY[member]:
 		return false
 	match member:
+		"sync_vehicle_pose", "request_vehicle_pose":
+			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and number(value[1])
+		"sync_triagon_pose":
+			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0])
+		"sync_triagon_attack":
+			return typeof(value[0]) == TYPE_BOOL and typeof(value[1]) == TYPE_BOOL and number(value[2]) and typeof(value[3]) == TYPE_VECTOR3 and finite_value(value[3]) and typeof(value[4]) == TYPE_BOOL
 		"sync_positions":
 			if typeof(value[0]) != TYPE_INT or typeof(value[1]) != TYPE_ARRAY or value[1].size() > 10: return false
 			for pose in value[1]:
 				if typeof(pose) != TYPE_ARRAY or pose.size() != 2 or typeof(pose[0]) != TYPE_INT or typeof(pose[1]) != TYPE_TRANSFORM or not finite_value(pose[1]): return false
 			return true
 		"_update_puppet":
-			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and typeof(value[1]) == TYPE_ARRAY and value[1].size() == 2 and number(value[1][0]) and number(value[1][1]) and number(value[2]) and (value[3] == null or typeof(value[3]) == TYPE_VECTOR3 and finite_value(value[3]))
+			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and typeof(value[1]) == TYPE_ARRAY and value[1].size() == 2 and number(value[1][0]) and number(value[1][1]) and number(value[2]) and (value[3] == null or typeof(value[3]) == TYPE_VECTOR3 and finite_value(value[3])) and typeof(value[4]) == TYPE_VECTOR3 and finite_value(value[4])
 		"_set_transform":
 			return typeof(value[0]) == TYPE_TRANSFORM and finite_value(value[0]) and (value.size() == 1 or typeof(value[1]) == TYPE_VECTOR3 and finite_value(value[1]) or typeof(value[1]) == TYPE_INT and value[1] >= 0)
 		"client_set_lerp_transform", "set_lerp_transform":

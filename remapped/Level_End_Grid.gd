@@ -17,6 +17,10 @@ func convert_time(old:int, new:int):
 	return str(minutes, ".", seconds, ".", milseconds)
 
 func set_performance_info():
+	for button in $Level_Info_Vbox.get_children():
+		if button is TextureButton:
+			button.show()
+	$Level_Info_Vbox/Next_Level.override_name = "Next Mission"
 	var online = Global.get_node_or_null("Multiplayer")
 	if online != null and online.NetworkBridge.check_connection() and online.Flow.result_active and online.hostSettings.get("gameMode", "cruelty") != "cruelty":
 		$Level_Info_Vbox/Next_Level.hide()
@@ -108,6 +112,11 @@ func set_performance_info():
 		$Level_Info_Vbox/Retry.visible = mp.NetworkBridge.is_world_authority()
 		$Level_Info_Vbox/Next_Level.visible = mp.Flow.result_won and mp.NetworkBridge.is_world_authority() and _has_next_level()
 		$Level_Info_Vbox/Level_Select.visible = not $Level_Info_Vbox/Next_Level.visible
+	if Global.menu.trauma_ending_results:
+		for button in $Level_Info_Vbox.get_children():
+			if button is TextureButton:
+				button.visible = button == $Level_Info_Vbox/Next_Level
+		$Level_Info_Vbox/Next_Level.override_name = "Next"
 
 func _has_next_level():
 	if Global.CURRENT_LEVEL in [Global.L_HQ, Global.L_PUNISHMENT, 18]:

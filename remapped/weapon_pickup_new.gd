@@ -80,6 +80,7 @@ puppet func sync_state(_id, weapon, rounds, version):
 		get_parent()._remove(null)
 
 func player_use():
+	if Global.get_node("Multiplayer").is_weapon_banned(current_weapon): return
 	if menu or pending or not _valid_weapon(current_weapon) or not is_instance_valid(Global.player) or Global.player.dead:
 		return
 	var weapon = Global.player.weapon
@@ -99,6 +100,9 @@ master func request_pickup(id, version, expected, replacement, rounds):
 		return
 	id = NetworkBridge.request_sender(id)
 	var actor = NetworkBridge.get_peer_actor(id)
+	if Global.get_node("Multiplayer").is_weapon_banned(current_weapon):
+		_reject(id)
+		return
 	if menu or not _valid_weapon(current_weapon) or version != revision or expected != current_weapon or actor == null or actor.global_transform.origin.distance_to(global_transform.origin) > 6.0 or (replacement != null and not _valid_weapon(replacement)) or typeof(rounds) != TYPE_INT or rounds < 0 or rounds > 10000:
 		_reject(id)
 		return

@@ -39,6 +39,13 @@ func _ready():
 	move_audio.unit_db = 2
 	bell_audio.stream = load("res://Sfx/Environment/Elevator_Bell.wav")
 	move_audio.stream = load("res://Sfx/Environment/Elevator_Move.wav")
+	move_audio.stream = move_audio.stream.duplicate()
+	if move_audio.stream is AudioStreamSample:
+		move_audio.stream.loop_begin = 0
+		move_audio.stream.loop_end = int(move_audio.stream.get_length() * move_audio.stream.mix_rate)
+		move_audio.stream.loop_mode = AudioStreamSample.LOOP_FORWARD
+	elif move_audio.stream is AudioStreamOGGVorbis:
+		move_audio.stream.loop = true
 
 func _process(delta):
 	if not NetworkBridge.check_connection() or NetworkBridge.is_world_authority():

@@ -105,7 +105,7 @@ func get_type():
 	return type;
 
 func player_use():
-	if Global.husk_mode:
+	if Global.husk_mode or DoorPolicy.competitive(Global.get_node("Multiplayer")):
 		NetworkBridge.request_host(self, "request_use", [DoorPolicy.capture(Global)])
 	else:
 		Global.player.UI.notify("It repulses you.", Color(0.5, 0.5, 0))
@@ -116,7 +116,7 @@ master func request_use(id, spiritual_state):
 		return
 	id = NetworkBridge.request_sender(id)
 	var actor = NetworkBridge.get_peer_actor(id)
-	if actor == null or not DoorPolicy.allows(spiritual_state, "husk_mode", actor.global_transform.origin, global_transform.origin):
+	if actor == null or not DoorPolicy.allows(spiritual_state, "husk_mode", actor.global_transform.origin, global_transform.origin, DoorPolicy.competitive(Global.get_node("Multiplayer"))):
 		return
 	stop = not stop
 	open = not open

@@ -1,6 +1,6 @@
 extends Node
 
-var version = "v1.0"
+var version = "v1.0-beta"
 const STEAM_MAX_PLAYERS = 250
 const LAN_MAX_PLAYERS = 4096
 var Commands
@@ -8,6 +8,7 @@ var Commands
 enum errorType {UNKNOW, TIME_OUT, WRONG_VERSION, SERVER_CLOSED, UPNP_ERROR, PLAYER_CONNECTED, LOBBY_FULL}
 
 var profile_loaded = false
+var host_selected_level = -1
 var playerInfo = {
 	"nickname": "MT Foxtrot",
 	"color": "ff00ff",
@@ -15,6 +16,8 @@ var playerInfo = {
 }
 
 var hostSettings = {
+	"bannedWeapons": [],
+	"spectating": true,
 	"bannedImplants" : [],
 	"map" : null,
 	"helpTimer": 15,
@@ -25,6 +28,7 @@ var hostSettings = {
 	"shareDifficulty": false,
 	"friendlyFire": true,
 	"dropWeaponsOnDeath": false,
+	"spawnInvulnerability": 10.0,
 	"maxPlayers": 16,
 	"gameMode": "cruelty",
 	"deathmatchSpawnNPCs": true,
@@ -35,6 +39,9 @@ var hostSettings = {
 }
 
 var config = {
+	"bannedWeapons": [],
+	"weaponBanPresets": {},
+	"spectating": true,
 	"bannedImplants": [],
 	"implantPresets": {},
 	"saveProgress": true,
@@ -54,6 +61,7 @@ var config = {
 	"shareDifficulty": false,
 	"friendlyFire": true,
 	"dropWeaponsOnDeath": false,
+	"spawnInvulnerability": 10.0,
 	"maxPlayers": 16,
 	"useVoiceChat": true,
 	"proximityVoiceChat": true,
@@ -120,9 +128,11 @@ var Eyecam
 var MeritPump
 var Extensions
 var Content
+var Spectator
 
 func _ready():
 	if preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG: version += "-debug"
+	$SyncLoad.add_child(load("res://MOD_CONTENT/CruS Online/interface/revitalized_side_strips.gd").new())
 	Extensions = preload("res://MOD_CONTENT/CruS Online/gameplay/extension_compatibility.gd").new()
 	Extensions.name = "ExtensionCompatibility"
 	add_child(Extensions)
@@ -143,6 +153,9 @@ func _ready():
 	add_child(OnlineStats)
 	Flow = preload("res://MOD_CONTENT/CruS Online/network/session_flow.gd").new()
 	Flow.name = "SessionFlow"
+	Spectator = preload("res://MOD_CONTENT/CruS Online/gameplay/spectator.gd").new()
+	Spectator.name = "Spectator"
+	add_child(Spectator)
 	add_child(Flow)
 	Voice = preload("res://MOD_CONTENT/CruS Online/voice/voice_chat.gd").new()
 	Voice.name = "VoiceChat"
@@ -194,6 +207,7 @@ func _ready():
 		["client_peer_connect", SteamNetwork.PERMISSION.SERVER],
 		["sync_mission_state", SteamNetwork.PERMISSION.SERVER],
 		["sync_host_settings", SteamNetwork.PERMISSION.SERVER],
+		["sync_selected_level", SteamNetwork.PERMISSION.SERVER],
 		["notify_host_difficulty", SteamNetwork.PERMISSION.SERVER],
 		["request_menu_exit", SteamNetwork.PERMISSION.ALL],
 		["_request_multiplayer_heal", SteamNetwork.PERMISSION.ALL],
@@ -225,6 +239,8 @@ var packages_count = 0
 
 var packages_inspector = false
 var last_ping_ms = 0
+var connecting_screen = false
+var connecting_elapsed = 0.0
 
 func peer_update(steam_id):
 	if players.has(steam_id):
@@ -248,22 +264,22 @@ func peer_update(steam_id):
 		NetworkBridge.n_rpc(self, "sync_players", [_public_players()])
 
 func _input(event):
+	if connecting_screen and event.is_action_pressed("ui_cancel"):
+		leave_server()
+		get_tree().set_input_as_handled()
+		return
 	if event is InputEventKey and not event.echo and event.pressed:
 		var key = event.scancode
 
 		match key:
 			KEY_F1:
 				$Debug.visible = !$Debug.visible
-			KEY_F2:
-				print("[CRUS ONLINE / DEBUG] players: ")
-				for player in players:
-					print(str(player) + ": ", players[player])
-			KEY_F3:
-				packages_inspector = !packages_inspector
-				NetworkBridge.debug = packages_inspector
-				$Debug/VBoxContainer/PackagesDebugList.visible = packages_inspector
 
 func _physics_process(delta):
+	if connecting_screen:
+		connecting_elapsed += delta
+		if connecting_elapsed > 30.0:
+			clear_connection(errorType.TIME_OUT)
 	_update_menu_background()
 	if NetworkBridge.is_lan():
 		if get_tree().network_peer != null and get_tree().network_peer.get_connection_status() == 0:
@@ -279,7 +295,8 @@ puppet func set_packages_count(id, value):
 
 func ping_check():
 	$Debug/VBoxContainer/FPS.text = "FPS: " + str(Engine.get_frames_per_second())
-	print("[CruS transport metrics] ", SteamNetwork.diagnostics())
+	if preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG and OS.get_environment("CRUS_NETWORK_METRICS") == "1":
+		print("[CruS transport metrics] ", SteamNetwork.diagnostics())
 	
 	if NetworkBridge.check_connection():
 		if NetworkBridge.is_steam() and (not SteamNetwork._peers.has(SteamInit.steam_id) or not SteamNetwork._peers[SteamInit.steam_id].connected):
@@ -319,7 +336,10 @@ func lobby_is_full(peer = 0):
 func apply_host_settings():
 	hostSettings.maxPlayers = max(selected_player_limit(), players.size() if NetworkBridge.is_world_authority() else 2)
 	hostSettings.dropWeaponsOnDeath = bool(config.get("dropWeaponsOnDeath", false))
+	hostSettings.spawnInvulnerability = clamp(float(config.get("spawnInvulnerability", 10.0)), 0.0, 60.0)
+	hostSettings.spectating = bool(config.get("spectating", true))
 	hostSettings.bannedImplants = config.bannedImplants.duplicate()
+	hostSettings.bannedWeapons = config.get("bannedWeapons", []).duplicate()
 	hostSettings.deathmatchSpawnNPCs = config.get("deathmatchSpawnNPCs", true)
 	hostSettings.saveProgress = config.saveProgress
 	if NetworkBridge.check_connection():
@@ -344,6 +364,17 @@ func apply_host_settings():
 		NetworkBridge.n_rpc(self, "sync_host_settings", [hostSettings])
 		if NetworkBridge.is_steam():
 			SteamLobby.publish_lobby_settings()
+
+puppet func sync_selected_level(_id, level, path):
+	if typeof(level) != TYPE_INT or typeof(path) != TYPE_STRING: return
+	if level >= Extensions.BASE_LEVEL_COUNT:
+		if not Extensions.set_scene(path): return
+		level = Global.CURRENT_LEVEL
+	if level < -1 or level >= Global.LEVELS.size(): return
+	if level >= 0 and Global.LEVELS[level] != path: return
+	host_selected_level = level
+	if is_instance_valid(Global.menu) and not Global.menu.in_game:
+		Global.menu.display_host_selection(level)
 
 puppet func sync_host_settings(id, settings):
 	if NetworkBridge.request_sender(id) != NetworkBridge.get_host_id():
@@ -387,8 +418,24 @@ func host_server():
 		dataLoaded = true
 		print("[CRUS ONLINE / MAIN]: Server hosted")
 
+func show_connection_screen():
+	connecting_screen = true
+	connecting_elapsed = 0.0
+	$SyncLoad.rect_scale = Vector2(Global.resolution[0] / 1280.0, Global.resolution[1] / 720.0)
+	$SyncLoad.z_index = 100
+	$SyncLoad/Center/Label.text = "Connecting"
+	$SyncLoad.show()
+	$SyncLoad.raise()
+
+func hide_connection_screen():
+	if not connecting_screen: return
+	connecting_screen = false
+	connecting_elapsed = 0.0
+	$SyncLoad.hide()
+
 func join_to_server(ip, port):
 	if NetworkBridge.is_lan():
+		show_connection_screen()
 		Content.set_destination({"transport": "lan", "ip": str(ip), "port": int(port)})
 		config.lastIp = ip
 		config.lastPort = port
@@ -402,6 +449,8 @@ func join_to_server(ip, port):
 		print("[CRUS ONLINE / MAIN]: Client try to connect")
 
 func leave_server():
+	hide_connection_screen()
+	Spectator.stop()
 	if is_instance_valid(Content):
 		Content.reset()
 	Commands.reset_session()
@@ -424,6 +473,7 @@ func leave_server():
 	revives_used.clear()
 	revive_authorizations.clear()
 	team_wipe_applied = false
+	Players.remove_players()
 	playerPuppet = null
 	$RestartTimer.stop()
 	if is_connected("host_tick", self, "check_players_load"):
@@ -451,6 +501,9 @@ func leave_server():
 		SteamLobby.leave_lobby()
 	
 	print("[CRUS ONLINE / MAIN]: Server leaved")
+	host_selected_level = -1
+	if is_instance_valid(Global.menu):
+		Global.menu.on_lobby_left()
 
 
 
@@ -551,6 +604,7 @@ master func connect_init(id, received_code, recivedVersion, recivedPlayerInfo, c
 			NetworkBridge.n_rpc_id(self, id, "disconnect_client", [errorType.SERVER_CLOSED])
 
 puppet func client_connect_init(id, recivedHostSettings, recivedPlayerInfo, received_code):
+	hide_connection_screen()
 	players = recivedPlayerInfo
 	if NetworkBridge.is_steam():
 		SteamLobby.set_joined_code(received_code)
@@ -732,6 +786,7 @@ var loaded_players = []
 var player_scene_loaded = true
 
 func goto_scene_host(scene, preserve_loadout = false):
+	_crash_breadcrumb("host transition requested: " + str(scene))
 	if preserve_loadout:
 		Global.capture_level_transition_loadout()
 	enforce_implant_bans()
@@ -747,6 +802,7 @@ func goto_scene_host(scene, preserve_loadout = false):
 	_announce_difficulty = not hostSettings.get("shareDifficulty", false)
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1)
 	sync_load_progress(null, 0, players.size(), SteamNetwork.scene_epoch)
+	Flow.mission_epoch = SteamNetwork.scene_epoch
 	$CancerReplication.reset(SteamNetwork.scene_epoch)
 	$RestartTimer.stop()
 	hostSettings.map = scene
@@ -769,10 +825,18 @@ func goto_scene_host(scene, preserve_loadout = false):
 		SteamInit.Steam.setLobbyJoinable(SteamLobby.get_lobby_id(), false)
 		
 	Global.goto_scene(scene)
+	_crash_breadcrumb("host scene load queued: " + str(scene))
 	NetworkBridge.n_rpc(self, "goto_scene_client", [scene, Global.CURRENT_LEVEL, SteamNetwork.scene_epoch, preserve_loadout])
+	_crash_breadcrumb("host scene change sent to clients: " + str(scene))
 	print("[CRUS ONLINE / HOST]: Goto to scene [" + scene + "]")
 	
 	Players.load_players()
+	_crash_breadcrumb("host player puppets prepared: " + str(scene))
+
+func _crash_breadcrumb(event):
+	var reporter = Global.get_node_or_null("CrashReporter")
+	if reporter != null:
+		reporter.breadcrumb(event)
 
 puppet func goto_scene_client(id, scene, level, epoch = -1, preserve_loadout = false):
 	if level >= Extensions.BASE_LEVEL_COUNT and not Extensions.set_scene(scene):
@@ -791,6 +855,7 @@ puppet func goto_scene_client(id, scene, level, epoch = -1, preserve_loadout = f
 	team_wipe_applied = false
 	SteamNetwork.begin_scene(SteamNetwork.scene_epoch + 1 if epoch < 0 else epoch)
 	sync_load_progress(null, 0, players.size(), SteamNetwork.scene_epoch)
+	Flow.mission_epoch = SteamNetwork.scene_epoch
 	$CancerReplication.reset(SteamNetwork.scene_epoch)
 	$RestartTimer.stop()
 	player_scene_loaded = false
@@ -809,6 +874,8 @@ puppet func goto_scene_client(id, scene, level, epoch = -1, preserve_loadout = f
 	Players.load_players()
 
 func _scene_loaded():
+	hide_connection_screen()
+	_crash_breadcrumb("scene ready: " + str(Global.CURRENT_LEVEL))
 	if _menu_destination != "":
 		var level_select = _menu_destination == "level_select"
 		_menu_destination = ""
@@ -821,7 +888,8 @@ func _scene_loaded():
 		emit_signal("scene_loaded")
 		return
 	if not player_scene_loaded:
-		$SyncLoad.rect_scale = Vector2(Global.resolution[0] / 1280 ,Global.resolution[1] / 720 )
+		$SyncLoad.rect_scale = Vector2(Global.resolution[0] / 1280.0, Global.resolution[1] / 720.0)
+		$SyncLoad/Center/Label.text = "Online synchronization\nPlease wait"
 		$SyncLoad.show()
 		player_scene_loaded = true
 		get_tree().paused = true
@@ -854,6 +922,8 @@ func check_players_load():
 		
 		get_tree().paused = false
 		$SyncLoad.hide()
+		for peer in players:
+			grant_spawn_protection(peer)
 		if Global.CURRENT_LEVEL == 18:
 			Global.objectives = 0
 			Global.objective_complete = true
@@ -908,6 +978,8 @@ master func load_check(id):
 		Commands.send_spawn_state(id)
 
 puppet func scene_loaded_signal(id):
+	for peer in players:
+		grant_spawn_protection(peer)
 	get_tree().paused = false
 	$SyncLoad.hide()
 	emit_signal("scene_loaded")
@@ -918,6 +990,13 @@ puppet func scene_loaded_signal(id):
 
 var died_players = []
 var revives_used = {}
+var spawn_protected_until = {}
+
+func grant_spawn_protection(peer):
+	spawn_protected_until[int(peer)] = OS.get_ticks_msec() + int(float(hostSettings.get("spawnInvulnerability", 0.0)) * 1000)
+
+func is_spawn_protected(peer):
+	return NetworkBridge.check_connection() and OS.get_ticks_msec() < int(spawn_protected_until.get(int(peer), 0))
 var revive_authorizations = {}
 var team_wipe_applied = false
 
@@ -943,6 +1022,7 @@ func can_peer_be_revived(peer):
 	return players.has(peer) and died_players.has(peer) and has_revives_remaining(peer)
 
 func reset_revive_state():
+	spawn_protected_until.clear()
 	revives_used.clear()
 	revive_authorizations.clear()
 	for peer in players:
@@ -1156,6 +1236,7 @@ master func _request_player_revive(id, target):
 		NetworkBridge.n_rpc_id(target_puppet, target, "_respawn_player")
 
 func player_died():
+	_crash_breadcrumb("multiplayer death handler entered")
 	var killer_id = 0
 	if is_instance_valid(Global.player) and Global.player.lastDamagerId != null:
 		killer_id = int(Global.player.lastDamagerId)
@@ -1163,6 +1244,7 @@ func player_died():
 		_player_died(null, killer_id, true)
 	else:
 		NetworkBridge.n_rpc(self, "_player_died", [killer_id])
+	_crash_breadcrumb("multiplayer death handler completed")
 
 master func _player_died(id, killer_id = 0, host = false):
 	if not NetworkBridge.is_world_authority():
@@ -1174,11 +1256,13 @@ master func _player_died(id, killer_id = 0, host = false):
 		return
 	_release_holds_for_peer(id)
 	died_players.append(id)
+	_crash_breadcrumb("host marked player dead: " + str(id))
 	_commit_death_weapons(id)
 	reward_multiplayer_kill(killer_id, id)
 	revive_authorizations.erase(id)
 	sync_player_life(null, id, true)
 	NetworkBridge.n_rpc(self, "sync_player_life", [id, true])
+	_crash_breadcrumb("host synchronized player death: " + str(id))
 
 	var all_player_died = true
 
@@ -1187,7 +1271,9 @@ master func _player_died(id, killer_id = 0, host = false):
 			all_player_died = false
 	
 	if is_instance_valid(Flow):
+		_crash_breadcrumb("host checking team wipe after death")
 		Flow.check_team_wipe()
+		_crash_breadcrumb("host death team-wipe check completed")
 		return
 	if all_player_died and not team_wipe_applied:
 		apply_team_wipe(null)
@@ -1199,6 +1285,7 @@ master func _player_died(id, killer_id = 0, host = false):
 		NetworkBridge.n_rpc(self, "set_death_label")
 
 func drop_local_death_weapons():
+	if has_revives_remaining(NetworkBridge.get_id()): return
 	if not NetworkBridge.check_connection() or not hostSettings.get("dropWeaponsOnDeath", false) or not is_instance_valid(Global.player): return
 	var weapon = Global.player.weapon
 	var weapons = []
@@ -1230,6 +1317,7 @@ master func report_death_weapons(sender, weapons, epoch):
 	if died_players.has(peer): _commit_death_weapons(peer)
 
 func _commit_death_weapons(peer):
+	if has_revives_remaining(peer): return
 	if not death_weapon_reports.has(peer) or death_weapons_dropped.has(peer): return
 	death_weapons_dropped[peer] = true
 	var actor = _revive_actor(peer)
@@ -1360,6 +1448,7 @@ puppet func sync_player_life(id, peer_id, is_dead):
 	else:
 		death_weapon_reports.erase(peer_id)
 		death_weapons_dropped.erase(peer_id)
+		grant_spawn_protection(peer_id)
 		died_players.erase(peer_id)
 		team_wipe_applied = false
 	var puppet = players[peer_id].get("puppet")
@@ -1406,7 +1495,8 @@ master func _player_respawn(id, host = false):
 	id = NetworkBridge.request_sender(id)
 	if not players.has(id):
 		return
-	var administrative = preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG and revive_authorizations.get(id) == "admin"
+	var administrative = preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG and str(revive_authorizations.get(id, "")) == "admin"
+	if not administrative and not has_revives_remaining(id): return
 	if Deathmatch.is_active() and not administrative: return
 	var assisted = revive_authorizations.has(id)
 	if not hostSettings.get("canRespawn", true) and not administrative:
@@ -1417,9 +1507,9 @@ master func _player_respawn(id, host = false):
 		return
 	if assisted:
 		revive_authorizations.erase(id)
-		if revive_limit() > 0 and not administrative:
-			revives_used[id] = int(revives_used.get(id, 0)) + 1
-			_sync_revive_state_to_clients()
+	if revive_limit() > 0 and not administrative:
+		revives_used[id] = int(revives_used.get(id, 0)) + 1
+		_sync_revive_state_to_clients()
 	died_players.erase(id)
 	team_wipe_applied = false
 	sync_player_life(null, id, false)
@@ -1436,6 +1526,7 @@ func enable_menu():
 func disable_menu():
 	if not NetworkBridge.check_connection():
 		return
+	Spectator.stop()
 	Global.menu.multiplayer_enter()
 	Global.menu.set_process_input(false)
 	Menu.set_process_input(true)
@@ -1557,6 +1648,7 @@ func is_implant_banned(implant_name):
 	return NetworkBridge.check_connection() and implant_name in hostSettings.get("bannedImplants", [])
 
 func enforce_implant_bans():
+	enforce_weapon_bans()
 	var changed = false
 	for slot in ["head_implant", "torso_implant", "arm_implant", "leg_implant"]:
 		if is_implant_banned(Global.implants.get(slot).i_name):
@@ -1565,3 +1657,34 @@ func enforce_implant_bans():
 	if changed and Global.menu.in_game and is_instance_valid(Global.player):
 		Global.player.update_implants()
 	return changed
+
+func weapon_ban_id(index):
+	if typeof(index) != TYPE_INT or index < 0: return ""
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	if registry != null and registry.is_custom(index): return registry.id_for(index)
+	return "vanilla:" + str(index)
+
+func is_weapon_banned(index):
+	return NetworkBridge.check_connection() and weapon_ban_id(index) in hostSettings.get("bannedWeapons", [])
+
+func weapon_ban_entries():
+	var entries = []
+	if not is_instance_valid(Global.menu): return entries
+	var menu = Global.menu
+	var registry = Global.get_node_or_null("WeaponRegistry")
+	for index in range(Global.WEAPONS_UNLOCKED.size()):
+		var button = menu._weapon_button_for_index(index)
+		if not is_instance_valid(button): continue
+		var definition = registry.definition_for(index) if registry != null else null
+		var title = definition.display_name if definition != null else str(button.get_meta("weapon_name") if button.has_meta("weapon_name") else button.name)
+		var description = definition.description if definition != null else str(button.get_meta("weapon_description") if button.has_meta("weapon_description") else button.hint_tooltip)
+		var texture = definition.icon if definition != null else menu.BUTTON_TEXTURES[button.get_meta("menu_button_type")]
+		if definition != null and button.has_meta("custom_icon"): texture = button.get_meta("custom_icon")
+		entries.append({"key": weapon_ban_id(index), "name": title, "description": description, "texture": texture, "index": index})
+	return entries
+
+func enforce_weapon_bans():
+	if not is_instance_valid(Global.menu): return
+	Global.menu.refresh_weapon_bans()
+	if Global.menu.in_game and is_instance_valid(Global.player) and is_instance_valid(Global.player.weapon):
+		Global.player.weapon.enforce_bans()

@@ -31,6 +31,7 @@ func validate_network_action(sender, target, method, args):
 
 var weaponsMesh
 var currentWeaponId = 0
+var last_flashlight_state = null
 
 var weaponHold = false
 var playerCrouch = false
@@ -179,12 +180,14 @@ func _ready():
 	print(int(self.name))
 	if int(self.name) == NetworkBridge.get_id():
 		Multiplayer.playerPuppet = self
+		hide()
+		animTree.active = false
 	
-	canDamage = false
-	$RespawnDamage.start()
+	_reset_spawn_damage()
 
 remote func _set_death(id, recived_death):
 	death = recived_death
+	$Puppet.visible = not death or Multiplayer.has_revives_remaining(int(name))
 	if not death:
 		revive_started = false
 	else:
@@ -198,7 +201,7 @@ remote func _set_death(id, recived_death):
 		animTree.set("parameters/DEATH1/active", true)
 	else:
 		animTree.set("parameters/DEATH1/active", false)
-		animTree.active = true
+		animTree.active = int(name) != NetworkBridge.get_id()
 
 func player_restart():
 	_implant_names.clear()
@@ -213,8 +216,7 @@ func player_restart():
 	$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_collision_layer_bit(8, false)
 	$Puppet/PlayerModel/HelpTimer.stop()
 	
-	canDamage = false
-	$RespawnDamage.start()
+	_reset_spawn_damage()
 
 func play_death_sound():
 	$Puppet/PlayerModel/SFX/IED1.play()
@@ -249,6 +251,10 @@ remote func set_sit(id, recived_value):
 		player_sitting = recived_value
 
 func _process(delta):
+	if not NetworkBridge.check_connection(): return
+	if int(name) == NetworkBridge.get_id():
+		_update_help_label_visibility()
+		return
 	_update_player_indicator()
 	_update_golem_visual()
 	_update_multiplayer_body_visuals()
@@ -284,6 +290,8 @@ func _process(delta):
 		global_transform = global_transform.interpolate_with(transform_lerp, clamp(delta * 10.0, 0, 1))
 	
 	var name_height = 2.55 if implant_state.get("golem_exosystem", false) else (2.15 if not playerCrouch else 1.45)
+	if implant_state.get("shrink", false):
+		name_height = name_height * 0.1 + 0.2
 	$Puppet/PlayerModel/Nickname.global_transform.origin = $Puppet.global_transform.origin + Vector3(0, name_height, 0)
 	if label_font_ready and centered_name != $Puppet/PlayerModel/Nickname.text:
 		centered_name = $Puppet/PlayerModel/Nickname.text
@@ -364,6 +372,7 @@ func delete_grapple_orbs():
 	grapple_orbs = []
 
 func _physics_process(delta):
+	if not NetworkBridge.check_connection(): return
 	if int(name) == NetworkBridge.get_id():
 		_implant_elapsed += delta
 		if _implant_elapsed >= 0.5:
@@ -411,7 +420,7 @@ remote func _update_puppet(id, recivedTransform, recivedPlayerMovement, recivedP
 		NetworkBridge.n_rpc_unreliable(self, "_update_puppet", [recivedTransform, recivedPlayerMovement, recivedPlayerAim, grapple_pos, playerHoldPosition])
 
 remote func respawn_puppet(id):
-	death = false
+	_set_death(null, false)
 	if int(self.name) == NetworkBridge.get_id():
 		NetworkBridge.n_rpc(self, "respawn_puppet")
 	else:
@@ -419,6 +428,7 @@ remote func respawn_puppet(id):
 		animTree.active = true
 
 remote func set_current_weapon(id, value):
+	if Multiplayer.is_weapon_banned(value): value = null
 	if int(self.name) == NetworkBridge.get_id():
 		NetworkBridge.n_rpc(self, "set_current_weapon", [value])
 	else:
@@ -535,8 +545,14 @@ remote func hideHelpLabel(id = null):
 	$Puppet/PlayerModel/HelpSound.play()
 	$Puppet/PlayerModel/HelpLabel.hide()
 	
-	canDamage = false
-	$RespawnDamage.start()
+	_reset_spawn_damage()
+
+func _reset_spawn_damage():
+	$RespawnDamage.stop()
+	var duration = float(Multiplayer.hostSettings.get("spawnInvulnerability", 0.0))
+	canDamage = duration <= 0.0
+	if duration > 0.0:
+		$RespawnDamage.start(duration)
 
 func setup_puppet(id):
 	$Puppet/PlayerModel/Armature/Skeleton/Chest/Body.set_meta("puppetId", id)
@@ -545,6 +561,9 @@ func shoot_play(pitch, soundId = 0):
 	NetworkBridge.n_rpc(self, "shoot_commit", [pitch, soundId])
 
 func flashlight(state):
+	if last_flashlight_state == state:
+		return
+	last_flashlight_state = state
 	NetworkBridge.n_rpc(self, "set_flashlight", [state])
 
 remote func set_flashlight(id, state):
@@ -597,6 +616,11 @@ remote func sync_implants(id, names):
 	var state = preload("res://MOD_CONTENT/CruS Online/gameplay/implant_network.gd").resolve(Global.implants.IMPLANTS, names)
 	if state != null:
 		implant_state = state
+		var body_scale = 0.1 if state.get("shrink", false) else 1.0
+		$Puppet/PlayerModel/Armature.scale = Vector3.ONE * body_scale
+		$Puppet/PlayerModel.translation.y = 0.84536 * body_scale
+		$Puppet/PlayerModel/HelpLabel.translation.y = -0.11608 * body_scale
+		_update_collision_stance()
 		_refresh_multiplayer_body_materials()
 		_update_golem_visual()
 
@@ -647,6 +671,10 @@ func _update_golem_visual():
 		var torso = _golem_model.get_node_or_null("Armature/Skeleton/Torso_Mesh")
 		if torso != null:
 			torso.material_override = load("res://Materials/rod.tres")
+	if is_instance_valid(_golem_model):
+		var body_scale = 0.1 if implant_state.get("shrink", false) else 1.0
+		_golem_model.scale = Vector3.ONE * body_scale
+		_golem_model.translation.y = body_scale
 	if equipped != _golem_visible:
 		_golem_visible = equipped
 		if _golem_model != null:

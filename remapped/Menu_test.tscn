@@ -499,12 +499,6 @@ size_flags_vertical = 3
 size_flags_stretch_ratio = 2.18
 color = Color( 1, 1, 1, 0 )
 
-[node name="ResetLevels" type="Button" parent="Settings/GridContainer/PanelContainer6/VBoxContainer3"]
-margin_top = 188.0
-margin_right = 344.0
-margin_bottom = 214.0
-text = "Reset Level Progression"
-
 [node name="ClearSave" type="Button" parent="Settings/GridContainer/PanelContainer6/VBoxContainer3"]
 margin_top = 214.0
 margin_right = 344.0
@@ -1294,7 +1288,6 @@ dialog_text = "This will remove all of your progress. Are you Sure?"
 [connection signal="toggled" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/Highperformance" to="." method="_on_Hiperf_toggled"]
 [connection signal="value_changed" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/Civslider" to="." method="_on_Civslider_value_changed"]
 [connection signal="value_changed" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/Drawslider" to="." method="_on_Drawslider_value_changed"]
-[connection signal="pressed" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/ResetLevels" to="." method="_reset_level_progression"]
 [connection signal="pressed" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/ClearSave" to="." method="_on_ClearSave_pressed"]
 [connection signal="pressed" from="Settings/GridContainer/PanelContainer6/VBoxContainer3/ResetTimer" to="." method="_on_ResetTimer_pressed"]
 [connection signal="character_speak" from="Level_Info_Grid/HBoxContainer/Description_Scroll/Description" to="." method="_on_Character_Speak"]

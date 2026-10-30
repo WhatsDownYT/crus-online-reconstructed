@@ -14,11 +14,14 @@ var settings = {
 	"enemyFriendlyFire": false,
 	"neutralEnemies": false,
 	"randomizeTeams": false,
-	"overrideTeams": false
+	"overrideTeams": false,
+	"spectateOpponents": false
 }
 var menu_ref = null
 var overlay = null
 var ready_button = null
+var selected_level_button = null
+var last_host_selection = ""
 var ready_count = null
 var team_button = null
 var round_operatives = []
@@ -420,13 +423,20 @@ func attach_menu(menu):
 	menu.add_child(overlay)
 	ready_button = _make_square("Ready", "res://Textures/Menu/mission_start.png", Vector2(24, 624), "Tell the host that you are ready.")
 	ready_button.connect("pressed", self, "_ready_pressed")
+	selected_level_button = TextureButton.new()
+	selected_level_button.expand = true
+	selected_level_button.rect_size = Vector2(64, 64)
+	selected_level_button.focus_mode = Control.FOCUS_NONE
+	selected_level_button.connect("mouse_entered", self, "_selected_level_hover")
+	selected_level_button.connect("mouse_exited", self, "_tooltip_exited")
+	overlay.add_child(selected_level_button)
 	team_button = _make_square("", "res://MOD_CONTENT/CruS Online/assets/interface/target_white.png", Vector2(104, 624), "Switch between the Operatives and Counter-Operatives teams.")
 	team_button.texture_hover = team_button.texture_normal
 	team_button.texture_pressed = team_button.texture_normal
 	team_button.get_node("Text").hide()
 	team_button.connect("pressed", self, "_team_pressed")
 	ready_count = Label.new()
-	ready_count.rect_position = Vector2(36, 252)
+	ready_count.rect_position = Vector2(56, 252)
 	ready_count.rect_size = Vector2(320, 40)
 	ready_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ready_count.add_font_override("font", _font(20))
@@ -486,6 +496,13 @@ func _level_select_open():
 	return menu_ref.active_menus.back() == menu_ref.menu[menu_ref.LEVEL_SELECT]
 
 func _process(_delta):
+	if NetworkBridge.check_connection() and NetworkBridge.is_world_authority() and is_instance_valid(Global.menu) and not Global.menu.in_game:
+		var level = Global.CURRENT_LEVEL if Global.menu.level_selected else -1
+		var key = str(level) + ":" + str(Multiplayer.players.keys())
+		if key != last_host_selection:
+			last_host_selection = key
+			Multiplayer.host_selected_level = level
+			NetworkBridge.n_rpc(Multiplayer, "sync_selected_level", [level, Global.LEVELS[level] if level >= 0 else ""])
 	if NetworkBridge.check_connection() and is_instance_valid(Global.menu) and not Global.menu.in_game and not Global.menu.active_menus.empty() and Global.menu.active_menus.back() == Global.menu.menu[Global.menu.LEVEL_SELECT]:
 		if not is_instance_valid(overlay) or menu_ref != Global.menu:
 			attach_menu(Global.menu)
@@ -504,6 +521,10 @@ func _update_overlay():
 	ready_button.visible = not host
 	if ready_button.visible:
 		_position_ready_button()
+	selected_level_button.visible = not host and Multiplayer.host_selected_level >= 0 and not menu_ref.online_navigation_active
+	if selected_level_button.visible:
+		selected_level_button.rect_position = ready_button.rect_position + Vector2(64, 0)
+		selected_level_button.texture_normal = Global.LEVEL_IMAGES[Multiplayer.host_selected_level]
 	var local_ready = ready.get(NetworkBridge.get_id(), false)
 	ready_button.modulate = Color(0.6, 1.0, 0.6) if local_ready else Color.white
 	ready_button.get_node("Text").hide()
@@ -514,9 +535,20 @@ func _update_overlay():
 	ready_count.visible = host
 	if is_instance_valid(menu_ref) and menu_ref.menu.size() > menu_ref.LEVEL_SELECT:
 		var return_button = menu_ref.menu[menu_ref.LEVEL_SELECT].get_child(0)
-		ready_count.rect_position = return_button.rect_position + Vector2(menu_ref.button_size.x, (menu_ref.button_size.y - ready_count.rect_size.y) / 2)
+		ready_count.rect_position = return_button.rect_position + Vector2(menu_ref.button_size.x + 20, (menu_ref.button_size.y - ready_count.rect_size.y) / 2)
 	var counts = ready_counts()
 	ready_count.text = "Ready: %d/%d" % [counts[0], counts[1]]
+
+func _selected_level_hover():
+	if Multiplayer.host_selected_level >= 0:
+		var hover = menu_ref.hover_info
+		hover.get_node("Image").hide()
+		hover.get_node("Hint").hide()
+		hover.get_node("Name").show()
+		hover.get_node("Name").text = menu_ref.LEVEL_NAMES[Multiplayer.host_selected_level]
+		hover.get_parent().rect_size = Vector2.ZERO
+		hover.get_parent().raise()
+		hover.get_parent().show()
 
 func _position_team_button():
 	if not is_instance_valid(menu_ref) or menu_ref.menu.size() <= menu_ref.LEVEL_SELECT:
@@ -525,8 +557,8 @@ func _position_team_button():
 	if level_menu.get_child_count() <= 2:
 		return
 	for button in level_menu.get_children():
-		if button is TextureButton and button.get_meta("menu_button_type") == menu_ref.B_WEAPON_1:
-			team_button.rect_position = button.rect_position + Vector2(button.rect_size.x, 0)
+		if button is TextureButton and button.has_meta("menu_button_type") and button.get_meta("menu_button_type") == menu_ref.B_STOCKS:
+			team_button.rect_position = menu_ref._level_select_position(button) + Vector2(menu_ref.button_size.x, 0)
 			return
 
 func _position_ready_button():

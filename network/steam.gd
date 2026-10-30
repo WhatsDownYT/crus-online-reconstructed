@@ -41,6 +41,8 @@ func _ready() -> void:
 	
 	is_on_steam_deck = Steam.isSteamRunningOnSteamDeck()
 	is_online = Steam.loggedOn()
+	if is_online and Steam.has_method("initRelayNetworkAccess"):
+		Steam.initRelayNetworkAccess()
 	is_owned = Steam.isSubscribed()
 	steam_id = Steam.getSteamID()
 	steam_username = Steam.getPersonaName()

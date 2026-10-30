@@ -8,6 +8,7 @@ const MASTERY_KEYS = ["s_rank", "hope_eradicated", "punishment", "chaos", "extra
 const MASTERY_ICONS = ["res://Textures/rank_letters/S.png", "res://Maps/textures/base/helldoor.png", "res://Textures/Menu/punished.png", "res://Maps/textures/trauma/tface1.png", "res://Textures/Menu/Implants/tux.png", "res://MOD_CONTENT/CruS Online/assets/interface/shiner.png"]
 const MASTERY_NAMES = ["EXPEDITIOUS", "ERADICATED", "PUNISHED", "TORMENTED", "EXTRAVAGANCE", "STRIPPED"]
 const MASTERY_DESCRIPTIONS = ["Complete the mission with an S Rank.", "Complete the mission in Hope Eradicated.", "Complete the mission on Punishment Mode.", "Complete the mission on Chaos Mode.", "Complete the mission with the Extravagant Suit.", "Complete the mission without any implants."]
+const CAMPAIGN_MASTERY_GOALS = {"synaptic_cascade": "hope_eradicated", "eternal_malice": "s_rank", "entrapment": "punishment", "suffering_for_aeons": "chaos", "beauty_of_life": "extravagance", "divestation": "stripped"}
 
 var ui_overlay
 var goals = []
@@ -770,7 +771,21 @@ func _filtered_goals():
 		var category = str(goal.get("category", "campaign")).to_lower()
 		if current_category == "all" or category == current_category:
 			filtered.append(goal)
+	# Keep the broad goal order, but show mission mastery in campaign order.
+	var level_goals = []
+	for goal in filtered:
+		if str(goal.get("category", "")) == "mastery" and goal.has("level"):
+			level_goals.append(goal)
+	level_goals.sort_custom(self, "_sort_mastery_levels")
+	var level_index = 0
+	for index in range(filtered.size()):
+		if str(filtered[index].get("category", "")) == "mastery" and filtered[index].has("level"):
+			filtered[index] = level_goals[level_index]
+			level_index += 1
 	return filtered
+
+func _sort_mastery_levels(left, right):
+	return int(left.get("level", -1)) < int(right.get("level", -1))
 
 func _wrap_text_lines(text, font, width):
 	var lines = []
@@ -874,7 +889,7 @@ func _add_card(cards, goal, width, ming_body, game_body):
 	image.mouse_filter = MOUSE_FILTER_IGNORE
 	image.texture = _texture(str(goal.get("icon", "")))
 	card.add_child(image)
-	if goal.get("category", "") == "campaign" and manager != null and not manager.is_hidden(goal):
+	if goal.get("category", "") == "mastery" and goal.has("level") and manager != null and not manager.is_hidden(goal):
 		var progress = manager.mastery_for(int(goal.get("level", -1)))
 		var mastered = 0
 		for key in MASTERY_KEYS:
@@ -893,6 +908,17 @@ func _add_card(cards, goal, width, ming_body, game_body):
 		for state in ["normal", "hover", "pressed", "focus"]:
 			mastery_count.add_stylebox_override(state, no_background)
 		mastery_count.connect("pressed", self, "_open_mastery", [int(goal.get("level", -1))])
+		card.add_child(mastery_count)
+	elif CAMPAIGN_MASTERY_GOALS.has(str(goal.get("id", ""))) and manager != null:
+		var key = CAMPAIGN_MASTERY_GOALS[str(goal.get("id", ""))]
+		var levels = manager._campaign_levels()
+		var mastered = 0
+		for level in levels:
+			if manager.mastery_for(level).get(key, false):
+				mastered += 1
+		var mastery_count = _label(str(mastered) + " / " + str(levels.size()), ming_title, Vector2(103, image_y + 30), Vector2(width - 110, 31))
+		mastery_count.align = Label.ALIGN_CENTER
+		mastery_count.add_color_override("font_color", Color(0.12, 1.0, 0.18))
 		card.add_child(mastery_count)
 	var description = _label(description_text, game_body, Vector2(6, desc_y), Vector2(desc_width, desc_height))
 	description.clip_text = false

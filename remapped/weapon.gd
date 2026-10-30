@@ -39,6 +39,59 @@ onready var reload_timer = $Reload_Timer
 var through_count = 0
 var grapple_target
 var item_consumed = false
+var revive_loadout = []
+
+func capture_revive_loadout():
+	revive_loadout = [weapon1, weapon2, current_weapon]
+
+func enforce_bans():
+	if not player: return
+	var multiplayer = Global.get_node("Multiplayer")
+	if multiplayer.is_weapon_banned(weapon1): weapon1 = null
+	if multiplayer.is_weapon_banned(weapon2): weapon2 = null
+	if revive_loadout.size() == 3:
+		for slot in range(3):
+			if multiplayer.is_weapon_banned(revive_loadout[slot]): revive_loadout[slot] = null
+	if not multiplayer.is_weapon_banned(current_weapon): return
+	current_weapon = weapon1 if weapon1 != null else weapon2
+	if is_instance_valid(reload_timer): reload_timer.stop()
+	if is_instance_valid(timer): timer.stop()
+	if is_instance_valid(anim):
+		anim.stop()
+		anim.play("Nogun", -1, 100)
+	if is_instance_valid(playerPuppet): playerPuppet.set_current_weapon(null, current_weapon)
+	if is_instance_valid(glob) and is_instance_valid(glob.player): glob.player.set_move_speed()
+	if current_weapon == null and is_instance_valid(UI):
+		UI.set_ammo(0, 0, 1, 1)
+		UI.set_secondary_ammo(0, false)
+	else:
+		set_UI_ammo()
+
+func restore_after_revive():
+	if revive_loadout.size() == 3:
+		weapon1 = revive_loadout[0]
+		weapon2 = revive_loadout[1]
+		current_weapon = revive_loadout[2]
+		revive_loadout.clear()
+	if current_weapon == null:
+		current_weapon = weapon1 if weapon1 != null else weapon2
+	if has_meta("pending_pickup"):
+		remove_meta("pending_pickup")
+	disabled = false
+	set_process(true)
+	set_physics_process(true)
+	set_process_input(true)
+	reload_timer.stop()
+	timer.stop()
+	anim.stop()
+	if current_weapon != null:
+		player_weapon.visible = not orb
+		if is_instance_valid(playerPuppet):
+			playerPuppet.set_current_weapon(null, current_weapon)
+	set_UI_ammo()
+
+func _controls_blocked():
+	return NetworkBridge.check_connection() and (Global.get_node("Multiplayer/Menu").visible or glob.menu.online_pause_settings or glob.menu.in_game and glob.menu.visible)
 var flash_light_switch = true
 var grenade_ammo = 2
 var flashlight
@@ -658,6 +711,8 @@ func _update_first_aid_target():
 		first_aid_target = peer
 
 func _input(event):
+	if player and _controls_blocked():
+		return
 	if glob.implants.arm_implant.regen_ammo:
 		return 
 	if event is InputEventMouseMotion and player and current_weapon != null:
@@ -692,7 +747,7 @@ func _physics_process(delta):
 		if weapon2 != null:
 			if magazine_ammo[weapon2] < MAX_MAG_AMMO[weapon2] and regentimer2.is_stopped():
 				regentimer2.start(5 / MAX_MAG_AMMO[weapon2])
-	if player and NetworkBridge.check_connection() and Global.get_node("Multiplayer/Menu").visible:
+	if player and _controls_blocked():
 		return
 	if not reload_timer.is_stopped() and player and not Input.is_action_pressed("reload"):
 		rotation.x = lerp(rotation.x, initrot.x + 0.5, 5 * delta)
@@ -700,6 +755,13 @@ func _physics_process(delta):
 		rotation.x = lerp(rotation.x, initrot.x, 4 * delta)
 	if kickflag:
 		kicktimer += delta * 35
+
+func _update_grapple_attachment():
+	if grapple_flag and is_instance_valid(grapple_point) and not glob.player.dead:
+		glob.player.grapple(grapple_point)
+		if is_instance_valid(grapple_target): grapple_target.grapple(grapple_point)
+	elif is_instance_valid(playerPuppet):
+		playerPuppet.set_grapple(null)
 
 func draw_line(begin, end):
 	begin = global_transform.xform_inv(begin)
@@ -719,10 +781,15 @@ func normalize(value, mn, mx):
 	return norm
 
 func _process(delta)->void :
+	if player: enforce_bans()
 	if player and has_meta("pending_pickup"):
 		return
 	if disabled:
 		return 
+	if player:
+		_update_grapple_attachment()
+	if player and _controls_blocked():
+		return
 	_refresh_custom_view_model()
 	t += 1
 	if not player:
@@ -768,14 +835,6 @@ func _process(delta)->void :
 			melee = true
 		else :
 			melee = false
-		if grapple_flag:
-			if grapple_point != null:
-				glob.player.grapple(grapple_point)
-			if grapple_target != null:
-				grapple_target.grapple(grapple_point)
-		else:
-			if is_instance_valid(playerPuppet):
-				playerPuppet.set_grapple(null)
 		radiation_cylinder.rotation.z -= cylinder_velocity
 		RAD_light.light_energy = cylinder_velocity * 10
 		if current_weapon != W_RADIATOR:
@@ -3062,6 +3121,7 @@ func set_UI_ammo():
 		UI.set_secondary_ammo(custom_secondary_loaded.get(current_weapon, 0) + custom_secondary_reserve.get(current_weapon, 0), definition != null and definition.launcher_magazine_size > 0)
 
 func set_weapon(weapon_index):
+	if Global.get_node("Multiplayer").is_weapon_banned(weapon_index): return
 	if player and not orb:
 		anim.stop()
 		if current_weapon == weapon1:
@@ -3110,6 +3170,7 @@ func particle(particle, collider, position):
 	new_particle.emitting = true
 
 func _eyecam_weapon_jammed():
+	if player and Global.get_node("Multiplayer").is_weapon_banned(current_weapon): return true
 	if not player: return false
 	var eye = Global.get_node("Multiplayer").get("Eyecam")
 	return is_instance_valid(eye) and is_instance_valid(eye.Jam) and eye.Jam.weapon_jammed(current_weapon)

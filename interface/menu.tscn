@@ -385,7 +385,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "v1.0"
+text = "v1.0-beta"
 script = SubResource( 18 )
 
 [node name="LAN" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -518,7 +518,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "v1.0"
+text = "v1.0-beta"
 script = SubResource( 18 )
 
 [node name="Steam" type="PanelContainer" parent="CenterContainer/TabContainer/Main"]
@@ -677,7 +677,7 @@ margin_left = 387.0
 margin_right = 641.0
 margin_bottom = 26.0
 size_flags_horizontal = 10
-text = "v1.0"
+text = "v1.0-beta"
 script = SubResource( 18 )
 
 [node name="Host" type="PanelContainer" parent="CenterContainer/TabContainer"]

@@ -32,6 +32,7 @@ var button_implant_indices:Array = []
 var navigation_button = null
 var menu_prev_texture = null
 var menu_next_texture = null
+var last_ban_state = ""
 
 func _navigation_texture(path):
 	var image = Image.new()
@@ -312,7 +313,7 @@ func _slot_button_entered(type):
 		_show_implant_info(IMPLANTS.find(implant))
 
 func update_buttons():
-	if page_transitioning:
+	if page_transitioning or button_implant_indices.size() < PAGE_SLOT_COUNT:
 		return
 	for slot in range(PAGE_SLOT_COUNT):
 		var implant_index = button_implant_indices[slot]
@@ -504,6 +505,13 @@ func _process(delta):
 	if not is_visible_in_tree():
 		hovered_implant_index = -1
 		return
+	var multiplayer = Global.get_node("Multiplayer")
+	var ban_state = str(multiplayer.NetworkBridge.check_connection()) + str(multiplayer.hostSettings.get("bannedImplants", []))
+	if ban_state != last_ban_state and not page_transitioning:
+		last_ban_state = ban_state
+		update_buttons()
+		if hovered_implant_index >= 0 and hovered_implant_index < IMPLANTS.size() and is_instance_valid(hover_info) and hover_info.get_parent().visible:
+			_show_implant_info(hovered_implant_index)
 	if hovered_implant_index >= 0 and hovered_implant_index < IMPLANTS.size() and is_instance_valid(hover_info) and hover_info.get_parent().visible:
 		var live_price = Global.STOCKS.implant_price(IMPLANTS[hovered_implant_index])
 		if live_price != hovered_implant_price:

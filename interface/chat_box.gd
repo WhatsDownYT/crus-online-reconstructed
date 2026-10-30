@@ -23,13 +23,14 @@ func _ready():
 	if in_game_chat:
 		hide()
 
-func set_size_ratio():
+func set_size_ratio(_ratio = 1.0):
 	sizeRatio = 20
-	
-	textBox.get_font("normal_font").size = sizeRatio
-	lineEdit.get_font("font").size = sizeRatio
-	if labelText != null:
-		labelText.get_font("font").size = sizeRatio
+	for item in [[textBox, "normal_font"], [lineEdit, "font"], [labelText, "font"]]:
+		if item[0] == null:
+			continue
+		var font = item[0].get_font(item[1]).duplicate()
+		font.size = sizeRatio
+		item[0].add_font_override(item[1], font)
 
 master func send_message_host(id, message, author, color = "ff0000"):
 	var sender = NetworkBridge.request_sender(id)
@@ -62,21 +63,21 @@ func _text_entered(new_text):
 		if new_text.begins_with("/"):
 			parent.Commands.submit(self, new_text)
 			lineEdit.text = ""
+			if get_parent().quick_chat_active:
+				get_parent().close_quick_chat()
 			return
 		if NetworkBridge.n_is_network_master(self):
 			send_message_host(null, new_text, parent.playerInfo.nickname, parent.playerInfo.color)
 		else:
 			NetworkBridge.n_rpc(self, "send_message_host", [new_text, parent.playerInfo.nickname, parent.playerInfo.color])
 		lineEdit.text = ""
+		if get_parent().quick_chat_active:
+			get_parent().close_quick_chat()
 
 func open_chat(type):
 	show()
-	set_size_ratio()
+	set_size_ratio(get_parent().native_panel_ratio)
 	fit_in_parent()
-	$"../OpenChat".button_disable()
-	$"../CloseChat".button_enable()
 
 func close_chat(type):
 	hide()
-	$"../OpenChat".button_enable()
-	$"../CloseChat".button_disable()

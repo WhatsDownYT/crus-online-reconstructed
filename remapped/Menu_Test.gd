@@ -27,7 +27,7 @@ func multiplayer_enter():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 enum {UP, RIGHT, DOWN, LEFT}
-enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY}
+enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY, KEY_OPEN_CHAT}
 enum {START, LEVEL_SELECT, WEAPON_SELECT, IN_GAME, LEVEL_END, SETTINGS, CHARACTER, STOCKS, GOALS, STATS, NEWS}
 var confirmed = false
 var cancel = false
@@ -224,6 +224,7 @@ var b_position = Vector2(100, 100)
 var dir = 0
 var in_game = false
 var online_pause_settings = false
+var main_branding = null
 
 var resolution_list:ItemList
 var time = 0
@@ -233,6 +234,7 @@ var menu_creation_level_index:int = 0
 var menu_changing = false
 var counterop_locked_levels = {}
 var online_navigation_active = false
+var level_selected = false
 var online_navigation_transitioning = false
 var online_sidebar_was_visible = false
 var online_sidebar_position = Vector2.ZERO
@@ -256,6 +258,11 @@ func _physics_process(delta):
 	var modloader_version = get_node_or_null("ModLoaderVersion")
 	if modloader_version != null:
 		modloader_version.visible = not in_game and not Global.cutscene and not active_menus.empty() and active_menus.back() == menu[START]
+		if not modloader_version.has_meta("revitalized_shifted"):
+			modloader_version.add_constant_override("margin_bottom", 105)
+			modloader_version.set_meta("revitalized_shifted", true)
+	if is_instance_valid(main_branding):
+		main_branding.visible = not in_game and not Global.cutscene and not active_menus.empty() and active_menus.back() == menu[START]
 	time += delta
 	
 	if in_game or Global.cutscene:
@@ -289,6 +296,7 @@ func get_key_index(action):
 		return [action.button_index, "MOUSE"]
 func get_scancodes():
 	ensure_secondary_weapon_action()
+	ensure_open_chat_action()
 	var key_scancodes:Array = [get_key_index(InputMap.get_action_list("movement_forward")[0]), 
 	get_key_index(InputMap.get_action_list("movement_left")[0]), 
 	get_key_index(InputMap.get_action_list("movement_right")[0]), 
@@ -309,7 +317,8 @@ func get_scancodes():
 	get_key_index(InputMap.get_action_list("drop")[0]), 
 	get_key_index(InputMap.get_action_list("Suicide")[0]), 
 	get_key_index(InputMap.get_action_list("Stocks")[0]),
-	get_key_index(InputMap.get_action_list("Shoot_Secondary")[0])]
+	get_key_index(InputMap.get_action_list("Shoot_Secondary")[0]),
+	get_key_index(InputMap.get_action_list("Open_Chat")[0])]
 	return key_scancodes
 
 func ensure_secondary_weapon_action():
@@ -320,8 +329,17 @@ func ensure_secondary_weapon_action():
 		middle_mouse.button_index = BUTTON_MIDDLE
 		InputMap.action_add_event("Shoot_Secondary", middle_mouse)
 
+func ensure_open_chat_action():
+	if not InputMap.has_action("Open_Chat"):
+		InputMap.add_action("Open_Chat")
+	if InputMap.get_action_list("Open_Chat").empty():
+		var chat_key = InputEventKey.new()
+		chat_key.scancode = KEY_T
+		InputMap.action_add_event("Open_Chat", chat_key)
+
 func _ready():
 	ensure_secondary_weapon_action()
+	ensure_open_chat_action()
 	if Global.ending_3:
 		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / Chaos_Mode.show()
 	else :
@@ -379,6 +397,7 @@ func _ready():
 	keylist.add_item("Throw Weapon: " + InputMap.get_action_list("drop")[0].as_text())
 	keylist.add_item("Suicide: " + InputMap.get_action_list("Suicide")[0].as_text())
 	keylist.add_item("Stock Market: " + InputMap.get_action_list("Stocks")[0].as_text())
+	keylist.add_item("Open Chat: " + InputMap.get_action_list("Open_Chat")[0].as_text())
 	$MyWork.rect_global_position.x = 170
 	$MyWork.rect_global_position.y = 248
 	hover_info = $Hover_Panel / Hover_Info
@@ -491,18 +510,46 @@ func _ready():
 	news_panel = load("res://MOD_CONTENT/CruS Online/interface/news_screen.gd").new()
 	add_child(news_panel)
 	move_child(news_panel, menu[START].get_index())
+	credits_screen = load("res://MOD_CONTENT/CruS Online/interface/credits_screen.gd").new()
+	add_child(credits_screen)
+	credits_screen.connect("finished", self, "_on_credits_finished")
+	_setup_main_branding()
+	var settings_credits = Button.new()
+	settings_credits.name = "Credits"
+	settings_credits.text = "Credits"
+	settings_credits.rect_min_size.y = 28
+	settings_credits.connect("pressed", self, "_open_settings_credits")
+	$Settings/GridContainer/PanelContainer6/VBoxContainer3.add_child(settings_credits)
+	var save_slots_button = Button.new()
+	save_slots_button.name = "SaveSlots"
+	save_slots_button.text = "Return to Save Slots"
+	save_slots_button.rect_min_size.y = 28
+	save_slots_button.connect("pressed", self, "_return_to_save_slots")
+	$Settings/GridContainer/PanelContainer6/VBoxContainer3.add_child(save_slots_button)
 	for child in menu[START].get_children():
 		child.show()
 		child.set_position(b_position)
 		b_position.x += button_size.x
 	_refresh_start_buttons()
-	update_level_info()
+	_set_level_details_visible(false)
+	$Level_Info_Grid.hide()
 	
 	
 
 	set_res(Global.resolution[0], Global.resolution[1])
+	var vsync = CheckBox.new()
+	vsync.name = "VSync"
+	vsync.text = "V-Sync"
+	vsync.pressed = Global.vsync_enabled
+	vsync.connect("toggled", self, "_set_vsync")
+	$Settings/GridContainer/PanelContainer5.add_child(vsync)
 	_connect_settings_autosave($Settings)
 	call_deferred("_align_startup_window")
+
+func _set_vsync(value):
+	Global.vsync_enabled = value
+	OS.vsync_enabled = value
+	Global.save_settings()
 
 func _connect_settings_autosave(control):
 	if control is Range:
@@ -541,7 +588,7 @@ func _counterop_level_locked(index):
 	return _counterop_restricted_path(level_path)
 
 func _counterop_restricted_path(level_path):
-	return level_path == "res://Levels/Training_Level.tscn" or level_path == "res://Levels/Level12.tscn" or level_path == "res://Levels/BonusEND.tscn"
+	return level_path == "res://Levels/Training_Level.tscn" or level_path == "res://Levels/BonusEND.tscn"
 
 func _restore_level_disabled_visual(index, button):
 	button.modulate = Color(1, 1, 1, 1)
@@ -611,6 +658,15 @@ func _apply_competitive_start_gate():
 		return
 	if not button.visible or not Multiplayer.NetworkBridge.is_world_authority():
 		return
+	if not level_selected:
+		button.disabled = true
+		button.texture_disabled = BUTTON_TEXTURES_D[0]
+		button.modulate = Color.white
+		button.hint_tooltip = "Select a mission."
+		return
+	if button.hint_tooltip == "Select a mission.":
+		button.disabled = false
+		button.hint_tooltip = ""
 	var reason = _competitive_start_reason()
 	if reason != "":
 		button.disabled = true
@@ -653,6 +709,8 @@ func _on_Multiplayer_Button_Pressed(m:int, button_id:TextureButton):
 	var generation = online_navigation_generation
 	online_navigation_active = true
 	online_navigation_transitioning = true
+	if is_instance_valid(campaign_label):
+		campaign_label.hide()
 	for level_button in menu[LEVEL_SELECT].get_children():
 		level_button.disabled = true
 	button_id.disabled = false
@@ -819,6 +877,9 @@ func _weapon_detail_button(button):
 	weapon_menu_name.text = button.name
 	weapon_menu_description.text = button.hint_tooltip
 	weapon_menu_portrait.texture = button.texture_normal
+	if Multiplayer.is_weapon_banned(weapon_index):
+		weapon_menu_name.text += " (Banned)"
+		weapon_menu_description.text = "This weapon is disabled by the host."
 	var stat_values = _weapon_stats(weapon_index)
 	for stat_index in range(weapon_stat_labels.size()):
 		var label = weapon_stat_labels[stat_index]
@@ -943,7 +1004,7 @@ func _on_Weapon_Next_Page_Pressed(_menu_index, _button):
 	$SFX / Close.play()
 	_show_weapon_page()
 
-func show_level_page():
+func show_level_page(show_now = true):
 	for button in page_buttons:
 		menu[LEVEL_SELECT].remove_child(button)
 		all_buttons.erase(button)
@@ -956,14 +1017,13 @@ func show_level_page():
 		return
 	var page = campaign_pages[campaign_page]
 	menu[LEVEL_SELECT].buttons = menu[LEVEL_SELECT].buttons.slice(0, 7)
-	if campaign_pages.size() > 1:
-		page_buttons.append(create_button(LEVEL_SELECT, "Previous campaign", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
-		menu[LEVEL_SELECT].buttons.append(B_PREV_LEVELS)
 	for index in page.indices:
 		if index >= 0 and index < all_level_buttons.size():
 			menu[LEVEL_SELECT].add_child(all_level_buttons[index])
 			menu[LEVEL_SELECT].buttons.append(B_LEVEL)
 	if campaign_pages.size() > 1:
+		page_buttons.append(create_button(LEVEL_SELECT, "Previous campaign", "_on_Prev_Levels_Button_Pressed", B_PREV_LEVELS))
+		menu[LEVEL_SELECT].buttons.append(B_PREV_LEVELS)
 		page_buttons.append(create_button(LEVEL_SELECT, "Next campaign", "_on_Next_Levels_Button_Pressed", B_NEXT_LEVELS))
 		menu[LEVEL_SELECT].buttons.append(B_NEXT_LEVELS)
 	if is_instance_valid(campaign_label):
@@ -971,7 +1031,7 @@ func show_level_page():
 		campaign_label.rect_position = level_select_origin + Vector2(button_size.x, button_size.y * 8)
 		campaign_label.rect_size = Vector2(button_size.x * 3, button_size.y)
 		campaign_label.visible = campaign_pages.size() > 1 and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
-	if not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]:
+	if show_now and not menu_changing and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]:
 		for button in menu[LEVEL_SELECT].get_children():
 			button.rect_position = _level_select_position(button)
 			button.show()
@@ -980,18 +1040,55 @@ func show_level_page():
 		_apply_online_level_lock()
 
 func _on_Next_Levels_Button_Pressed(_menu_index, _button):
-	if online_navigation_active or campaign_pages.empty():
+	if online_navigation_active or menu_changing or campaign_pages.empty():
 		return
-	campaign_page = (campaign_page + 1) % campaign_pages.size()
-	$SFX / Close.play()
-	show_level_page()
+	_animate_campaign_page((campaign_page + 1) % campaign_pages.size())
 
 func _on_Prev_Levels_Button_Pressed(_menu_index, _button):
-	if online_navigation_active or campaign_pages.empty():
+	if online_navigation_active or menu_changing or campaign_pages.empty():
 		return
-	campaign_page = (campaign_page - 1 + campaign_pages.size()) % campaign_pages.size()
-	$SFX / Close.play()
-	show_level_page()
+	_animate_campaign_page((campaign_page - 1 + campaign_pages.size()) % campaign_pages.size())
+
+func _animate_campaign_page(destination):
+	menu_changing = true
+	_navigation_generation += 1
+	var generation = _navigation_generation
+	var old_buttons = []
+	for button in menu[LEVEL_SELECT].get_children():
+		if button.get_meta("menu_button_type") in [B_LEVEL, B_PREV_LEVELS, B_NEXT_LEVELS]:
+			old_buttons.append(button)
+	old_buttons.invert()
+	for button in old_buttons:
+		button.disabled = true
+		button.hide()
+		$SFX/Close.play()
+		yield (get_tree().create_timer(GRID_STEP_SECONDS), "timeout")
+		if generation != _navigation_generation:
+			return
+	campaign_page = destination
+	show_level_page(false)
+	button_state()
+	var new_buttons = []
+	var allowed = {}
+	var locked = {}
+	for button in menu[LEVEL_SELECT].get_children():
+		if button.get_meta("menu_button_type") in [B_LEVEL, B_PREV_LEVELS, B_NEXT_LEVELS]:
+			button.rect_position = _level_select_position(button)
+			new_buttons.append(button)
+			allowed[button] = true if button.get_meta("menu_button_type") in [B_PREV_LEVELS, B_NEXT_LEVELS] else button.visible
+			locked[button] = button.disabled
+			button.hide()
+	for button in new_buttons:
+		if allowed[button]:
+			button.show()
+		button.disabled = true
+		$SFX/Open.play()
+		yield (get_tree().create_timer(GRID_STEP_SECONDS), "timeout")
+		if generation != _navigation_generation:
+			return
+		button.disabled = locked[button]
+	button_state()
+	menu_changing = false
 
 func create_buttons(m:int):
 	var level = 0
@@ -1007,8 +1104,7 @@ func create_buttons(m:int):
 			B_STATS:
 				create_button(m, "Statistics", "_on_Statistics_Button_Pressed", menu[m].buttons[i])
 			B_NEWS:
-				var news_button = create_button(m, "News", "_on_News_Button_Pressed", menu[m].buttons[i])
-				news_button.hint_tooltip = "Coming soon!"
+				create_button(m, "Community", "_on_News_Button_Pressed", menu[m].buttons[i])
 			B_LEVEL:
 				var level_button = create_button(m, LEVEL_NAMES[level], "_on_Level_Pressed", menu[m].buttons[i])
 				level_button.set_meta("level_index", level)
@@ -1241,11 +1337,35 @@ func _on_Stocks_Button_Pressed(m:int, button_id:TextureButton):
 	
 
 
+func _set_level_details_visible(selected):
+	if not selected:
+		$Level_Info_Grid.hide()
+	$Level_Info_Grid/HBoxContainer/Description_Scroll.show()
+	if not selected:
+		$Level_Info_Grid/HBoxContainer/Description_Scroll/Description.text = ""
+		$Level_Info_Grid/HBoxContainer/VBoxContainer/Objective_Panel/Objectives.text = ""
+		for child in $Level_Info_Grid/Level_Info_Vbox/Time_Panel/VBoxContainer.get_children():
+			if child is Label:
+				child.text = ""
+		$Level_Info_Grid/Level_Info_Vbox/Level_Image.texture = RANK_LETTERS[4]
+	else:
+		$Level_Info_Grid/HBoxContainer/VBoxContainer/Portrait.show()
+		$Level_Info_Grid/HBoxContainer/VBoxContainer/Objective_Panel.show()
+		$Level_Info_Grid/Level_Info_Vbox/Time_Panel.show()
+		$Level_Info_Grid/Level_Info_Vbox/Level_Image.show()
+	for image in $Level_Info_Grid/Level_Info_Vbox/Time_Panel/VBoxContainer/HBoxContainer.get_children():
+		image.self_modulate = Color(1, 1, 1, 1.0 if selected else 0.0)
+
 func _on_Start_Button_Pressed(m:int, button_id:TextureButton):
 	_close_online_panel()
 	_ensure_counterop_overlay()
 	if not in_game and Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority():
 		goto_menu(m, LEVEL_SELECT, button_id)
+		active_element = $Level_Info_Grid
+		_host_description_pending = level_selected
+		_set_level_details_visible(level_selected)
+		if level_selected:
+			$Level_Info_Grid.come()
 		_update_waiting_menu()
 		return
 	Global.save_settings()
@@ -1254,12 +1374,15 @@ func _on_Start_Button_Pressed(m:int, button_id:TextureButton):
 		active_element = $Level_Info_Grid
 		$Level_Info_Grid.rect_position.x = 512
 		$Level_Info_Grid.rect_position.y = 40
-		$Level_Info_Grid.come()
+		_set_level_details_visible(level_selected)
+		if level_selected:
+			$Level_Info_Grid.come()
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = true
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.visible_characters = 0
 		for i in range(20):
 			yield (get_tree(), "idle_frame")
-		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech()
+		if level_selected:
+			$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech()
 		$Level_Info_Grid / HBoxContainer / Description_Scroll / Description.speech_break = false
 	else :
 		toggle_menu()
@@ -1283,9 +1406,18 @@ func _on_Statistics_Button_Pressed(m:int, button_id:TextureButton):
 	menu[STATS].raise()
 
 func _on_News_Button_Pressed(m:int, button_id:TextureButton):
-	pass
+	if in_game or menu_changing:
+		return
+	_close_online_panel()
+	goto_menu(m, NEWS, button_id)
+	active_element = news_panel
+	news_panel.come()
+	menu[NEWS].raise()
 
 func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
+	$Settings/GridContainer/PanelContainer6/VBoxContainer3/Credits.visible = not in_game and not online_pause_settings
+	$Settings/GridContainer/PanelContainer6/VBoxContainer3/SaveSlots.visible = not in_game and not online_pause_settings and not Multiplayer.NetworkBridge.check_connection()
+	menu[SETTINGS].show()
 	goto_menu(m, SETTINGS, button_id)
 	active_element = $Settings
 	$Settings.rect_position.x = 320
@@ -1293,7 +1425,75 @@ func _on_Settings_Button_Pressed(m:int, button_id:TextureButton):
 	$Settings.come()
 	menu[SETTINGS].raise()
 
-func level_end():
+func _setup_main_branding():
+	main_branding = Control.new()
+	main_branding.name = "RevitalizedBranding"
+	main_branding.rect_position = Vector2(100, 648)
+	main_branding.rect_size = Vector2(500, 60)
+	main_branding.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var source = Image.new()
+	if source.load("res://MOD_CONTENT/CruS Online/branding/header.png") == OK:
+		var texture = ImageTexture.new()
+		texture.create_from_image(source, 0)
+		var logo = TextureRect.new()
+		logo.texture = texture
+		logo.expand = true
+		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		logo.rect_position = Vector2(0, -30)
+		logo.rect_size = Vector2(360, 55)
+		logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		main_branding.add_child(logo)
+	var version = Label.new()
+	version.text = Multiplayer.version
+	version.rect_position = Vector2(370, -8)
+	version.rect_size = Vector2(130, 44)
+	version.valign = Label.VALIGN_CENTER
+	version.theme = load("res://Menu/menu_theme.tres")
+	version.add_color_override("font_color", Color(1, 0, 0))
+	version.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_branding.add_child(version)
+	add_child(main_branding)
+
+func _open_settings_credits():
+	if is_instance_valid(credits_screen):
+		credits_screen.open()
+
+func _return_to_save_slots():
+	Global.save_game()
+	Global.save_slot_selected = false
+	Global.force_save_selector = true
+	get_tree().paused = false
+	Global.goto_scene("res://Cutscenes/Cutscene1.tscn")
+
+func _on_credits_finished(automatically):
+	if not trauma_credits_active:
+		return
+	trauma_credits_active = false
+	get_tree().paused = false
+	if Multiplayer.NetworkBridge.check_connection():
+		Multiplayer.Flow.exit_to_menu(false)
+		return
+	if automatically:
+		in_game = false
+		level_selected = false
+		$Level_End_Grid.hide()
+		active_element = null
+		menu[START].show()
+		Global.CURRENT_LEVEL = 0
+		Global.objective_complete = false
+		Global.objectives = 0
+		if Global.skip_intro:
+			Global.force_save_selector = true
+			Global.goto_scene("res://Cutscenes/Cutscene1.tscn")
+		else:
+			Global.goto_scene("res://Cutscenes/Consumerintro.tscn")
+	else:
+		_on_Exit_Menu_Pressed(START, menu[START].get_child(0))
+
+func level_end(from_trauma_ending = false):
+	$Level_Info_Grid.hide()
+	$Level_Info_Grid/HBoxContainer/Description_Scroll/Description.speech_break = true
+	trauma_ending_results = from_trauma_ending
 	if is_instance_valid(campaign_label):
 		campaign_label.hide()
 	if Multiplayer.NetworkBridge.check_connection():
@@ -1339,6 +1539,19 @@ func _on_weapon_equipped(button_id):
 	_weapon_detail_button(button_id)
 	$Character_Menu / Character_Container / Equip.play()
 	Global.save_game()
+
+func refresh_weapon_bans():
+	if weapon_select_buttons.empty(): return
+	for slot in range(2):
+		var index = weapon_1 if slot == 0 else weapon_2
+		var preview = $Weapon1_Viewport/Weapon if slot == 0 else $Weapon2_Viewport/Weapon
+		if typeof(index) == TYPE_INT and index >= 0 and index < preview.MESH.size():
+			preview.MESH[index].visible = not Multiplayer.is_weapon_banned(index)
+	for index in range(Global.CURRENT_WEAPONS.size()):
+		Global.CURRENT_WEAPONS[index] = index in [weapon_1, weapon_2] and not Multiplayer.is_weapon_banned(index)
+	button_state()
+	if not active_menus.empty() and active_menus.back() == menu[WEAPON_SELECT]:
+		_weapon_detail_button(_weapon_button_for_index(weapon_1 if current_weapon_select == 1 else weapon_2))
 
 
 func _on_Rod_Pressed(m:int, button_id:TextureButton):
@@ -1433,6 +1646,7 @@ func _on_Light_Pressed(m:int, button_id:TextureButton):
 	_on_weapon_equipped(button_id)
 
 func set_weapon(w_index:int):
+	if Multiplayer.is_weapon_banned(w_index): return
 	match current_weapon_select:
 		1:
 			$Weapon1_Viewport.get_node("Weapon").MESH[weapon_1].hide()
@@ -1450,6 +1664,9 @@ func set_weapon(w_index:int):
 	_refresh_weapon_menu_icons()
 
 func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
+	if online_pause_settings:
+		Global.get_node("Multiplayer/Menu").close_settings()
+		return
 	if menu_changing:
 		return
 	if active_menus.size() > 1 and active_menus.back() != menu[LEVEL_SELECT]:
@@ -1467,6 +1684,8 @@ func _on_Return_Button_Pressed(m:int, button_id:TextureButton):
 
 func _on_Mission_Start_Pressed(m:int, button_id:TextureButton):
 	if online_navigation_active:
+		return
+	if not level_selected:
 		return
 	if _counterop_level_locked(Global.CURRENT_LEVEL) or _competitive_start_reason() != "":
 		return
@@ -1501,6 +1720,11 @@ func _on_Level_Pressed(m:int, button_id:TextureButton):
 	if _counterop_level_locked(level_index):
 		return
 	Global.CURRENT_LEVEL = level_index
+	level_selected = true
+	_set_level_details_visible(true)
+	if not $Level_Info_Grid.visible:
+		$Level_Info_Grid.show()
+		$Level_Info_Grid.come()
 	if Global.LEVEL_PUNISHED[Global.CURRENT_LEVEL]:
 		$Level_Info_Grid / Level_Info_Vbox / Time_Panel / VBoxContainer / HBoxContainer / Punishment_Image.modulate = Color(1, 1, 1, 1)
 	else :
@@ -1725,6 +1949,10 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 		elif from_menu in [START, LEVEL_SELECT] and child.get_meta("menu_button_type") == B_RETURN and to_menu in [GOALS, STATS, SETTINGS, NEWS]:
 			to_pos = b.rect_position + Vector2(0, button_size.y) if from_menu == START and to_menu in [SETTINGS, NEWS] else b.rect_position
 			b_position = to_pos
+		if online_pause_settings and to_menu == SETTINGS and child.get_meta("menu_button_type") == B_RETURN:
+			var pause_settings = Global.get_node_or_null("Multiplayer/Menu/Settings")
+			to_pos = pause_settings.rect_position + Vector2(0, button_size.y) if pause_settings != null else b.rect_position + Vector2(0, button_size.y)
+			b_position = to_pos
 		if to_menu == SETTINGS and b.get_meta("menu_button_type") == B_MULTIPLAYER_MENU:
 			to_pos = b.rect_position + Vector2(button_size.x, 0)
 			b_position = to_pos
@@ -1752,7 +1980,14 @@ func goto_menu(from_menu:int, to_menu:int, b:TextureButton):
 	menu_changing = false
 
 func _input(event):
+	if is_instance_valid(credits_screen) and credits_screen.visible:
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
+			credits_screen.close()
+			get_tree().set_input_as_handled()
+		return
 	if is_instance_valid(Multiplayer.Flow) and Multiplayer.Flow.result_active:
+		return
+	if online_pause_settings:
 		return
 	if in_game and Multiplayer.NetworkBridge.check_connection() and not online_pause_settings:
 		return
@@ -1818,13 +2053,13 @@ func button_state():
 			else :
 				level_buttons[button].hide()
 
-			if button == Global.CURRENT_LEVEL:
+			if level_selected and button == Global.CURRENT_LEVEL:
 				level_buttons[button].disabled = true
 			else :
 				level_buttons[button].disabled = false
 			if button >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
 				var stage_locked = not Multiplayer.Extensions.stage_unlocked(button)
-				level_buttons[button].disabled = stage_locked or button == Global.CURRENT_LEVEL
+				level_buttons[button].disabled = stage_locked or (level_selected and button == Global.CURRENT_LEVEL)
 				if stage_locked:
 					var stage = Multiplayer.Extensions.campaign_stages.get(button, {})
 					if stage.get("secret", false):
@@ -1865,6 +2100,9 @@ func button_state():
 				weapon_button.texture_disabled = weapon_button.texture_normal
 				weapon_button.modulate = Color(0.55, 0.55, 0.55) if Global.CURRENT_WEAPONS[button] else Color.white
 				weapon_button.disabled = Global.CURRENT_WEAPONS[button]
+				if Multiplayer.is_weapon_banned(button):
+					weapon_button.modulate = Color(1, 0.2, 0.2)
+					weapon_button.disabled = true
 			else:
 				weapon_button.hint_tooltip = ""
 				weapon_button.texture_normal = MYSTERY
@@ -2114,6 +2352,12 @@ func _on_Exit_Level_Select_Pressed(m:int, b:BaseButton):
 
 
 func _on_exls():
+	if trauma_ending_results and active_element == $Level_End_Grid and $Level_End_Grid/Level_Info_Vbox/Next_Level.visible:
+		if Multiplayer.NetworkBridge.check_connection():
+			Multiplayer.Flow.start_ending_credits()
+		else:
+			show_ending_credits()
+		return
 	if $Level_End_Grid/Level_Info_Vbox/Next_Level.visible and Global.CURRENT_LEVEL >= CUSTOM_LEVEL_BASE and is_instance_valid(Multiplayer.Extensions):
 		var next_level = Multiplayer.Extensions.next_campaign_level(Global.CURRENT_LEVEL)
 		if next_level >= 0:
@@ -2122,6 +2366,12 @@ func _on_exls():
 	$Hover_Panel.hide()
 func _on_exmm():
 	_on_Exit_Menu_Pressed(START, menu[START].get_child(0))
+
+func show_ending_credits():
+	if trauma_credits_active:
+		return
+	trauma_credits_active = true
+	credits_screen.open()
 	
 func _on_rb():
 	_on_Retry_Button_Pressed(START, menu[START].get_child(0))
@@ -2139,6 +2389,8 @@ func _on_Key_List_item_activated(index):
 	var list_index = index
 	if index == KEY_SHOOT + 1:
 		index = KEY_SECONDARY
+	elif index == KEY_OPEN_CHAT:
+		pass
 	elif index > KEY_SHOOT + 1:
 		index -= 1
 	wait_for_key = true
@@ -2212,6 +2464,9 @@ func _on_Key_List_item_activated(index):
 		KEY_SECONDARY:
 			set_inputs("Shoot_Secondary")
 			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Shoot Secondary: " + key_pressed.as_text())
+		KEY_OPEN_CHAT:
+			set_inputs("Open_Chat")
+			$Settings / GridContainer / PanelContainer2 / VBoxContainer4 / Key_List.set_item_text(list_index, "Open Chat: " + key_pressed.as_text())
 	Global.save_settings()
 func set_inputs(action):
 	InputMap.action_erase_events(action)
@@ -2249,25 +2504,6 @@ func _on_Reflections_toggled(value):
 func _on_InvertY_toggled(value):
 	Global.invert_y = value
 
-
-func _reset_level_progression():
-
-	$ConfirmationDialog.popup(Rect2(get_global_mouse_position(), Vector2(256, 128)))
-	$ConfirmationDialog.dialog_text = "Reset level progression?"
-	while confirmed == false:
-		yield (get_tree(), "idle_frame")
-	confirmed = false
-	if cancel == true:
-		cancel = false
-		return 
-	Global.LEVELS_UNLOCKED = 1
-	Global.CURRENT_LEVEL = 0
-	if Global.implants.purchased_implants.find("House") != - 1:
-		Global.implants.purchased_implants.remove(Global.implants.purchased_implants.find("House"))
-	Global.BONUS_UNLOCK = []
-	if is_instance_valid(Multiplayer.Extensions):
-		Multiplayer.Extensions.reset_campaign_progress()
-	button_state()
 
 func _on_ClearSave_pressed():
 	confirmed = false
@@ -2589,15 +2825,42 @@ var _waiting_label
 var goals_screen
 var statistics_screen
 var news_panel
+var credits_screen
+var trauma_credits_active = false
+var trauma_ending_results = false
 
 func _close_online_panel():
 	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
 		panel.disable_menu()
 
+var _displayed_host_level = -2
+var _host_description_pending = false
+
+func display_host_selection(level):
+	if Multiplayer.NetworkBridge.is_world_authority() or in_game: return
+	_displayed_host_level = level
+	level_selected = level >= 0
+	if level < 0:
+		$Level_Info_Grid.hide()
+		return
+	Global.CURRENT_LEVEL = level
+	_set_level_details_visible(true)
+	update_level_info()
+	for toggle in ["Punishment_Mode", "Chaos_Mode"]:
+		var control = $Level_Info_Grid/Level_Info_Vbox/Time_Panel/VBoxContainer.get_node_or_null(toggle)
+		if control != null:
+			control.hide()
+	$Level_Info_Grid/HBoxContainer/Description_Scroll/Description.speech_break = true
+	$Level_Info_Grid/HBoxContainer/Description_Scroll/Description.visible_characters = 0
+	_host_description_pending = true
+	_update_waiting_menu()
+
 func _update_waiting_menu():
 	var waiting = Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and not in_game and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+	if waiting and _displayed_host_level != Multiplayer.host_selected_level:
+		display_host_selection(Multiplayer.host_selected_level)
 	if is_instance_valid(campaign_label):
-		campaign_label.visible = campaign_pages.size() > 1 and not waiting and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
+		campaign_label.visible = campaign_pages.size() > 1 and not waiting and not online_navigation_active and not active_menus.empty() and active_menus.back() == menu[LEVEL_SELECT]
 	if not is_instance_valid(_waiting_label):
 		if not waiting:
 			return
@@ -2615,26 +2878,48 @@ func _update_waiting_menu():
 		add_child(_waiting_label)
 	var online_open = online_navigation_active
 	for panel in get_tree().get_nodes_in_group("MultiplayerMenu"):
-		if panel.is_visible_in_tree():
+		var center = panel.get_node_or_null("CenterContainer")
+		if center != null and center.is_visible_in_tree():
 			online_open = true
 			break
-	_waiting_label.visible = waiting and not online_open
+	_waiting_label.visible = waiting and not online_open and Multiplayer.host_selected_level < 0
 	if waiting:
 		_waiting_label.rect_position = (get_viewport_rect().size / rect_scale - _waiting_label.rect_size) * 0.5
-		$Level_Info_Grid.hide()
+		if not menu_changing:
+			$Level_Info_Grid.visible = Multiplayer.host_selected_level >= 0 and not online_open and active_element == $Level_Info_Grid
+			if $Level_Info_Grid.visible and _host_description_pending:
+				_host_description_pending = false
+				$Level_Info_Grid/HBoxContainer/Description_Scroll/Description.speech()
 		for button in menu[LEVEL_SELECT].get_children():
 			if _client_mission_button(button):
 				button.hide()
+	elif not Multiplayer.NetworkBridge.is_world_authority() and not in_game:
+		$Level_Info_Grid.hide()
+
+func on_lobby_left():
+	_displayed_host_level = -2
+	_host_description_pending = false
+	level_selected = false
+	$Level_Info_Grid.hide()
+	if is_instance_valid(_waiting_label):
+		_waiting_label.hide()
+	for button in menu[LEVEL_SELECT].get_children():
+		if button.has_meta("menu_button_type") and button.get_meta("menu_button_type") == B_MISSION_START:
+			button.show()
+			button.disabled = true
+	button_state()
 
 var _navigation_generation = 0
 
 func _client_mission_button(button):
-	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START, B_PREV_LEVELS, B_NEXT_LEVELS]
+	return Multiplayer.NetworkBridge.check_connection() and not Multiplayer.NetworkBridge.is_world_authority() and button.has_meta("menu_button_type") and button.get_meta("menu_button_type") in [B_LEVEL, B_MISSION_START, B_PREV_LEVELS, B_NEXT_LEVELS]
 
 func _hide_online_navigation():
 	_navigation_generation += 1
 	_reset_online_navigation_state()
 	menu_changing = false
+	if is_instance_valid(weapon_menu_panel):
+		weapon_menu_panel.hide()
 	for entry in menu:
 		entry.hide()
 	for panel in [$Level_Info_Grid, $Character_Menu, $Stock_Menu, $Settings, $Hover_Panel]:

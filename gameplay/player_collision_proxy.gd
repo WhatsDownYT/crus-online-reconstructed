@@ -14,7 +14,9 @@ func _ready():
 	update_stance()
 
 func update_stance():
-	collision_shape.shape.extents = Vector3(0.311979, 0.414648 if client.playerCrouch else 0.903937, 0.289931)
+	var body_scale = 0.1 if client.implant_state.get("shrink", false) else 1.0
+	collision_shape.translation.y = 0.918484 * body_scale
+	collision_shape.shape.extents = Vector3(0.311979, 0.414648 if client.playerCrouch else 0.903937, 0.289931) * body_scale
 	collision_shape.set_deferred("disabled", client.death or int(client.name) == client.NetworkBridge.get_id())
 
 func damage(amount, normal, point, source):

@@ -15,6 +15,10 @@ func _init():
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/interface/death_screen.tscn").instance())
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/achievements/achievement_preview.gd").new())
 	Global.add_child(preload("res://MOD_CONTENT/CruS Online/achievements/achievement_goals.gd").new())
+	Global.add_child(preload("res://MOD_CONTENT/CruS Online/core/fullscreen_shortcut.gd").new())
+	var crash_reporter = preload("res://MOD_CONTENT/CruS Online/core/crash_reporter.gd").new()
+	crash_reporter.name = "CrashReporter"
+	Global.add_child(crash_reporter)
 	var capture = preload("res://MOD_CONTENT/CruS Online/core/debug_capture.gd").new()
 	capture.name = "DebugCapture"
 	Global.add_child(capture)

@@ -18,6 +18,7 @@ func _process(delta):
 	var voice = Multiplayer.get_node_or_null("VoiceChat")
 	if voice == null:
 		return
+	var ratio = Multiplayer.get_node("Menu").native_panel_ratio
 	for peer in rows.keys():
 		if not Multiplayer.players.has(peer):
 			rows[peer].hide()
@@ -31,7 +32,7 @@ func _process(delta):
 			row.add_constant_override("separation", 10)
 			var icon = TextureButton.new()
 			icon.name = "Voice"
-			icon.rect_min_size = Vector2(32, 32)
+			icon.rect_min_size = Vector2(32, 32) * ratio
 			icon.expand = true
 			icon.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 			icon.focus_mode = Control.FOCUS_NONE
@@ -48,7 +49,7 @@ func _process(delta):
 			row.add_child(label)
 			var team = TextureButton.new()
 			team.name = "Team"
-			team.rect_min_size = Vector2(48, 48)
+			team.rect_min_size = Vector2(48, 48) * ratio
 			team.expand = true
 			team.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 			team.focus_mode = Control.FOCUS_NONE
@@ -60,6 +61,9 @@ func _process(delta):
 			add_child(row)
 			rows[peer] = row
 		var row = rows[peer]
+		row.get_node("Voice").rect_min_size = Vector2(32, 32) * ratio
+		row.get_node("Team").rect_min_size = Vector2(48, 48) * ratio
+		row.get_node("Name").get_font("font").size = 20
 		move_child(row, position)
 		position += 1
 		var info = Multiplayer.players[peer]

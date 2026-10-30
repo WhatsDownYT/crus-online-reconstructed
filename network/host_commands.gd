@@ -2,7 +2,7 @@ extends Node
 
 const DEBUG = preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG
 const HELP = "/kick <player>, /ban <player>, /mute <player>, /unmute <player>, /players, /announce <message>, /restart, /end, /tp <player1> <player2>, /op <player>, /deop <player>, /help"
-const DEVHELP = "/god <player>, /map <level>, /noclip <player>, /heal <player>, /revive <player>, /kill <player>, /money <amount> [player], /give <weapon> [player], /implant <implant> [player], /spawn <npc>, /killall, /freezeai, /unfreezeai"
+const DEVHELP = "/god <player>, /map <level>, /noclip <player>, /heal <player>, /revive <player>, /kill <player>, /money <amount> [player], /give <weapon> [player], /implant <implant> [player], /spawn <entity>, /killall, /freezeai, /unfreezeai"
 onready var mp = get_parent()
 onready var bridge = get_parent().get_node("NetworkBridge")
 var short_ids = {}
@@ -176,7 +176,7 @@ func consume(chat, message, sender):
 		reply(chat, HELP + "\nUse /players for IDs. Put names containing spaces in double quotes." + ("\n/devhelp lists debug commands." if DEBUG else ""))
 		return true
 	if command == "devhelp":
-		reply(chat, DEVHELP if DEBUG else "Debug commands are unavailable in this build.")
+		reply(chat, DEVHELP + "\nUse /map list, /give list, or /spawn list for complete catalogs." if DEBUG else "Debug commands are unavailable in this build.")
 		return true
 	if command == "players":
 		for peer in mp.players:
@@ -204,6 +204,9 @@ func consume(chat, message, sender):
 		return true
 	if command in ["freezeai", "unfreezeai", "killall", "map", "spawn", "god", "noclip", "heal", "revive", "kill", "money", "give", "implant"] and not DEBUG:
 		reply(chat, "Debug commands are unavailable in this build."); return true
+	if command in ["map", "give", "spawn"] and args.size() == 1 and args[0].to_lower() == "list":
+		command_list(chat, command)
+		return true
 	if command == "map":
 		if args.empty():
 			reply(chat, "Usage: /map <level name or 0-based ID>")
@@ -236,11 +239,11 @@ func consume(chat, message, sender):
 					remove_npc(bridge.get_id(),mp.SteamNetwork.scene_epoch,npc.get_path())
 		else:
 			if args.empty():
-				reply(chat, "Usage: /spawn <NPC scene name>")
+				reply(chat, "Usage: /spawn <entity scene name or resource path>")
 				return true
 			var scene = resolve_npc(PoolStringArray(args).join(" "))
 			if scene.empty():
-				reply(chat, "Unknown NPC. Use an enemy scene name, such as E_Grunt or E_Killerbot.")
+				reply(chat, "Unknown or ambiguous entity. Try New_Car, E_Grunt, or a full scene resource path.")
 				return true
 			spawn_sequence += 1
 			var pose = Global.player.global_transform
@@ -324,7 +327,11 @@ func usable_player(peer):
 
 func dispatch(peer, action, value):
 	if action == "revive":
+		if not mp.died_players.has(peer) and not (peer == bridge.get_id() and is_instance_valid(Global.player) and Global.player.died): return
 		mp.revive_authorizations[peer] = "admin"
+		if mp.Flow.result_active:
+			apply_action(bridge.get_host_id(), "resume_after_revive", null, mp.SteamNetwork.scene_epoch)
+			bridge.n_rpc(self, "apply_action", ["resume_after_revive", null, mp.SteamNetwork.scene_epoch])
 	if peer == bridge.get_id():
 		apply_action(bridge.get_host_id(), action, value, mp.SteamNetwork.scene_epoch)
 	else:
@@ -361,13 +368,14 @@ puppet func apply_action(sender, action, value, epoch = -1):
 		"kill":
 			player.remove_meta("admin_god")
 			player.instadie()
+		"resume_after_revive":
+			mp.Flow.clear_result()
+			Global.menu.hide()
 		"revive":
 			if player.dead or player.died:
 				mp.Flow.clear_result()
-				var enabled = mp.hostSettings.canRespawn
-				mp.hostSettings.canRespawn = true
-				Global.get_node("DeathScreen").respawn(true)
-				mp.hostSettings.canRespawn = enabled
+				Global.menu.hide()
+				Global.get_node("DeathScreen").respawn(true, true)
 		"give":
 			if typeof(value) != TYPE_INT or value < 0 or value >= player.weapon.MAX_AMMO.size():
 				return
@@ -444,17 +452,39 @@ func resolve_level(token):
 	return found[0] if found.size() == 1 else -1
 
 func resolve_weapon(token):
-	var menu = Global.menu.menu[Global.menu.WEAPON_SELECT]
+	var catalog = mp.weapon_ban_entries()
 	if token.is_valid_integer():
-		return int(token) if int(token) >= 0 and int(token) < menu.get_child_count()-1 else -1
+		for entry in catalog:
+			if entry.index == int(token): return entry.index
+		return -1
 	var found = []
-	for index in range(1, menu.get_child_count()):
-		var name = str(menu.get_child(index).name).to_lower()
-		if name == token.to_lower():
-			return index-1
+	for entry in catalog:
+		var name = entry.name.to_lower()
+		if name == token.to_lower() or entry.key.to_lower() == token.to_lower():
+			return entry.index
 		if name.find(token.to_lower()) >= 0:
-			found.append(index-1)
+			found.append(entry.index)
 	return found[0] if found.size() == 1 else -1
+
+func command_list(chat, command):
+	var lines = []
+	if command == "map":
+		for index in range(Global.LEVELS.size()):
+			lines.append("%d: %s" % [index, mp.get_node("DiscordPresence")._level_name(index)])
+	elif command == "give":
+		for entry in mp.weapon_ban_entries():
+			lines.append("%d: %s [%s]" % [entry.index, entry.name, entry.key])
+	else:
+		for path in entity_catalog(): lines.append(path)
+	# Return the entire catalog in bounded messages, including for remote ops.
+	var heading = "/%s list (%d entries)" % [command, lines.size()]
+	var message = heading
+	for line in lines:
+		if (message + "\n" + line).to_utf8().size() > 1800:
+			reply(chat, message)
+			message = heading + " — continued"
+		message += "\n" + line
+	reply(chat, message)
 
 func resolve_implant(token):
 	var found = []
@@ -466,28 +496,42 @@ func resolve_implant(token):
 	return found[0] if found.size() == 1 else ""
 
 func resolve_npc(token):
-	var directory = Directory.new()
-	if directory.open("res://Entities/Enemies") != OK:
-		return ""
-	directory.list_dir_begin(true, true)
-	var name = directory.get_next()
+	if token.begins_with("res://") and not ".." in token and token.get_extension() in ["tscn", "scn"] and ResourceLoader.exists(token):
+		return token
+	var catalog = entity_catalog()
 	var found = []
-	while not name.empty():
-		if name.ends_with(".tscn") and (name.begins_with("E_") or name.begins_with("Obj_") or name == "Grid_Crab.tscn"):
-			var base = name.get_basename().to_lower()
-			if base == token.to_lower() or base.trim_prefix("e_") == token.to_lower():
-				directory.list_dir_end()
-				return "res://Entities/Enemies/" + name
-			if base.find(token.to_lower()) >= 0:
-				found.append("res://Entities/Enemies/" + name)
-		name = directory.get_next()
-	directory.list_dir_end()
+	var exact = []
+	for path in catalog:
+		var base = path.get_file().get_basename().to_lower()
+		if base == token.to_lower() or base.trim_prefix("e_") == token.to_lower(): exact.append(path)
+		elif token.to_lower() in base: found.append(path)
+	if exact.size() == 1: return exact[0]
+	if exact.size() > 1: return ""
 	return found[0] if found.size() == 1 else ""
+
+func entity_catalog():
+	var catalog = []
+	_collect_entity_scenes("res://Entities", catalog)
+	for path in ["res://snake.tscn", "res://snakesphere.tscn"]:
+		if ResourceLoader.exists(path): catalog.append(path)
+	catalog.sort()
+	return catalog
+
+func _collect_entity_scenes(root, result):
+	var directory = Directory.new()
+	if directory.open(root) != OK: return
+	directory.list_dir_begin(true, true)
+	var entry = directory.get_next()
+	while not entry.empty():
+		if directory.current_is_dir(): _collect_entity_scenes(root + "/" + entry, result)
+		elif entry.get_extension() in ["tscn", "scn"]: result.append(root + "/" + entry)
+		entry = directory.get_next()
+	directory.list_dir_end()
 
 puppet func spawn_npc(sender, epoch, path, name, pose):
 	if not DEBUG or bridge.request_sender(sender) != bridge.get_host_id() or epoch != mp.SteamNetwork.scene_epoch or typeof(path) != TYPE_STRING or typeof(name) != TYPE_STRING or typeof(pose) != TYPE_TRANSFORM:
 		return
-	if not path.begins_with("res://Entities/Enemies/") or path.find("..") >= 0 or not path.ends_with(".tscn") or not name.begins_with("AdminNPC_"):
+	if not path.begins_with("res://") or path.find("..") >= 0 or not path.get_extension() in ["tscn", "scn"] or not name.begins_with("AdminNPC_"):
 		return
 	if not is_instance_valid(Global.current_scene) or Global.current_scene.has_node(name):
 		return
@@ -495,6 +539,9 @@ puppet func spawn_npc(sender, epoch, path, name, pose):
 	if not packed is PackedScene:
 		return
 	var npc = packed.instance()
+	if not npc is Spatial:
+		npc.free()
+		return
 	npc.name = name
 	npc.set_network_master(bridge.get_host_id())
 	Global.current_scene.add_child(npc)

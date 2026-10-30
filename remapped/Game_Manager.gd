@@ -119,7 +119,7 @@ func consume_level_transition_loadout():
 	level_transition_loadout = null
 	return result
 
-enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY}
+enum {KEY_FORWARD, KEY_LEFT, KEY_RIGHT, KEY_BACK, KEY_SHOOT, KEY_JUMP, KEY_CROUCH, KEY_RELOAD, KEY_ZOOM, KEY_USE, KEY_KICK, KEY_LEAN_LEFT, KEY_LEAN_RIGHT, KEY_WEAPON1, KEY_WEAPON2, KEY_LAST_WEAPON, KEY_TERTIARY, KEY_THROW_WEAPON, KEY_SUICIDE, KEY_STOCKS, KEY_SECONDARY, KEY_OPEN_CHAT}
 enum {L_HQ, L_PHARMA, L_PARADISE, L_SPACE, L_ANDROGEN, L_MALL, L_APARTMENT, L_CRUISE, L_SWAMP, L_CASINO, L_CASTLE, L_OFFICE, L_PUNISHMENT}
 
 var LEVEL_META:Array
@@ -178,6 +178,7 @@ var master_volume:float = 0
 var music_volume:float = 0
 var resolution:Array = [1280, 720]
 var full_screen:bool = false
+var vsync_enabled = true
 var implants
 var enemy_count = 0
 var total_kills = 0
@@ -480,6 +481,9 @@ func goto_scene(path:String):
 
 func _deferred_goto_scene(path:String)->void :
 	loading_path = path
+	var crash_reporter = get_node_or_null("CrashReporter")
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("resource load starting: " + path)
 	loading_report_msec = OS.get_ticks_msec()
 	print("[CruS loading] Begin ", path)
 	loader = ResourceLoader.load_interactive(path)
@@ -515,6 +519,9 @@ func _process(time:float)->void :
 		
 		if err == ERR_FILE_EOF:
 			var resource = loader.get_resource()
+			var crash_reporter = get_node_or_null("CrashReporter")
+			if crash_reporter != null:
+				crash_reporter.breadcrumb("resource load complete: " + loading_path)
 			loader = null
 			set_new_scene(resource)
 			break
@@ -533,8 +540,13 @@ signal scene_loaded()
 
 func set_new_scene(scene_resource:PackedScene)->void :
 	$Loading_Screen.visible = false
+	var crash_reporter = get_node_or_null("CrashReporter")
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("scene instantiating: " + loading_path)
 	print("[CruS loading] Instantiate ", loading_path)
 	current_scene = scene_resource.instance()
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("scene instantiated: " + loading_path)
 	if loading_path.begins_with("res://Levels/") and loading_path != "res://Levels/Level1.tscn" and loading_path != "res://Levels/Level2.tscn":
 		var stray_handler_message = current_scene.get_node_or_null("Message_Area")
 		if stray_handler_message != null:
@@ -549,7 +561,12 @@ func set_new_scene(scene_resource:PackedScene)->void :
 		screenmat.set_shader_param("intro", false)
 		screenmat.set_shader_param("amplitude", 0.0)
 	print("[CruS loading] Initialize ", loading_path)
+	var multiplayer = get_node_or_null("Multiplayer")
+	if multiplayer != null and multiplayer.NetworkBridge.check_connection() and multiplayer.hostSettings.gameMode in ["deathmatch", "counter_op"]:
+		preload("res://MOD_CONTENT/CruS Online/gameplay/competitive_pickups.gd").strip(current_scene)
 	get_node("/root").add_child(current_scene)
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("scene entered tree: " + loading_path)
 	if loading_path == "res://Menu/Main_Menu.tscn":
 		apply_hope_music_pitch()
 	print("[CruS loading] Ready ", loading_path)
@@ -602,6 +619,7 @@ func level_finished()->void :
 	menu.get_node("Soul_Rended").rect_size.x = 420
 	objectives = 0
 	if player.dead:
+		get_tree().paused = false
 		if not Global.hope_discarded:
 			consecutive_deaths += 1
 		if consecutive_deaths == 4:
@@ -920,6 +938,7 @@ func _restore_saved_loadout(data):
 func settings()->Dictionary:
 	var settings_dict = {
 		"full_screen":full_screen, 
+		"vsync":vsync_enabled,
 		"resolution":resolution, 
 		"draw_distance":draw_distance, 
 		"FOV":FOV, 
@@ -1165,6 +1184,8 @@ func load_game()->void :
 		save_settings()
 		return 
 	parsedJSON = parse_json(settings.get_line())
+	vsync_enabled = bool(parsedJSON.get("vsync", true))
+	OS.vsync_enabled = vsync_enabled
 	mouse_sensitivity = parsedJSON.get("mouse_sensitivity")
 	master_volume = parsedJSON.get("master_volume")
 	music_volume = parsedJSON.get("music_volume")
@@ -1293,6 +1314,10 @@ func load_game()->void :
 					var action = InputEventKey.new()
 					action.scancode = key_scancodes[scancode][0]
 					set_inputs("Shoot_Secondary", action)
+				KEY_OPEN_CHAT:
+					var action = InputEventKey.new()
+					action.scancode = key_scancodes[scancode][0]
+					set_inputs("Open_Chat", action)
 		elif key_scancodes[scancode][1] == "MOUSE":
 			match scancode:
 				KEY_FORWARD:
@@ -1379,6 +1404,10 @@ func load_game()->void :
 					var action = InputEventMouseButton.new()
 					action.button_index = key_scancodes[scancode][0]
 					set_inputs("Shoot_Secondary", action)
+				KEY_OPEN_CHAT:
+					var action = InputEventMouseButton.new()
+					action.button_index = key_scancodes[scancode][0]
+					set_inputs("Open_Chat", action)
 	
 	
 	set_game_volume(master_volume)

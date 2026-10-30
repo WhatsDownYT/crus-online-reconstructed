@@ -123,6 +123,9 @@ var water = false
 var ladder = false
 var dead = false
 var died = false
+var death_camera_parent = null
+var death_camera_pose = Transform.IDENTITY
+var death_body_visible = true
 
 var pain_sound
 var psychocounter = 0
@@ -217,7 +220,10 @@ remote func _spawn_gib(id, parentPath, gib, gibName, gibPos, recivedDamage):
 	new_gib.set_name(gibName)
 	get_node(parentPath).add_child(new_gib)
 	new_gib.global_transform.origin = gibPos
-	NetworkBridge.apply_damage(self, new_gib, "damage", [recivedDamage[0], recivedDamage[1], recivedDamage[2], recivedDamage[3]])
+	if NetworkBridge.is_world_authority():
+		NetworkBridge.apply_damage(self, new_gib, "damage", recivedDamage)
+	if gib == 3:
+		_death_blood(gibPos)
 
 remote func _play_sound(id, soundName):
 	if not Multiplayer.players.has(id) or id == NetworkBridge.get_id():
@@ -674,7 +680,9 @@ func _physics_process(delta):
 		$SFX / IED_alert.stop()
 		$SFX / IED_alert.pitch_scale = 1
 		
-		if not is_equal_approx(shader_screen.material.get_shader_param("hit_red"), 0.5):
+		if Multiplayer.Spectator.active:
+			shader_screen.material.set_shader_param("hit_red", 0.0)
+		elif not is_equal_approx(shader_screen.material.get_shader_param("hit_red"), 0.5):
 			shader_screen.material.set_shader_param("hit_red", lerp(shader_screen.material.get_shader_param("hit_red"), 0.5, 0.05))
 	else :
 		if not is_zero_approx(shader_screen.material.get_shader_param("hit_red")):
@@ -1250,6 +1258,7 @@ func _input(event):
 			rotation_helper.rotation_degrees = camera_rot
 
 func damage(damage, collision_n, collision_p, shooter_pos):
+	if Multiplayer.is_spawn_protected(NetworkBridge.get_id()): return
 	if _admin_god(): return
 	if dead:
 		return 
@@ -1304,6 +1313,9 @@ func die(damage, collision_n, collision_p, shooter_pos):
 
 func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZERO, shooter_pos = Vector3.ZERO):
 	if _admin_god(): return
+	var crash_reporter = GLOBAL.get_node_or_null("CrashReporter")
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death started: level " + str(GLOBAL.CURRENT_LEVEL))
 	if car != null:
 		car.eject()
 	
@@ -1313,7 +1325,10 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 		$SFX / IED2.stop()
 		$SFX / IED_alert.stop()
 		return 
+	weapon.capture_revive_loadout()
 	GLOBAL.get_node("Multiplayer").drop_local_death_weapons()
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death weapons processed")
 	dead = true
 	if not GLOBAL.campaign_save.active:
 		GLOBAL.total_deaths += 1
@@ -1332,12 +1347,33 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 	weapon.hide()
 	NetworkBridge.n_rpc(self, "_spawn_explosion", [global_transform.origin])
 	var n_explosion = EXPLOSION.instance()
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death explosion instantiated")
 	NetworkBridge.inherit_damage_source(n_explosion, self)
 	get_parent().add_child(n_explosion)
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death explosion entered tree")
 	n_explosion.global_transform.origin = global_transform.origin
 
 
 
+
+	# Keep the intact body available to rescuers; permanent deaths use the original flying head.
+	if not NetworkBridge.check_connection() or not Multiplayer.has_revives_remaining(NetworkBridge.get_id()):
+		death_body_visible = $Body_Mesh.visible
+		$Body_Mesh.hide()
+		spawn_gib(0, 1, damage, collision_n, collision_p)
+		spawn_gib(1, 2, damage, collision_n, collision_p)
+		spawn_gib(2, 2, damage, collision_n, collision_p)
+		var head_gib = spawn_gib(3, 1, damage, collision_n, collision_p)
+		death_camera_parent = weakref(player_view.get_parent())
+		death_camera_pose = player_view.transform
+		var view_pose = player_view.global_transform
+		player_view.get_parent().remove_child(player_view)
+		head_gib.add_child(player_view)
+		player_view.global_transform = view_pose
+		player_view.global_transform.origin = head_gib.global_transform.origin
+		_death_blood(global_transform.origin)
 
 	UI.hide()
 	if not NetworkBridge.check_connection():
@@ -1346,10 +1382,14 @@ func instadie(damage = 100, collision_n = Vector3.ZERO, collision_p = Vector3.ZE
 		GLOBAL.level_finished()
 		return
 	GLOBAL.get_node('DeathScreen').player_died()
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death screen updated")
 	set_process_input(true)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
 	NetworkBridge.n_rpc(self, "send_death_nofify", [lastDamagerId])
+	if crash_reporter != null:
+		crash_reporter.breadcrumb("local death notification sent")
 
 func _on_Crush_Check_body_entered(body):
 		if body.get_class() == "StaticBody":
@@ -1373,18 +1413,29 @@ func set_ladder(truth):
 	ladder = truth
 
 func spawn_gib(gib, count, damage, collision_n, collision_p):
+	var first_gib = null
 	for i_gib in range(count):
 		
 		var new_gib = gibs[gib].instance()
 		NetworkBridge.inherit_damage_source(new_gib, self)
 		new_gib.set_name(new_gib.name + "#" + str(new_gib.get_instance_id()))
-		get_parent().add_child(new_gib)
+		Global.current_scene.add_child(new_gib)
+		if first_gib == null:
+			first_gib = new_gib
 		new_gib.global_transform.origin = global_transform.origin
 		var damageArgs = [damage * 10, - collision_n + Vector3(rand_range(0, 0.1), rand_range(0, 0.1), rand_range(0, 0.1)), collision_p, Vector3.ZERO]
-		NetworkBridge.apply_damage(self, new_gib, "damage", [damageArgs[0], damageArgs[1], damageArgs[2], damageArgs[3]])
+		if NetworkBridge.is_world_authority():
+			NetworkBridge.apply_damage(self, new_gib, "damage", damageArgs)
 
-		NetworkBridge.n_rpc(self, "_spawn_gib", [get_parent().get_path(), gib, new_gib.name, new_gib.global_transform.origin, damageArgs])
-		return new_gib
+		NetworkBridge.n_rpc(self, "_spawn_gib", [Global.current_scene.get_path(), gib, new_gib.name, new_gib.global_transform.origin, damageArgs])
+	return first_gib
+
+func _death_blood(position):
+	var blood = load("res://Entities/Particles/Blood_Particle.tscn").instance()
+	get_parent().add_child(blood)
+	blood.global_transform.origin = position
+	blood.emitting = true
+	get_tree().create_timer(2.0).connect("timeout", blood, "queue_free")
 
 func set_multiplayer_sedative(duration = 10.0):
 	multiplayer_sedative_time = max(multiplayer_sedative_time, float(duration))
@@ -1457,7 +1508,7 @@ func set_toxic():
 	UI.toxic = true
 
 func _gameplay_input_enabled():
-	return not NetworkBridge.check_connection() or not Multiplayer.Menu.visible
+	return not NetworkBridge.check_connection() or (not Multiplayer.Menu.visible and not GLOBAL.menu.online_pause_settings and not Multiplayer.Spectator.active)
 
 func _gameplay_pressed(action):
 	return _gameplay_input_enabled() and Input.is_action_pressed(action)
@@ -1474,3 +1525,20 @@ func _publish_goop(position, yaw, burst):
 
 func _admin_god():
 	return preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG and has_meta("admin_god") and get_meta("admin_god")
+
+func restore_death_view():
+	Multiplayer.Spectator.stop()
+	if death_camera_parent != null:
+		var parent = death_camera_parent.get_ref()
+		if is_instance_valid(parent) and player_view.get_parent() != parent:
+			player_view.get_parent().remove_child(player_view)
+			parent.add_child(player_view)
+			player_view.transform = death_camera_pose
+		death_camera_parent = null
+	$Body_Mesh.visible = death_body_visible
+	player_view.current = true
+	shader_screen.material.set_shader_param("hit_red", 0.0)
+	set_process(true)
+	set_physics_process(true)
+	set_process_input(true)
+	set_process_unhandled_key_input(true)

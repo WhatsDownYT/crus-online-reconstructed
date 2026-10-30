@@ -123,6 +123,9 @@ var Multiplayer = Global.get_node("Multiplayer")
 
 
 var enabled = true
+var combat_sync_elapsed = 0.0
+var damage_sync_elapsed = 0.0
+var damage_sync_dirty = false
 var _suspended_nodes = []
 var _presentation_notifier
 var _presentation_animation
@@ -201,7 +204,7 @@ puppet func _hide_npc_client(id):
 puppet func respawn(id, host_objective = null):
 	call_deferred("_update_simulation")
 	var boneattachment = skeleton.get_node_or_null("Armature/Skeleton/BoneAttachment")
-	if boneattachment and is_instance_valid(weapon) and not weapon.disabled:
+	if boneattachment and is_instance_valid(weapon) and "disabled" in weapon and not weapon.disabled:
 		boneattachment.show()
 	if host_objective != null:
 		objective = host_objective
@@ -278,6 +281,7 @@ func _ready():
 		["network_damage", NetworkBridge.PERMISSION.ALL],
 		["network_remove_weapon", NetworkBridge.PERMISSION.ALL],
 		["_die_client", NetworkBridge.PERMISSION.SERVER],
+		["sync_combat_state", NetworkBridge.PERMISSION.SERVER],
 		["_hide_npc_client", NetworkBridge.PERMISSION.SERVER],
 		["respawn", NetworkBridge.PERMISSION.SERVER],
 		["cleanup", NetworkBridge.PERMISSION.SERVER],
@@ -428,11 +432,32 @@ func _ready():
 		heartbeat = new_heartbeat
 
 func _physics_process(delta):
+	if NetworkBridge.is_world_authority() and damage_sync_dirty:
+		damage_sync_elapsed += delta
+		if damage_sync_elapsed >= 0.1:
+			damage_sync_elapsed = 0.0
+			damage_sync_dirty = false
+			NetworkBridge.n_rset_unreliable(self, "health", health)
+			NetworkBridge.n_rset_unreliable(self, "armor", armor)
+	if objective and NetworkBridge.check_connection() and NetworkBridge.is_world_authority():
+		combat_sync_elapsed += delta
+		if combat_sync_elapsed >= 0.5:
+			combat_sync_elapsed = 0.0
+			NetworkBridge.n_rpc(self, "sync_combat_state", [health, armor, dead, gibs_spawned])
 	if NetworkBridge.n_is_network_master(self):
 		if on_fire:
 			var dist_clamped = clamp(body.global_transform.origin.distance_to(glob.player.global_transform.origin), 0.1, 20)
 			pain_sfx[0].pitch_scale = 0.5 + ((dist_clamped - 0.1) / (20 - 0.1))
 		t += 1
+
+puppet func sync_combat_state(_id, host_health, host_armor, host_dead, host_gibbed):
+	health = host_health
+	armor = host_armor
+	if host_dead and not dead:
+		_die_client(null)
+	if host_gibbed:
+		hide()
+		body.set_collision_layer_bit(4, false)
 
 func set_tranquilized(dart = null):
 	network_set_tranquilized(null, dart)
@@ -493,7 +518,7 @@ master func network_piercing_damage(id, damage, collision_n, collision_p):
 	armor -= damage
 
 	if NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rset(self, "armor", armor)
+		damage_sync_dirty = true
 
 	if health <= flee_health and damage > 0.5 and NetworkBridge.n_is_network_master(self):
 		body.set_flee()
@@ -571,7 +596,7 @@ master func network_damage(id, damage, collision_n, collision_p, shooter_pos):
 	health -= damage
 
 	if NetworkBridge.n_is_network_master(self):
-		NetworkBridge.n_rset(self, "health", health)
+		damage_sync_dirty = true
 
 	if health <= flee_health and damage > 0.5:
 		body.set_flee()

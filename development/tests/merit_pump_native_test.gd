@@ -174,7 +174,7 @@ func run():
 	yield(get_tree().create_timer(0.6),"timeout")
 	if not HOST:
 		player.global_transform.origin=capped_drop.global_transform.origin
-		mp.NetworkBridge.n_rpc(mp.playerPuppet,"_update_puppet",[player.global_transform,[0.0,0.0],0.0,null])
+		mp.NetworkBridge.n_rpc(mp.playerPuppet,"_update_puppet",[player.global_transform,[0.0,0.0],0.0,null,player.global_transform.origin])
 		yield(get_tree().create_timer(0.5),"timeout")
 		capped_drop.get_node("Area").player_use()
 	yield(get_tree().create_timer(0.8),"timeout")

@@ -12,6 +12,7 @@ signal lobby_owner_changed(previous_owner, new_owner)
 signal lobby_data_updated(steam_id)
 signal chat_message_received(sender_steam_id, message)
 
+signal browser_lobby_updated(lobby_id, success)
 signal lobby_list(lobbies)
 signal lobby_code_result(lobby_id)
 
@@ -23,6 +24,7 @@ var _members = {}
 var _creating_lobby = false
 var _pending_lobby_id = 0
 var _ping_location_refresh = 0.0
+var _published_lobby_type = ""
 var _lobby_code = ""
 var _join_code = ""
 var _search_code = ""
@@ -88,6 +90,7 @@ func join_lobby(lobby_id: int, code = ""):
 	if in_lobby():
 		Multiplayer.leave_server()
 	_pending_lobby_id = lobby_id
+	Multiplayer.show_connection_screen()
 	Multiplayer.Content.set_destination({"transport": "steam", "lobby": str(lobby_id), "code": str(code)})
 	_join_code = code.to_upper()
 	print("Trying to join lobby %s" % lobby_id)
@@ -102,6 +105,7 @@ func leave_lobby():
 	_creating_lobby = false
 	_lobby_code = ""
 	_join_code = ""
+	_published_lobby_type = ""
 	if SteamInit.Steam.has_method("setRichPresence"):
 		SteamInit.Steam.setRichPresence("connect", "")
 	if old_lobby != 0:
@@ -127,6 +131,8 @@ func request_lobby_list(code = ""):
 	SteamInit.Steam.addRequestLobbyListStringFilter("version", network_version(), SteamInit.Steam.LOBBY_COMPARISON_EQUAL)
 	if not _search_code.empty():
 		SteamInit.Steam.addRequestLobbyListStringFilter("code_lookup", _search_code.sha256_text(), SteamInit.Steam.LOBBY_COMPARISON_EQUAL)
+	else:
+		SteamInit.Steam.addRequestLobbyListStringFilter("lobby_type", "public", SteamInit.Steam.LOBBY_COMPARISON_EQUAL)
 
 	print("Requesting a lobby list")
 	SteamInit.Steam.requestLobbyList()
@@ -203,15 +209,24 @@ func publish_lobby_settings():
 	if not in_lobby() or not is_owner():
 		return
 	var lobby_id = get_lobby_id()
-	SteamInit.Steam.setLobbyMemberLimit(lobby_id, int(Multiplayer.hostSettings.get("maxPlayers", 16)))
-	SteamInit.Steam.setLobbyData(lobby_id, "name", valid_lobby_name(Multiplayer.config.get("hostLobbyName", "")))
-	SteamInit.Steam.setLobbyData(lobby_id, "mode", str(Multiplayer.hostSettings.get("gameMode", "cruelty")))
+	var capacity = int(Multiplayer.hostSettings.get("maxPlayers", 16))
+	if SteamInit.Steam.getLobbyMemberLimit(lobby_id) != capacity:
+		SteamInit.Steam.setLobbyMemberLimit(lobby_id, capacity)
+	_set_lobby_data("name", valid_lobby_name(Multiplayer.config.get("hostLobbyName", "")))
+	_set_lobby_data("mode", str(Multiplayer.hostSettings.get("gameMode", "cruelty")))
 	var lobby_type = str(Multiplayer.config.get("hostLobbyType", "public"))
-	SteamInit.Steam.setLobbyData(lobby_id, "lobby_type", lobby_type)
-	if SteamInit.Steam.has_method("setLobbyType"):
-		SteamInit.Steam.setLobbyType(lobby_id, 2 if lobby_type == "public" else 3)
-	if SteamInit.Steam.has_method("setRichPresence"):
-		SteamInit.Steam.setRichPresence("connect", "+connect_lobby " + str(lobby_id) if lobby_type != "private" else "")
+	_set_lobby_data("lobby_type", lobby_type)
+	# Only change visibility when the host actually switches lobby type
+	if lobby_type != _published_lobby_type:
+		_published_lobby_type = lobby_type
+		if SteamInit.Steam.has_method("setLobbyType"):
+			SteamInit.Steam.setLobbyType(lobby_id, 2 if lobby_type == "public" else 3)
+		if SteamInit.Steam.has_method("setRichPresence"):
+			SteamInit.Steam.setRichPresence("connect", "+connect_lobby " + str(lobby_id) if lobby_type != "private" else "")
+
+func _set_lobby_data(key, value):
+	if SteamInit.Steam.getLobbyData(get_lobby_id(), key) != value:
+		SteamInit.Steam.setLobbyData(get_lobby_id(), key, value)
 
 func is_compatible_lobby(lobby_id) -> bool:
 	# make sure the browser shouldn't advertise lobbies from the old mod or another build
@@ -219,20 +234,28 @@ func is_compatible_lobby(lobby_id) -> bool:
 
 func lobby_ping_ms(lobby_id) -> int:
 	var location = SteamInit.Steam.getLobbyData(lobby_id, "ping_location")
-	if location.empty() or not SteamInit.Steam.has_method("estimatePingTimeFromLocalHost"):
+	if location.empty() or not SteamInit.Steam.has_method("estimatePingTimeFromLocalHost") or not SteamInit.Steam.has_method("parsePingLocationString"):
 		return -1
-	return int(SteamInit.Steam.estimatePingTimeFromLocalHost(location))
+	var parsed = SteamInit.Steam.parsePingLocationString(location)
+	if typeof(parsed) == TYPE_DICTIONARY:
+		if not parsed.get("success", false): return -1
+		parsed = parsed.get("ping_location", parsed.get("location", null))
+	if typeof(parsed) != TYPE_RAW_ARRAY: return -1
+	return int(SteamInit.Steam.estimatePingTimeFromLocalHost(parsed))
 
 func publish_ping_location():
 	if not in_lobby() or not is_owner() or not SteamInit.Steam.has_method("getLocalPingLocation"):
 		return
-	var ping_location = SteamInit.Steam.getLocalPingLocation()
-	# GodotSteam has returned both a string and a dictionary here across builds
-	if typeof(ping_location) == TYPE_DICTIONARY:
-		ping_location = ping_location.get("location", ping_location.get("ping_location", ""))
-	if typeof(ping_location) == TYPE_STRING and not ping_location.empty() and ping_location != SteamInit.Steam.getLobbyData(get_lobby_id(), "ping_location"):
-		SteamInit.Steam.setLobbyData(get_lobby_id(), "ping_location", ping_location)
-	
+	var location = SteamInit.Steam.getLocalPingLocation()
+	if typeof(location) == TYPE_DICTIONARY:
+		if float(location.get("age", -1)) < 0: return
+		location = location.get("location", location.get("ping_location", null))
+	# The bundled GodotSteam returns bytes, but lobby metadata only accepts text
+	if typeof(location) == TYPE_RAW_ARRAY and SteamInit.Steam.has_method("convertPingLocationToString"):
+		location = SteamInit.Steam.convertPingLocationToString(location)
+	if typeof(location) == TYPE_STRING and not location.empty():
+		_set_lobby_data("ping_location", location)
+
 func send_chat_message(message: String) -> bool:
 	return SteamInit.Steam.sendLobbyChatMsg(_steam_lobby_id, message)
 
@@ -322,6 +345,7 @@ func _on_lobby_invite(inviter, lobby, game):
 	pass
 	
 func _on_lobby_data_update(success, lobby_id, member_id):
+	emit_signal("browser_lobby_updated", lobby_id, success)
 	if lobby_id != _steam_lobby_id or not in_lobby():
 		return
 	if success:

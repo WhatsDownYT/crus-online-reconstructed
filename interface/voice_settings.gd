@@ -57,7 +57,7 @@ func _ready():
 	binding.connect("pressed", self, "_bind_pressed")
 	roster_panel = PanelContainer.new()
 	roster_panel.size_flags_vertical = SIZE_EXPAND_FILL
-	roster_panel.add_stylebox_override("panel", host.get_stylebox("panel"))
+	roster_panel.add_stylebox_override("panel", load("res://MOD_CONTENT/CruS Online/assets/interface/redpanel.tres"))
 	box.add_child(roster_panel)
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = SIZE_EXPAND_FILL

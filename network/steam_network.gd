@@ -24,11 +24,13 @@ const SNAPSHOT_PACKET = 10
 const TARGET_REQUEST = 11
 const TARGET_DELIVERY = 12
 const SCENE_EVENT = 13
-const PROTOCOL_VERSION = 3
+const PROTOCOL_VERSION = 4
 const SNAPSHOT_BATCH = 14
 const RELIABLE_SEND_MODE = 2
 const CONTENT_METHODS = ["connect_init", "content_offer", "content_request", "content_chunk", "content_cancel"]
 const SNAPSHOT_CHANNEL = 1
+const PRIORITY_CHANNEL = 3
+const PRIORITY_METHODS = ["_die_client", "_hide_npc_client", "sync_combat_state", "show_result", "goto_scene_client", "goto_menu_client", "scene_loaded_signal", "sync_player_life"]
 const MAX_PACKETS_PER_FRAME = 128
 const PACKET_BUDGET_USEC = 2000
 const SNAPSHOT_SEND_BUDGET_USEC = 4000
@@ -241,14 +243,17 @@ func _process(delta):
 	if _last_frame_usec > 0:
 		_peak_frame_ms = max(_peak_frame_ms, (frame_usec - _last_frame_usec) / 1000.0)
 	_last_frame_usec = frame_usec
-	_update_object_census()
+	if preload("res://MOD_CONTENT/CruS Online/core/build_flags.gd").DEBUG and OS.get_environment("CRUS_NETWORK_METRICS") == "1":
+		_update_object_census()
+	if not SteamLobby.in_lobby():
+		return
 	var started = OS.get_ticks_usec()
 	var processed = 0
 	var receive_budget = int(clamp(delta * 100000.0, PACKET_BUDGET_USEC, 6000))
 
 	while processed < MAX_PACKETS_PER_FRAME and OS.get_ticks_usec() - started < receive_budget:
 		var read_any = false
-		for channel in [0, SNAPSHOT_CHANNEL]:
+		for channel in [PRIORITY_CHANNEL, 0, SNAPSHOT_CHANNEL]:
 			if processed >= MAX_PACKETS_PER_FRAME or OS.get_ticks_usec() - started >= receive_budget:
 				break
 			var packet_size = SteamInit.Steam.getAvailableP2PPacketSize(channel)
@@ -480,7 +485,7 @@ func _rpc(to_peer_id: int, node: Node, method: String, args: Array):
 	var packet = PoolByteArray()
 	var payload = [path_cache_index, method, args]
 	
-	if is_server() and not _peer_confirmed_path(to_peer, node_path) or \
+	if method in PRIORITY_METHODS or is_server() and not _peer_confirmed_path(to_peer, node_path) or \
 		path_cache_index == -1:
 		payload.push_front(node_path)
 		packet.append(PACKET_TYPE.RPC_WITH_NODE_PATH)
@@ -490,7 +495,7 @@ func _rpc(to_peer_id: int, node: Node, method: String, args: Array):
 	var serialized_payload = var2bytes(payload)
 	
 	packet.append_array(serialized_payload)
-	_send_scene_event(to_peer.steam_id, packet, method in ["goto_scene_client", "goto_menu_client"] or method in CONTENT_METHODS)
+	_send_scene_event(to_peer.steam_id, packet, method in ["goto_scene_client", "goto_menu_client", "show_result"] or method in CONTENT_METHODS, method in PRIORITY_METHODS)
 
 func _rset(to_peer, node: Node, property: String, value):
 	if _waiting_world_target(to_peer.steam_id, node):
@@ -521,10 +526,10 @@ func _rset(to_peer, node: Node, property: String, value):
 	packet.append_array(serialized_payload)
 	_send_scene_event(to_peer.steam_id, packet)
 
-func _send_scene_event(peer_id, packet, transition = false):
+func _send_scene_event(peer_id, packet, transition = false, priority = false):
 	var envelope = PoolByteArray([SCENE_EVENT])
 	envelope.append_array(var2bytes([-1 if transition else scene_epoch, packet]))
-	_send_p2p_packet(peer_id, envelope)
+	_send_p2p_packet(peer_id, envelope, RELIABLE_SEND_MODE, PRIORITY_CHANNEL if priority else 0)
 
 func _get_rset_property_path(node_path: NodePath, property: String):
 	return NodePath("%s:%s" % [node_path, property])
@@ -670,7 +675,7 @@ func _read_p2p_packet(packet_size:int, channel = 0):
 	var sender_id: int = packet["steam_id_remote"]
 	var packet_data: PoolByteArray = packet["data"]
 
-	metrics.traffic("received", packet_data.size(), channel == 0)
+	metrics.traffic("received", packet_data.size(), channel != SNAPSHOT_CHANNEL)
 	if channel == SNAPSHOT_CHANNEL:
 		if packet_data.size() > MAX_UNRELIABLE_BYTES:
 			metrics.warn("snapshot_oversize", "received")
@@ -778,7 +783,7 @@ func _handle_packet(sender_id, payload: PoolByteArray):
 			if not inner[0] in [PACKET_TYPE.RPC, PACKET_TYPE.RPC_WITH_NODE_PATH]:
 				return
 			var method = decoded[method_index]
-			if not method in CONTENT_METHODS and (sender_id != get_server_steam_id() or not method in ["goto_scene_client", "goto_menu_client"]):
+			if not method in CONTENT_METHODS and (sender_id != get_server_steam_id() or not method in ["goto_scene_client", "goto_menu_client", "show_result"]):
 				return
 		elif envelope[0] != scene_epoch:
 			metrics.count("scene_mismatch")

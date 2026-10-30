@@ -99,7 +99,7 @@ class ExitFixture:
 class FakeSteam:
 	extends Reference
 	var P2P_SEND_RELIABLE = null
-	var incoming = {0: [], 1: []}
+	var incoming = {0: [], 1: [], 3: []}
 	var sent = []
 	var closed = []
 	var accepted = []
@@ -377,6 +377,13 @@ func run():
 	net._server_confirm_peer_node_path(2, cache_id)
 	net._server_confirm_peer_node_path(2, cache_id)
 	check(net._peers_confirmed_node_path[2].size() == 1, "ack deduplication")
+	net.register_rpc(entity, "show_result", net.PERMISSION.SERVER)
+	parent.Steam.sent.clear()
+	net._rpc(2, entity, "show_result", [{}])
+	var priority_packet = parent.Steam.sent.back()
+	var priority_envelope = bytes2var(priority_packet[1].subarray(1, priority_packet[1].size() - 1))
+	check(priority_packet[3] == net.PRIORITY_CHANNEL and priority_packet[2] == net.RELIABLE_SEND_MODE, "results use an independent reliable priority channel")
+	check(priority_envelope[1][0] == net.PACKET_TYPE.RPC_WITH_NODE_PATH, "priority RPC contains its path even when cached")
 	parent.Steam.sent.clear()
 	for i in range(100):
 		net.snapshot_rpc(entity, "network_set_rotation", [i])
@@ -523,7 +530,8 @@ func run():
 	check(net._snapshots.valid_value("_set_transform", [Transform.IDENTITY, 3], false), "door revision is accepted in movement snapshots")
 	check(not net._snapshots.valid_value("_set_transform", [Transform.IDENTITY, -1], false), "negative door revision rejected")
 	var command = load("res://MOD_CONTENT/CruS Online/remapped/Player.gd").Cmd.new()
-	check(net._snapshots.valid_value("_update_puppet", [Transform.IDENTITY, [command.forward_move, command.right_move], 0.0, null], false), "new player input is valid before first movement tick")
+	check(net._snapshots.valid_value("_update_puppet", [Transform.IDENTITY, [command.forward_move, command.right_move], 0.0, null, Vector3.ZERO], false), "new player input is valid before first movement tick")
+	check(not net._snapshots.valid_value("_update_puppet", [Transform.IDENTITY, [0.0, 0.0], 0.0, null], false), "old player snapshots without the hold position are rejected")
 	var old_entity_path = entity.get_path()
 	entity.name = "RenamedProjectile"
 	check(net.check_permission_hash(entity, "network_set_rotation"), "renamed projectile keeps RPC registration")

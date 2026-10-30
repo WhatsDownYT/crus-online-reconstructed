@@ -31,6 +31,8 @@ func _counterop():
 	return Multiplayer.CounterOp
 
 func damage_allowed(source, target, source_node = null):
+	if target > 0 and Multiplayer.is_spawn_protected(target):
+		return false
 	if Multiplayer.hostSettings.get("gameMode", "cruelty") == "deathmatch":
 		return true
 	var counterop = _counterop()
